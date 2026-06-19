@@ -2844,6 +2844,10 @@ type SqlDiagnostic struct {
 	Column        int32                  `protobuf:"varint,2,opt,name=column,proto3" json:"column,omitempty"`
 	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
 	Severity      string                 `protobuf:"bytes,4,opt,name=severity,proto3" json:"severity,omitempty"`
+	EndLine       int32                  `protobuf:"varint,5,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`
+	EndColumn     int32                  `protobuf:"varint,6,opt,name=end_column,json=endColumn,proto3" json:"end_column,omitempty"`
+	StartByte     int32                  `protobuf:"varint,7,opt,name=start_byte,json=startByte,proto3" json:"start_byte,omitempty"`
+	EndByte       int32                  `protobuf:"varint,8,opt,name=end_byte,json=endByte,proto3" json:"end_byte,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2904,6 +2908,34 @@ func (x *SqlDiagnostic) GetSeverity() string {
 		return x.Severity
 	}
 	return ""
+}
+
+func (x *SqlDiagnostic) GetEndLine() int32 {
+	if x != nil {
+		return x.EndLine
+	}
+	return 0
+}
+
+func (x *SqlDiagnostic) GetEndColumn() int32 {
+	if x != nil {
+		return x.EndColumn
+	}
+	return 0
+}
+
+func (x *SqlDiagnostic) GetStartByte() int32 {
+	if x != nil {
+		return x.StartByte
+	}
+	return 0
+}
+
+func (x *SqlDiagnostic) GetEndByte() int32 {
+	if x != nil {
+		return x.EndByte
+	}
+	return 0
 }
 
 type FormatSqlRequest struct {
@@ -3368,6 +3400,7 @@ type SqlCompletionCandidate struct {
 	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	InsertText    string                 `protobuf:"bytes,3,opt,name=insert_text,json=insertText,proto3" json:"insert_text,omitempty"`
+	Detail        string                 `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3419,6 +3452,13 @@ func (x *SqlCompletionCandidate) GetKind() string {
 func (x *SqlCompletionCandidate) GetInsertText() string {
 	if x != nil {
 		return x.InsertText
+	}
+	return ""
+}
+
+func (x *SqlCompletionCandidate) GetDetail() string {
+	if x != nil {
+		return x.Detail
 	}
 	return ""
 }
@@ -3481,6 +3521,202 @@ func (x *CompleteSqlResponse) GetReplacementEnd() int32 {
 		return x.ReplacementEnd
 	}
 	return 0
+}
+
+type AnalyzeSqlRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId        string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	DefaultDatasetId string                 `protobuf:"bytes,2,opt,name=default_dataset_id,json=defaultDatasetId,proto3" json:"default_dataset_id,omitempty"`
+	Sql              string                 `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AnalyzeSqlRequest) Reset() {
+	*x = AnalyzeSqlRequest{}
+	mi := &file_emulator_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnalyzeSqlRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnalyzeSqlRequest) ProtoMessage() {}
+
+func (x *AnalyzeSqlRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnalyzeSqlRequest.ProtoReflect.Descriptor instead.
+func (*AnalyzeSqlRequest) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *AnalyzeSqlRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *AnalyzeSqlRequest) GetDefaultDatasetId() string {
+	if x != nil {
+		return x.DefaultDatasetId
+	}
+	return ""
+}
+
+func (x *AnalyzeSqlRequest) GetSql() string {
+	if x != nil {
+		return x.Sql
+	}
+	return ""
+}
+
+type ReferencedTable struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	DatasetId     string                 `protobuf:"bytes,2,opt,name=dataset_id,json=datasetId,proto3" json:"dataset_id,omitempty"`
+	TableId       string                 `protobuf:"bytes,3,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	Alias         string                 `protobuf:"bytes,4,opt,name=alias,proto3" json:"alias,omitempty"`
+	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReferencedTable) Reset() {
+	*x = ReferencedTable{}
+	mi := &file_emulator_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferencedTable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferencedTable) ProtoMessage() {}
+
+func (x *ReferencedTable) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferencedTable.ProtoReflect.Descriptor instead.
+func (*ReferencedTable) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *ReferencedTable) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ReferencedTable) GetDatasetId() string {
+	if x != nil {
+		return x.DatasetId
+	}
+	return ""
+}
+
+func (x *ReferencedTable) GetTableId() string {
+	if x != nil {
+		return x.TableId
+	}
+	return ""
+}
+
+func (x *ReferencedTable) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+func (x *ReferencedTable) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type AnalyzeSqlResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ReferencedTables []*ReferencedTable     `protobuf:"bytes,1,rep,name=referenced_tables,json=referencedTables,proto3" json:"referenced_tables,omitempty"`
+	StatementKinds   []string               `protobuf:"bytes,2,rep,name=statement_kinds,json=statementKinds,proto3" json:"statement_kinds,omitempty"`
+	Diagnostics      []*SqlDiagnostic       `protobuf:"bytes,3,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AnalyzeSqlResponse) Reset() {
+	*x = AnalyzeSqlResponse{}
+	mi := &file_emulator_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnalyzeSqlResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnalyzeSqlResponse) ProtoMessage() {}
+
+func (x *AnalyzeSqlResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_emulator_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnalyzeSqlResponse.ProtoReflect.Descriptor instead.
+func (*AnalyzeSqlResponse) Descriptor() ([]byte, []int) {
+	return file_emulator_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *AnalyzeSqlResponse) GetReferencedTables() []*ReferencedTable {
+	if x != nil {
+		return x.ReferencedTables
+	}
+	return nil
+}
+
+func (x *AnalyzeSqlResponse) GetStatementKinds() []string {
+	if x != nil {
+		return x.StatementKinds
+	}
+	return nil
+}
+
+func (x *AnalyzeSqlResponse) GetDiagnostics() []*SqlDiagnostic {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return nil
 }
 
 var File_emulator_proto protoreflect.FileDescriptor
@@ -3661,12 +3897,18 @@ const file_emulator_proto_rawDesc = "" +
 	"\x05Array\x126\n" +
 	"\belements\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\belements\"<\n" +
 	"\x06Struct\x122\n" +
-	"\x06fields\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x06fields\"q\n" +
+	"\x06fields\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x06fields\"\xe5\x01\n" +
 	"\rSqlDiagnostic\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\x05R\x04line\x12\x16\n" +
 	"\x06column\x18\x02 \x01(\x05R\x06column\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1a\n" +
-	"\bseverity\x18\x04 \x01(\tR\bseverity\"\x97\x01\n" +
+	"\bseverity\x18\x04 \x01(\tR\bseverity\x12\x19\n" +
+	"\bend_line\x18\x05 \x01(\x05R\aendLine\x12\x1d\n" +
+	"\n" +
+	"end_column\x18\x06 \x01(\x05R\tendColumn\x12\x1d\n" +
+	"\n" +
+	"start_byte\x18\a \x01(\x05R\tstartByte\x12\x19\n" +
+	"\bend_byte\x18\b \x01(\x05R\aendByte\"\x97\x01\n" +
 	"\x10FormatSqlRequest\x12\x10\n" +
 	"\x03sql\x18\x01 \x01(\tR\x03sql\x12\x16\n" +
 	"\x06strict\x18\x02 \x01(\bR\x06strict\x12*\n" +
@@ -3697,18 +3939,36 @@ const file_emulator_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12,\n" +
 	"\x12default_dataset_id\x18\x02 \x01(\tR\x10defaultDatasetId\x12\x10\n" +
 	"\x03sql\x18\x03 \x01(\tR\x03sql\x12,\n" +
-	"\x12cursor_byte_offset\x18\x04 \x01(\x05R\x10cursorByteOffset\"c\n" +
+	"\x12cursor_byte_offset\x18\x04 \x01(\x05R\x10cursorByteOffset\"{\n" +
 	"\x16SqlCompletionCandidate\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1f\n" +
 	"\vinsert_text\x18\x03 \x01(\tR\n" +
-	"insertText\"\xb9\x01\n" +
+	"insertText\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\"\xb9\x01\n" +
 	"\x13CompleteSqlResponse\x12L\n" +
 	"\n" +
 	"candidates\x18\x01 \x03(\v2,.bigquery_emulator.v1.SqlCompletionCandidateR\n" +
 	"candidates\x12+\n" +
 	"\x11replacement_start\x18\x02 \x01(\x05R\x10replacementStart\x12'\n" +
-	"\x0freplacement_end\x18\x03 \x01(\x05R\x0ereplacementEnd2\xb4\x0e\n" +
+	"\x0freplacement_end\x18\x03 \x01(\x05R\x0ereplacementEnd\"r\n" +
+	"\x11AnalyzeSqlRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12,\n" +
+	"\x12default_dataset_id\x18\x02 \x01(\tR\x10defaultDatasetId\x12\x10\n" +
+	"\x03sql\x18\x03 \x01(\tR\x03sql\"\x94\x01\n" +
+	"\x0fReferencedTable\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
+	"\n" +
+	"dataset_id\x18\x02 \x01(\tR\tdatasetId\x12\x19\n" +
+	"\btable_id\x18\x03 \x01(\tR\atableId\x12\x14\n" +
+	"\x05alias\x18\x04 \x01(\tR\x05alias\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\"\xd8\x01\n" +
+	"\x12AnalyzeSqlResponse\x12R\n" +
+	"\x11referenced_tables\x18\x01 \x03(\v2%.bigquery_emulator.v1.ReferencedTableR\x10referencedTables\x12'\n" +
+	"\x0fstatement_kinds\x18\x02 \x03(\tR\x0estatementKinds\x12E\n" +
+	"\vdiagnostics\x18\x03 \x03(\v2#.bigquery_emulator.v1.SqlDiagnosticR\vdiagnostics2\xb4\x0e\n" +
 	"\aCatalog\x12n\n" +
 	"\x0fRegisterDataset\x12,.bigquery_emulator.v1.RegisterDatasetRequest\x1a-.bigquery_emulator.v1.RegisterDatasetResponse\x12b\n" +
 	"\vDropDataset\x12(.bigquery_emulator.v1.DropDatasetRequest\x1a).bigquery_emulator.v1.DropDatasetResponse\x12e\n" +
@@ -3732,12 +3992,13 @@ const file_emulator_proto_rawDesc = "" +
 	"\x13SetColumnGovernance\x120.bigquery_emulator.v1.SetColumnGovernanceRequest\x1a1.bigquery_emulator.v1.SetColumnGovernanceResponse2\xb7\x01\n" +
 	"\x05Query\x12R\n" +
 	"\x06DryRun\x12\".bigquery_emulator.v1.QueryRequest\x1a$.bigquery_emulator.v1.DryRunResponse\x12Z\n" +
-	"\fExecuteQuery\x12\".bigquery_emulator.v1.QueryRequest\x1a$.bigquery_emulator.v1.QueryResultRow0\x012\xff\x02\n" +
+	"\fExecuteQuery\x12\".bigquery_emulator.v1.QueryRequest\x1a$.bigquery_emulator.v1.QueryResultRow0\x012\xdd\x03\n" +
 	"\bSqlTools\x12Y\n" +
 	"\x06Format\x12&.bigquery_emulator.v1.FormatSqlRequest\x1a'.bigquery_emulator.v1.FormatSqlResponse\x12V\n" +
 	"\x05Parse\x12%.bigquery_emulator.v1.ParseSqlRequest\x1a&.bigquery_emulator.v1.ParseSqlResponse\x12_\n" +
 	"\bTokenize\x12(.bigquery_emulator.v1.TokenizeSqlRequest\x1a).bigquery_emulator.v1.TokenizeSqlResponse\x12_\n" +
-	"\bComplete\x12(.bigquery_emulator.v1.CompleteSqlRequest\x1a).bigquery_emulator.v1.CompleteSqlResponseBFZAgithub.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb\xf8\x01\x01b\x06proto3"
+	"\bComplete\x12(.bigquery_emulator.v1.CompleteSqlRequest\x1a).bigquery_emulator.v1.CompleteSqlResponse\x12\\\n" +
+	"\aAnalyze\x12'.bigquery_emulator.v1.AnalyzeSqlRequest\x1a(.bigquery_emulator.v1.AnalyzeSqlResponseBFZAgithub.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb\xf8\x01\x01b\x06proto3"
 
 var (
 	file_emulator_proto_rawDescOnce sync.Once
@@ -3751,7 +4012,7 @@ func file_emulator_proto_rawDescGZIP() []byte {
 	return file_emulator_proto_rawDescData
 }
 
-var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
+var file_emulator_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_emulator_proto_goTypes = []any{
 	(*DatasetRef)(nil),                    // 0: bigquery_emulator.v1.DatasetRef
 	(*TableRef)(nil),                      // 1: bigquery_emulator.v1.TableRef
@@ -3817,7 +4078,10 @@ var file_emulator_proto_goTypes = []any{
 	(*CompleteSqlRequest)(nil),            // 61: bigquery_emulator.v1.CompleteSqlRequest
 	(*SqlCompletionCandidate)(nil),        // 62: bigquery_emulator.v1.SqlCompletionCandidate
 	(*CompleteSqlResponse)(nil),           // 63: bigquery_emulator.v1.CompleteSqlResponse
-	nil,                                   // 64: bigquery_emulator.v1.QueryRequest.ParametersEntry
+	(*AnalyzeSqlRequest)(nil),             // 64: bigquery_emulator.v1.AnalyzeSqlRequest
+	(*ReferencedTable)(nil),               // 65: bigquery_emulator.v1.ReferencedTable
+	(*AnalyzeSqlResponse)(nil),            // 66: bigquery_emulator.v1.AnalyzeSqlResponse
+	nil,                                   // 67: bigquery_emulator.v1.QueryRequest.ParametersEntry
 }
 var file_emulator_proto_depIdxs = []int32{
 	2,  // 0: bigquery_emulator.v1.FieldSchema.fields:type_name -> bigquery_emulator.v1.FieldSchema
@@ -3852,7 +4116,7 @@ var file_emulator_proto_depIdxs = []int32{
 	1,  // 29: bigquery_emulator.v1.SetColumnGovernanceRequest.table:type_name -> bigquery_emulator.v1.TableRef
 	39, // 30: bigquery_emulator.v1.SetColumnGovernanceRequest.column:type_name -> bigquery_emulator.v1.ColumnGovernance
 	18, // 31: bigquery_emulator.v1.ListRowsResponse.rows:type_name -> bigquery_emulator.v1.DataRow
-	64, // 32: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
+	67, // 32: bigquery_emulator.v1.QueryRequest.parameters:type_name -> bigquery_emulator.v1.QueryRequest.ParametersEntry
 	3,  // 33: bigquery_emulator.v1.DryRunResponse.schema:type_name -> bigquery_emulator.v1.TableSchema
 	3,  // 34: bigquery_emulator.v1.QueryResultRow.schema:type_name -> bigquery_emulator.v1.TableSchema
 	50, // 35: bigquery_emulator.v1.QueryResultRow.cells:type_name -> bigquery_emulator.v1.Cell
@@ -3868,58 +4132,62 @@ var file_emulator_proto_depIdxs = []int32{
 	59, // 45: bigquery_emulator.v1.TokenizeSqlResponse.tokens:type_name -> bigquery_emulator.v1.SqlToken
 	53, // 46: bigquery_emulator.v1.TokenizeSqlResponse.diagnostics:type_name -> bigquery_emulator.v1.SqlDiagnostic
 	62, // 47: bigquery_emulator.v1.CompleteSqlResponse.candidates:type_name -> bigquery_emulator.v1.SqlCompletionCandidate
-	44, // 48: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
-	4,  // 49: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
-	6,  // 50: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
-	8,  // 51: bigquery_emulator.v1.Catalog.ListDatasets:input_type -> bigquery_emulator.v1.ListDatasetsRequest
-	10, // 52: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
-	12, // 53: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
-	14, // 54: bigquery_emulator.v1.Catalog.ListTables:input_type -> bigquery_emulator.v1.ListTablesRequest
-	16, // 55: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
-	19, // 56: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
-	21, // 57: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
-	24, // 58: bigquery_emulator.v1.Catalog.ListRoutines:input_type -> bigquery_emulator.v1.ListRoutinesRequest
-	26, // 59: bigquery_emulator.v1.Catalog.GetRoutine:input_type -> bigquery_emulator.v1.GetRoutineRequest
-	28, // 60: bigquery_emulator.v1.Catalog.UpsertRoutine:input_type -> bigquery_emulator.v1.UpsertRoutineRequest
-	30, // 61: bigquery_emulator.v1.Catalog.DeleteRoutine:input_type -> bigquery_emulator.v1.DeleteRoutineRequest
-	33, // 62: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:input_type -> bigquery_emulator.v1.UpsertRowAccessPolicyRequest
-	35, // 63: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:input_type -> bigquery_emulator.v1.DeleteRowAccessPolicyRequest
-	37, // 64: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:input_type -> bigquery_emulator.v1.ListRowAccessPoliciesRequest
-	40, // 65: bigquery_emulator.v1.Catalog.SetColumnGovernance:input_type -> bigquery_emulator.v1.SetColumnGovernanceRequest
-	43, // 66: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
-	43, // 67: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
-	54, // 68: bigquery_emulator.v1.SqlTools.Format:input_type -> bigquery_emulator.v1.FormatSqlRequest
-	56, // 69: bigquery_emulator.v1.SqlTools.Parse:input_type -> bigquery_emulator.v1.ParseSqlRequest
-	58, // 70: bigquery_emulator.v1.SqlTools.Tokenize:input_type -> bigquery_emulator.v1.TokenizeSqlRequest
-	61, // 71: bigquery_emulator.v1.SqlTools.Complete:input_type -> bigquery_emulator.v1.CompleteSqlRequest
-	5,  // 72: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
-	7,  // 73: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
-	9,  // 74: bigquery_emulator.v1.Catalog.ListDatasets:output_type -> bigquery_emulator.v1.ListDatasetsResponse
-	11, // 75: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
-	13, // 76: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
-	15, // 77: bigquery_emulator.v1.Catalog.ListTables:output_type -> bigquery_emulator.v1.ListTablesResponse
-	17, // 78: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
-	20, // 79: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
-	42, // 80: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
-	25, // 81: bigquery_emulator.v1.Catalog.ListRoutines:output_type -> bigquery_emulator.v1.ListRoutinesResponse
-	27, // 82: bigquery_emulator.v1.Catalog.GetRoutine:output_type -> bigquery_emulator.v1.GetRoutineResponse
-	29, // 83: bigquery_emulator.v1.Catalog.UpsertRoutine:output_type -> bigquery_emulator.v1.UpsertRoutineResponse
-	31, // 84: bigquery_emulator.v1.Catalog.DeleteRoutine:output_type -> bigquery_emulator.v1.DeleteRoutineResponse
-	34, // 85: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:output_type -> bigquery_emulator.v1.UpsertRowAccessPolicyResponse
-	36, // 86: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:output_type -> bigquery_emulator.v1.DeleteRowAccessPolicyResponse
-	38, // 87: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:output_type -> bigquery_emulator.v1.ListRowAccessPoliciesResponse
-	41, // 88: bigquery_emulator.v1.Catalog.SetColumnGovernance:output_type -> bigquery_emulator.v1.SetColumnGovernanceResponse
-	45, // 89: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
-	46, // 90: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
-	55, // 91: bigquery_emulator.v1.SqlTools.Format:output_type -> bigquery_emulator.v1.FormatSqlResponse
-	57, // 92: bigquery_emulator.v1.SqlTools.Parse:output_type -> bigquery_emulator.v1.ParseSqlResponse
-	60, // 93: bigquery_emulator.v1.SqlTools.Tokenize:output_type -> bigquery_emulator.v1.TokenizeSqlResponse
-	63, // 94: bigquery_emulator.v1.SqlTools.Complete:output_type -> bigquery_emulator.v1.CompleteSqlResponse
-	72, // [72:95] is the sub-list for method output_type
-	49, // [49:72] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	65, // 48: bigquery_emulator.v1.AnalyzeSqlResponse.referenced_tables:type_name -> bigquery_emulator.v1.ReferencedTable
+	53, // 49: bigquery_emulator.v1.AnalyzeSqlResponse.diagnostics:type_name -> bigquery_emulator.v1.SqlDiagnostic
+	44, // 50: bigquery_emulator.v1.QueryRequest.ParametersEntry.value:type_name -> bigquery_emulator.v1.QueryParameter
+	4,  // 51: bigquery_emulator.v1.Catalog.RegisterDataset:input_type -> bigquery_emulator.v1.RegisterDatasetRequest
+	6,  // 52: bigquery_emulator.v1.Catalog.DropDataset:input_type -> bigquery_emulator.v1.DropDatasetRequest
+	8,  // 53: bigquery_emulator.v1.Catalog.ListDatasets:input_type -> bigquery_emulator.v1.ListDatasetsRequest
+	10, // 54: bigquery_emulator.v1.Catalog.RegisterTable:input_type -> bigquery_emulator.v1.RegisterTableRequest
+	12, // 55: bigquery_emulator.v1.Catalog.DropTable:input_type -> bigquery_emulator.v1.DropTableRequest
+	14, // 56: bigquery_emulator.v1.Catalog.ListTables:input_type -> bigquery_emulator.v1.ListTablesRequest
+	16, // 57: bigquery_emulator.v1.Catalog.DescribeTable:input_type -> bigquery_emulator.v1.DescribeTableRequest
+	19, // 58: bigquery_emulator.v1.Catalog.InsertRows:input_type -> bigquery_emulator.v1.InsertRowsRequest
+	21, // 59: bigquery_emulator.v1.Catalog.ListRows:input_type -> bigquery_emulator.v1.ListRowsRequest
+	24, // 60: bigquery_emulator.v1.Catalog.ListRoutines:input_type -> bigquery_emulator.v1.ListRoutinesRequest
+	26, // 61: bigquery_emulator.v1.Catalog.GetRoutine:input_type -> bigquery_emulator.v1.GetRoutineRequest
+	28, // 62: bigquery_emulator.v1.Catalog.UpsertRoutine:input_type -> bigquery_emulator.v1.UpsertRoutineRequest
+	30, // 63: bigquery_emulator.v1.Catalog.DeleteRoutine:input_type -> bigquery_emulator.v1.DeleteRoutineRequest
+	33, // 64: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:input_type -> bigquery_emulator.v1.UpsertRowAccessPolicyRequest
+	35, // 65: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:input_type -> bigquery_emulator.v1.DeleteRowAccessPolicyRequest
+	37, // 66: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:input_type -> bigquery_emulator.v1.ListRowAccessPoliciesRequest
+	40, // 67: bigquery_emulator.v1.Catalog.SetColumnGovernance:input_type -> bigquery_emulator.v1.SetColumnGovernanceRequest
+	43, // 68: bigquery_emulator.v1.Query.DryRun:input_type -> bigquery_emulator.v1.QueryRequest
+	43, // 69: bigquery_emulator.v1.Query.ExecuteQuery:input_type -> bigquery_emulator.v1.QueryRequest
+	54, // 70: bigquery_emulator.v1.SqlTools.Format:input_type -> bigquery_emulator.v1.FormatSqlRequest
+	56, // 71: bigquery_emulator.v1.SqlTools.Parse:input_type -> bigquery_emulator.v1.ParseSqlRequest
+	58, // 72: bigquery_emulator.v1.SqlTools.Tokenize:input_type -> bigquery_emulator.v1.TokenizeSqlRequest
+	61, // 73: bigquery_emulator.v1.SqlTools.Complete:input_type -> bigquery_emulator.v1.CompleteSqlRequest
+	64, // 74: bigquery_emulator.v1.SqlTools.Analyze:input_type -> bigquery_emulator.v1.AnalyzeSqlRequest
+	5,  // 75: bigquery_emulator.v1.Catalog.RegisterDataset:output_type -> bigquery_emulator.v1.RegisterDatasetResponse
+	7,  // 76: bigquery_emulator.v1.Catalog.DropDataset:output_type -> bigquery_emulator.v1.DropDatasetResponse
+	9,  // 77: bigquery_emulator.v1.Catalog.ListDatasets:output_type -> bigquery_emulator.v1.ListDatasetsResponse
+	11, // 78: bigquery_emulator.v1.Catalog.RegisterTable:output_type -> bigquery_emulator.v1.RegisterTableResponse
+	13, // 79: bigquery_emulator.v1.Catalog.DropTable:output_type -> bigquery_emulator.v1.DropTableResponse
+	15, // 80: bigquery_emulator.v1.Catalog.ListTables:output_type -> bigquery_emulator.v1.ListTablesResponse
+	17, // 81: bigquery_emulator.v1.Catalog.DescribeTable:output_type -> bigquery_emulator.v1.DescribeTableResponse
+	20, // 82: bigquery_emulator.v1.Catalog.InsertRows:output_type -> bigquery_emulator.v1.InsertRowsResponse
+	42, // 83: bigquery_emulator.v1.Catalog.ListRows:output_type -> bigquery_emulator.v1.ListRowsResponse
+	25, // 84: bigquery_emulator.v1.Catalog.ListRoutines:output_type -> bigquery_emulator.v1.ListRoutinesResponse
+	27, // 85: bigquery_emulator.v1.Catalog.GetRoutine:output_type -> bigquery_emulator.v1.GetRoutineResponse
+	29, // 86: bigquery_emulator.v1.Catalog.UpsertRoutine:output_type -> bigquery_emulator.v1.UpsertRoutineResponse
+	31, // 87: bigquery_emulator.v1.Catalog.DeleteRoutine:output_type -> bigquery_emulator.v1.DeleteRoutineResponse
+	34, // 88: bigquery_emulator.v1.Catalog.UpsertRowAccessPolicy:output_type -> bigquery_emulator.v1.UpsertRowAccessPolicyResponse
+	36, // 89: bigquery_emulator.v1.Catalog.DeleteRowAccessPolicy:output_type -> bigquery_emulator.v1.DeleteRowAccessPolicyResponse
+	38, // 90: bigquery_emulator.v1.Catalog.ListRowAccessPolicies:output_type -> bigquery_emulator.v1.ListRowAccessPoliciesResponse
+	41, // 91: bigquery_emulator.v1.Catalog.SetColumnGovernance:output_type -> bigquery_emulator.v1.SetColumnGovernanceResponse
+	45, // 92: bigquery_emulator.v1.Query.DryRun:output_type -> bigquery_emulator.v1.DryRunResponse
+	46, // 93: bigquery_emulator.v1.Query.ExecuteQuery:output_type -> bigquery_emulator.v1.QueryResultRow
+	55, // 94: bigquery_emulator.v1.SqlTools.Format:output_type -> bigquery_emulator.v1.FormatSqlResponse
+	57, // 95: bigquery_emulator.v1.SqlTools.Parse:output_type -> bigquery_emulator.v1.ParseSqlResponse
+	60, // 96: bigquery_emulator.v1.SqlTools.Tokenize:output_type -> bigquery_emulator.v1.TokenizeSqlResponse
+	63, // 97: bigquery_emulator.v1.SqlTools.Complete:output_type -> bigquery_emulator.v1.CompleteSqlResponse
+	66, // 98: bigquery_emulator.v1.SqlTools.Analyze:output_type -> bigquery_emulator.v1.AnalyzeSqlResponse
+	75, // [75:99] is the sub-list for method output_type
+	51, // [51:75] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_emulator_proto_init() }
@@ -3939,7 +4207,7 @@ func file_emulator_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_emulator_proto_rawDesc), len(file_emulator_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   65,
+			NumMessages:   68,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

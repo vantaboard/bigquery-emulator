@@ -416,6 +416,7 @@ service SqlTools {
   rpc Parse(ParseSqlRequest) returns (ParseSqlResponse);
   rpc Tokenize(TokenizeSqlRequest) returns (TokenizeSqlResponse);
   rpc Complete(CompleteSqlRequest) returns (CompleteSqlResponse);
+  rpc Analyze(AnalyzeSqlRequest) returns (AnalyzeSqlResponse);
 }
 
 message SqlDiagnostic {
@@ -423,6 +424,10 @@ message SqlDiagnostic {
   int32 column = 2;
   string message = 3;
   string severity = 4;
+  int32 end_line = 5;
+  int32 end_column = 6;
+  int32 start_byte = 7;
+  int32 end_byte = 8;
 }
 
 message FormatSqlRequest {
@@ -475,10 +480,31 @@ message SqlCompletionCandidate {
   string label = 1;
   string kind = 2;
   string insert_text = 3;
+  string detail = 4;
 }
 
 message CompleteSqlResponse {
   repeated SqlCompletionCandidate candidates = 1;
   int32 replacement_start = 2;
   int32 replacement_end = 3;
+}
+
+message AnalyzeSqlRequest {
+  string project_id = 1;
+  string default_dataset_id = 2;
+  string sql = 3;
+}
+
+message ReferencedTable {
+  string project_id = 1;
+  string dataset_id = 2;
+  string table_id = 3;
+  string alias = 4;
+  string kind = 5;
+}
+
+message AnalyzeSqlResponse {
+  repeated ReferencedTable referenced_tables = 1;
+  repeated string statement_kinds = 2;
+  repeated SqlDiagnostic diagnostics = 3;
 }

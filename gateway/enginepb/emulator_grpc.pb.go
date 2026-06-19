@@ -914,6 +914,7 @@ const (
 	SqlTools_Parse_FullMethodName    = "/bigquery_emulator.v1.SqlTools/Parse"
 	SqlTools_Tokenize_FullMethodName = "/bigquery_emulator.v1.SqlTools/Tokenize"
 	SqlTools_Complete_FullMethodName = "/bigquery_emulator.v1.SqlTools/Complete"
+	SqlTools_Analyze_FullMethodName  = "/bigquery_emulator.v1.SqlTools/Analyze"
 )
 
 // SqlToolsClient is the client API for SqlTools service.
@@ -924,6 +925,7 @@ type SqlToolsClient interface {
 	Parse(ctx context.Context, in *ParseSqlRequest, opts ...grpc.CallOption) (*ParseSqlResponse, error)
 	Tokenize(ctx context.Context, in *TokenizeSqlRequest, opts ...grpc.CallOption) (*TokenizeSqlResponse, error)
 	Complete(ctx context.Context, in *CompleteSqlRequest, opts ...grpc.CallOption) (*CompleteSqlResponse, error)
+	Analyze(ctx context.Context, in *AnalyzeSqlRequest, opts ...grpc.CallOption) (*AnalyzeSqlResponse, error)
 }
 
 type sqlToolsClient struct {
@@ -974,6 +976,16 @@ func (c *sqlToolsClient) Complete(ctx context.Context, in *CompleteSqlRequest, o
 	return out, nil
 }
 
+func (c *sqlToolsClient) Analyze(ctx context.Context, in *AnalyzeSqlRequest, opts ...grpc.CallOption) (*AnalyzeSqlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnalyzeSqlResponse)
+	err := c.cc.Invoke(ctx, SqlTools_Analyze_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SqlToolsServer is the server API for SqlTools service.
 // All implementations should embed UnimplementedSqlToolsServer
 // for forward compatibility.
@@ -982,6 +994,7 @@ type SqlToolsServer interface {
 	Parse(context.Context, *ParseSqlRequest) (*ParseSqlResponse, error)
 	Tokenize(context.Context, *TokenizeSqlRequest) (*TokenizeSqlResponse, error)
 	Complete(context.Context, *CompleteSqlRequest) (*CompleteSqlResponse, error)
+	Analyze(context.Context, *AnalyzeSqlRequest) (*AnalyzeSqlResponse, error)
 }
 
 // UnimplementedSqlToolsServer should be embedded to have
@@ -1002,6 +1015,9 @@ func (UnimplementedSqlToolsServer) Tokenize(context.Context, *TokenizeSqlRequest
 }
 func (UnimplementedSqlToolsServer) Complete(context.Context, *CompleteSqlRequest) (*CompleteSqlResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Complete not implemented")
+}
+func (UnimplementedSqlToolsServer) Analyze(context.Context, *AnalyzeSqlRequest) (*AnalyzeSqlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Analyze not implemented")
 }
 func (UnimplementedSqlToolsServer) testEmbeddedByValue() {}
 
@@ -1095,6 +1111,24 @@ func _SqlTools_Complete_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SqlTools_Analyze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalyzeSqlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqlToolsServer).Analyze(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SqlTools_Analyze_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqlToolsServer).Analyze(ctx, req.(*AnalyzeSqlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SqlTools_ServiceDesc is the grpc.ServiceDesc for SqlTools service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1117,6 +1151,10 @@ var SqlTools_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Complete",
 			Handler:    _SqlTools_Complete_Handler,
+		},
+		{
+			MethodName: "Analyze",
+			Handler:    _SqlTools_Analyze_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
