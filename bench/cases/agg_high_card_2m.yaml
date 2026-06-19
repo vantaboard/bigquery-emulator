@@ -4,11 +4,11 @@ setup:
   - sql: |
       CREATE TABLE {{ds}}.t AS
       SELECT id, MOD(id, 500000) AS k, CAST(id AS FLOAT64) / 7 AS v
-      FROM (
-        SELECT n + (m - 1) * 1000000 AS id
-        FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS n
-        CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m
-      )
+      FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS id
+  - sql: |
+      INSERT INTO {{ds}}.t
+      SELECT id + 1000000 AS id, MOD(id + 1000000, 500000) AS k, CAST(id + 1000000 AS FLOAT64) / 7 AS v
+      FROM UNNEST(GENERATE_ARRAY(1, 1000000)) AS id
 query: |
   SELECT k, COUNT(*) AS cnt, SUM(v) AS total
   FROM {{ds}}.t
