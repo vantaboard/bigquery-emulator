@@ -36,6 +36,7 @@ DEFAULT_SEED_FILE=/opt/bigquery-emulator/testdata/public-data/bigquery-public-da
 has_hostname=0
 has_data_dir=0
 has_seed_file=0
+has_sql_tools=0
 for arg in "$@"; do
     case "${arg}" in
         --hostname|--hostname=*|-hostname|-hostname=*)
@@ -46,6 +47,9 @@ for arg in "$@"; do
             ;;
         --seed-data-file|--seed-data-file=*|--seed-yaml|--seed-yaml=*)
             has_seed_file=1
+            ;;
+        --enable-sql-tools-api)
+            has_sql_tools=1
             ;;
     esac
 done
@@ -61,6 +65,9 @@ if [ "${has_data_dir}" -eq 0 ]; then
 fi
 if [ "${has_hostname}" -eq 0 ]; then
     set -- --hostname=0.0.0.0 "$@"
+fi
+if [ "${has_sql_tools}" -eq 0 ]; then
+    set -- --enable-sql-tools-api "$@"
 fi
 
 exec /opt/bigquery-emulator/gateway_main "$@"

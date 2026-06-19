@@ -833,11 +833,26 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
 | `UNDROP SCHEMA` | `unsupported` | **real** | [DML / DDL](#dml--ddl) (`RunUndrop` today) |
+| SQL Tools API (format/parse/complete/analyze) | ✅ landed | **real** | [SQL Tools API](#sql-tools-api) (M4 query editor) |
 
 > **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
 > NOT planned.** It is effectively a whole second query language and is
 > not worth modeling in a local emulator; it stays `unsupported` (see
 > [Non-goals](#non-goals)).
+
+### SQL Tools API
+
+Opt-in gateway routes (`--enable-sql-tools-api`) expose GoogleSQL format,
+parse, tokenize, catalog-aware completion, and query analysis for downstream
+query-editor UIs. See [`docs/SQL_TOOLS_API.md`](docs/SQL_TOOLS_API.md).
+
+- ✅ Format / parse / tokenize / complete — engine-backed parser and formatter
+- ✅ Diagnostic spans + UTF-16 offset contract — CodeMirror integration
+- ✅ Routines, views, FQNs, column metadata in completion
+- ✅ In-scope column completion via analyzer
+- ✅ `POST /analyze` — referenced tables for reference panels
+- ✅ `GET /capabilities` — UI feature probe
+- Docker default enables `--enable-sql-tools-api` via `docker/gateway_main.sh`
 
 ### BigQuery ML
 
