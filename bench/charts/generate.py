@@ -137,6 +137,15 @@ def _goccy_wall_ms(row: dict | None) -> float:
     return ms if ms > 0 else math.nan
 
 
+def _goccy_unavailable(row: dict | None) -> bool:
+    """True when goccy has no plottable latency (skipped, error, timeout, missing)."""
+    if row is None:
+        return True
+    if row.get("outcome") != "ok":
+        return True
+    return _p50_ms(row) <= 0
+
+
 def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     cases = sorted({r["case_name"] for r in results["results"]})
     emu = {r["case_name"]: r for r in results["results"] if r["target"] == "emulator"}
@@ -144,17 +153,15 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     bq = baseline.get("cases", {})
 
     labels, emu_wall_ms, goccy_ms, bq_ms = [], [], [], []
-    goccy_skipped_x: list[int] = []
+    goccy_unavailable_x: list[int] = []
     for case in cases:
         labels.append(case)
         xi = len(labels) - 1
         emu_wall_ms.append(_emu_wall_ms(emu.get(case)))
         row = goccy.get(case)
-        if row and row.get("outcome") == "skipped":
-            goccy_ms.append(math.nan)
-            goccy_skipped_x.append(xi)
-        else:
-            goccy_ms.append(_goccy_wall_ms(row))
+        goccy_ms.append(_goccy_wall_ms(row))
+        if _goccy_unavailable(row):
+            goccy_unavailable_x.append(xi)
         bq_val = _bq_latency_ms(bq.get(case))
         bq_ms.append(bq_val if bq_val is not None else math.nan)
 
@@ -166,15 +173,15 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     ax.bar([i + offsets[0] for i in x], emu_wall_ms, width, label="vantaboard (wall)")
     ax.bar([i + offsets[1] for i in x], goccy_ms, width, label="goccy (wall)")
     ax.bar([i + offsets[2] for i in x], bq_ms, width, label="bigquery (job duration)")
-    if goccy_skipped_x:
+    if goccy_unavailable_x:
         ax.scatter(
-            [i + offsets[1] for i in goccy_skipped_x],
-            [SKIPPED_MARKER_MS] * len(goccy_skipped_x),
+            [i + offsets[1] for i in goccy_unavailable_x],
+            [SKIPPED_MARKER_MS] * len(goccy_unavailable_x),
             marker="x",
             color=OUTCOMES["skipped"],
             s=50,
             linewidths=1.5,
-            label="goccy skipped",
+            label="goccy unavailable",
             zorder=5,
             clip_on=False,
         )

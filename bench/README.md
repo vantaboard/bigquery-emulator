@@ -37,22 +37,17 @@ query: SELECT COUNT(*) AS cnt FROM {{ds}}.t
 iterations: 10
 warmup: 2
 max_ratio: 1.5   # optional; default 1.5x BigQuery p50
-max_ms: 180000  # optional; emulator compare-gate cap (also query cap when above 30s)
-query_timeout_ms: 600000  # optional; explicit per-query wall cap (overrides max_ms for queries)
+max_ms: 180000  # optional; query wall cap when above 30s default (also baseline ratio cap)
 ```
 
 `{{ds}}` is substituted per target (emulator dataset id, or `project.dataset` on BigQuery).
 
-`max_ms` gates emulator latency in `bench:compare`. Heavy cases also reuse raised
-`max_ms` as the default query wall cap (60s otherwise). Goccy on those cases gets
-a 10-minute floor so slow queries finish without loosening the emulator gate.
-Override with `query_timeout_ms` per case, or `--timeout` on the bench CLI.
-
 Cases tagged `heavy` (e.g. `join_hash_2m`, `agg_high_card_2m`, `order_by_1m`,
 `window_partition_1m`) build 1M–2M row tables so engine quality — not fixed
 per-query overhead — dominates the result. They use fewer `iterations` and a
-raised `max_ms`. Capture a fresh BigQuery baseline (`task bench:baseline`) after
-adding heavy cases so they are gated and charted.
+raised `max_ms` so slower targets (notably goccy) can finish. Capture a fresh
+BigQuery baseline (`task bench:baseline`) after adding heavy cases so they are
+gated and charted.
 
 > **`GENERATE_ARRAY` cap:** BigQuery rejects a single `GENERATE_ARRAY` that
 > produces more than 1,048,576 elements (`Error 400: ... produced too many
@@ -150,7 +145,7 @@ task bench:profile CASE=agg_group_by_100k MODE=heap  # heaptrack output
 ## Charts & CI
 
 - `task bench:charts` — matplotlib/seaborn SVGs in `bench/charts/out/`:
-  - `comparison.svg` — log-scale latency bars: vantaboard wall, goccy wall, BQ job duration (× marks where goccy skipped a case)
+  - `comparison.svg` — log-scale latency bars: vantaboard wall, goccy wall, BQ job duration (× where goccy data is unavailable: skipped, error, timeout, or missing)
   - `phases.svg` — stacked p50 engine phase timings for vantaboard cases
 - Re-run `task bench:run` after engine changes so `engine_p50` / `total_engine` populate results
 - Committed `bench/charts/out/*.svg` snapshots are embedded in the root
