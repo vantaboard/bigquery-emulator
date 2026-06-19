@@ -61,7 +61,7 @@ export function resourceTabId(kind: 'dataset' | 'table', projectId: string, data
 }
 
 export function defaultSql(project: string, dataset: string, table: string): string {
-    return `SELECT * FROM \`${project}.${dataset}.${table}\` LIMIT 100`;
+    return `SELECT * FROM \`${project}.${dataset}.${table}\` LIMIT 1000`;
 }
 
 export function tabLabel(tab: WorkspaceTab): string {
