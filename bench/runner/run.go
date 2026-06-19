@@ -222,7 +222,7 @@ func runCase(
 	opts.logf("    %s on %s: setup done in %s, running %d iterations...",
 		c.Name, target.Name(), time.Since(setupBegan).Round(time.Millisecond), c.Iterations)
 	_, query := c.Substitute(dsRef, project)
-	caseTimeout := c.QueryTimeoutForTarget(target.Name(), timeout)
+	caseTimeout := c.QueryTimeout(timeout)
 
 	samples, execSamples, queueSamples, slotSamples, phaseIters, last, outcome, lastErr := runQueryIterations(
 		ctx, opts, target, c, query, caseTimeout)

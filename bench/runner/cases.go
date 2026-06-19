@@ -16,29 +16,27 @@ import (
 
 // Case is one YAML benchmark definition under bench/cases/.
 type Case struct {
-	Name           string       `yaml:"name"`
-	Tags           []string     `yaml:"tags,omitempty"`
-	SetupSQL       []string     `yaml:"-"`
-	Query          string       `yaml:"query"`
-	Iterations     int          `yaml:"iterations,omitempty"`
-	Warmup         int          `yaml:"warmup,omitempty"`
-	MaxRatio       float64      `yaml:"max_ratio,omitempty"`
-	MaxMS          int64        `yaml:"max_ms,omitempty"`
-	QueryTimeoutMS int64        `yaml:"query_timeout_ms,omitempty"`
-	ProjectID      string       `yaml:"project_id,omitempty"`
-	SkipTargets    []TargetName `yaml:"skip_targets,omitempty"`
-	SkipReason     string       `yaml:"skip_reason,omitempty"`
-	Path           string       `yaml:"-"`
-	ContentHash    string       `yaml:"-"`
+	Name        string       `yaml:"name"`
+	Tags        []string     `yaml:"tags,omitempty"`
+	SetupSQL    []string     `yaml:"-"`
+	Query       string       `yaml:"query"`
+	Iterations  int          `yaml:"iterations,omitempty"`
+	Warmup      int          `yaml:"warmup,omitempty"`
+	MaxRatio    float64      `yaml:"max_ratio,omitempty"`
+	MaxMS       int64        `yaml:"max_ms,omitempty"`
+	ProjectID   string       `yaml:"project_id,omitempty"`
+	SkipTargets []TargetName `yaml:"skip_targets,omitempty"`
+	SkipReason  string       `yaml:"skip_reason,omitempty"`
+	Path        string       `yaml:"-"`
+	ContentHash string       `yaml:"-"`
 }
 
 const (
-	defaultIterations    = 10
-	defaultWarmup        = 2
-	defaultMaxRatio      = 1.5
-	defaultMaxMS         = 30_000
-	defaultTimeoutMS     = 60_000
-	goccyHeavyQueryMinMS = 600_000 // 10m floor for heavy cases on goccy (not CI-gated)
+	defaultIterations = 10
+	defaultWarmup     = 2
+	defaultMaxRatio   = 1.5
+	defaultMaxMS      = 30_000
+	defaultTimeoutMS  = 60_000
 )
 
 // LoadCases reads every *.yaml file in dir, sorted by name.
@@ -134,18 +132,17 @@ func (c Case) Substitute(dataset, project string) (setup []string, query string)
 // UnmarshalYAML accepts setup as {sql: ...} objects.
 func (c *Case) UnmarshalYAML(value *yaml.Node) error {
 	type plain struct {
-		Name           string       `yaml:"name"`
-		Tags           []string     `yaml:"tags,omitempty"`
-		Query          string       `yaml:"query"`
-		Iterations     int          `yaml:"iterations,omitempty"`
-		Warmup         int          `yaml:"warmup,omitempty"`
-		MaxRatio       float64      `yaml:"max_ratio,omitempty"`
-		MaxMS          int64        `yaml:"max_ms,omitempty"`
-		QueryTimeoutMS int64        `yaml:"query_timeout_ms,omitempty"`
-		ProjectID      string       `yaml:"project_id,omitempty"`
-		SkipTargets    []TargetName `yaml:"skip_targets,omitempty"`
-		SkipReason     string       `yaml:"skip_reason,omitempty"`
-		Setup          []struct {
+		Name        string       `yaml:"name"`
+		Tags        []string     `yaml:"tags,omitempty"`
+		Query       string       `yaml:"query"`
+		Iterations  int          `yaml:"iterations,omitempty"`
+		Warmup      int          `yaml:"warmup,omitempty"`
+		MaxRatio    float64      `yaml:"max_ratio,omitempty"`
+		MaxMS       int64        `yaml:"max_ms,omitempty"`
+		ProjectID   string       `yaml:"project_id,omitempty"`
+		SkipTargets []TargetName `yaml:"skip_targets,omitempty"`
+		SkipReason  string       `yaml:"skip_reason,omitempty"`
+		Setup       []struct {
 			SQL string `yaml:"sql"`
 		} `yaml:"setup"`
 	}
@@ -160,7 +157,6 @@ func (c *Case) UnmarshalYAML(value *yaml.Node) error {
 	c.Warmup = aux.Warmup
 	c.MaxRatio = aux.MaxRatio
 	c.MaxMS = aux.MaxMS
-	c.QueryTimeoutMS = aux.QueryTimeoutMS
 	c.ProjectID = aux.ProjectID
 	c.SkipTargets = aux.SkipTargets
 	c.SkipReason = aux.SkipReason
@@ -178,33 +174,12 @@ func hashContent(s string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// QueryTimeout returns the wall-clock cap for query iterations. Explicit
-// query_timeout_ms wins; otherwise cases that raise max_ms above the
-// compare-gate default reuse that value as the query cap.
+// QueryTimeout returns the wall-clock cap for query iterations. Cases
+// that set max_ms above the default baseline cap use that value so
+// slow targets (notably goccy on large joins) can finish.
 func (c Case) QueryTimeout(fallback time.Duration) time.Duration {
-	if c.QueryTimeoutMS > 0 {
-		return time.Duration(c.QueryTimeoutMS) * time.Millisecond
-	}
 	if c.MaxMS > defaultMaxMS {
 		return time.Duration(c.MaxMS) * time.Millisecond
 	}
 	return fallback
-}
-
-// QueryTimeoutForTarget applies target-specific adjustments. Goccy on heavy
-// cases (raised max_ms) gets a longer floor so slow queries finish without
-// inflating the emulator compare-gate threshold.
-func (c Case) QueryTimeoutForTarget(target TargetName, fallback time.Duration) time.Duration {
-	t := c.QueryTimeout(fallback)
-	if target != TargetGoccy || c.QueryTimeoutMS > 0 {
-		return t
-	}
-	if c.MaxMS <= defaultMaxMS {
-		return t
-	}
-	min := time.Duration(goccyHeavyQueryMinMS) * time.Millisecond
-	if t < min {
-		return min
-	}
-	return t
 }

@@ -54,22 +54,4 @@ func TestCaseQueryTimeout(t *testing.T) {
 	if got := (Case{MaxMS: 180_000}).QueryTimeout(fallback); got != 180*time.Second {
 		t.Fatalf("raised max_ms: got %v", got)
 	}
-	if got := (Case{QueryTimeoutMS: 90_000}).QueryTimeout(fallback); got != 90*time.Second {
-		t.Fatalf("query_timeout_ms: got %v", got)
-	}
-}
-
-func TestCaseQueryTimeoutForTargetGoccy(t *testing.T) {
-	fallback := 60 * time.Second
-	heavy := Case{MaxMS: 180_000}
-	if got := heavy.QueryTimeoutForTarget(TargetEmulator, fallback); got != 180*time.Second {
-		t.Fatalf("emulator heavy: got %v want 180s", got)
-	}
-	if got := heavy.QueryTimeoutForTarget(TargetGoccy, fallback); got != 10*time.Minute {
-		t.Fatalf("goccy heavy floor: got %v want 10m", got)
-	}
-	explicit := Case{MaxMS: 180_000, QueryTimeoutMS: 240_000}
-	if got := explicit.QueryTimeoutForTarget(TargetGoccy, fallback); got != 240*time.Second {
-		t.Fatalf("explicit query_timeout_ms: got %v", got)
-	}
 }
