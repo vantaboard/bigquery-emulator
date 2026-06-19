@@ -4,7 +4,7 @@ async function selectTable(page: Page) {
     const project = page.getByTestId('project-local-project');
     await expect(project).toBeVisible();
     await Promise.all([
-        page.waitForResponse((r) => r.url().includes('/api/projects/local-project/datasets') && r.ok()),
+        page.waitForResponse((r) => r.url().includes('/bigquery/v2/projects/local-project/datasets') && r.ok()),
         project.click(),
     ]);
     const dataset = page.getByTestId('dataset-test-dataset');
@@ -14,7 +14,7 @@ async function selectTable(page: Page) {
     ]);
     const table = page.getByTestId('table-table_a');
     await Promise.all([
-        page.waitForResponse((r) => r.url().includes('/tables/table_a/schema') && r.ok()),
+        page.waitForResponse((r) => r.url().includes('/tables/table_a') && r.ok()),
         table.click(),
     ]);
 }
@@ -40,7 +40,7 @@ test.describe('BigQuery Explorer', () => {
     test('runs a query and shows results', async ({ page }) => {
         await selectTable(page);
         await page.getByTestId('run-query').click();
-        await page.waitForResponse((r) => r.url().includes('/api/query') && r.ok());
+        await page.waitForResponse((r) => r.url().includes('/queries') && r.ok());
         await expect(page.getByTestId('results-tab')).toHaveClass(/border-blue-500/);
         await expect(page.getByTestId('results-tab')).toContainText('(2)');
         await expect(page.getByRole('cell', { name: 'alice' })).toBeVisible();

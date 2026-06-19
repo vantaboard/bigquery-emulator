@@ -1,11 +1,14 @@
-# Production image: static React app + nginx proxying /api to bq-api service.
+# Production image: static React app + nginx proxying /bigquery to the emulator.
 FROM node:22-alpine AS build
 WORKDIR /app
+ARG VITE_DEFAULT_PROJECT=
+ARG VITE_ALLOW_EMULATOR_PROJECT_ADMIN=
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
-# Same-origin /api in browser (nginx proxies to bq-api)
 ENV VITE_API_URL=
+ENV VITE_DEFAULT_PROJECT=$VITE_DEFAULT_PROJECT
+ENV VITE_ALLOW_EMULATOR_PROJECT_ADMIN=$VITE_ALLOW_EMULATOR_PROJECT_ADMIN
 RUN npm run build
 
 FROM nginx:1.27-alpine

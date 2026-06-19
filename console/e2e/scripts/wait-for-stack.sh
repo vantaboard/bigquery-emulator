@@ -24,4 +24,4 @@ wait_for() {
 }
 
 wait_for "ui" "curl -fsS -o /dev/null '$UI_URL/'"
-wait_for "explorer projects via nginx" "curl -fsS '$EMULATOR_URL/api/projects' | grep -q local-project"
+wait_for "bigquery datasets via nginx" "curl -fsS '$UI_URL/bigquery/v2/projects/local-project/datasets' | grep -q test-dataset"

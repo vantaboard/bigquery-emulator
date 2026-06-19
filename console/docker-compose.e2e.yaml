@@ -1,5 +1,4 @@
-# E2E stack: pinned Vantaboard emulator + explorer API bridge + static UI.
-# v0.3.1 serves BigQuery REST only; the bridge adapts /api/* for the React UI.
+# E2E stack: pinned Vantaboard emulator + static UI (nginx proxies /bigquery to emulator).
 # Usage: docker compose -f docker-compose.e2e.yaml up -d --wait --build
 services:
   bigquery:
@@ -15,27 +14,13 @@ services:
       retries: 12
       start_period: 45s
 
-  explorer-api:
-    build: ./e2e/explorer-bridge
-    environment:
-      BIGQUERY_EMULATOR_URL: http://bigquery:9050
-      EXPLORER_DEFAULT_PROJECT: local-project
-    depends_on:
-      bigquery:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/healthz | grep -q ok"]
-      interval: 3s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-
   bq-ui:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_DEFAULT_PROJECT: local-project
     ports:
       - "8080:80"
-    volumes:
-      - ./e2e/nginx.e2e.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      explorer-api:
+      bigquery:
         condition: service_healthy

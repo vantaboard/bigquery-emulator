@@ -1,8 +1,0 @@
-FROM node:22-alpine
-WORKDIR /app
-COPY index.mjs .
-ENV BIGQUERY_EMULATOR_URL=http://bigquery:9050
-ENV EXPLORER_API_PORT=8090
-ENV EXPLORER_DEFAULT_PROJECT=local-project
-EXPOSE 8090
-CMD ["node", "index.mjs"]

@@ -18,7 +18,6 @@ export default async function globalSetup() {
     } catch (err) {
         try {
             run(`docker compose -f "${composeFile}" logs bigquery`);
-            run(`docker compose -f "${composeFile}" logs explorer-api`);
         } catch {
             /* ignore log failure */
         }

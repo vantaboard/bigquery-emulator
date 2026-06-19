@@ -2,6 +2,17 @@ import { webEnv } from './env';
 
 const base = webEnv.apiBaseUrl;
 
+function extractApiError(data: unknown, status: number): string {
+    if (data && typeof data === 'object' && data !== null && 'error' in data) {
+        const err = (data as { error: unknown }).error;
+        if (typeof err === 'string') return err;
+        if (err && typeof err === 'object' && 'message' in err) {
+            return String((err as { message: unknown }).message);
+        }
+    }
+    return `HTTP ${status}`;
+}
+
 export class ApiClient {
     private readonly baseUrl: string;
 
@@ -26,11 +37,7 @@ export class ApiClient {
         const text = await res.text();
         const data = text ? (JSON.parse(text) as unknown) : null;
         if (!res.ok) {
-            const msg =
-                data && typeof data === 'object' && data !== null && 'error' in data
-                    ? String((data as { error: unknown }).error)
-                    : `HTTP ${res.status}`;
-            throw new Error(msg);
+            throw new Error(extractApiError(data, res.status));
         }
         return data as T;
     }
