@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     Folder,
@@ -18,7 +19,7 @@ import { resourceTabId } from '@/features/workspace/types';
 
 export function ResourceSidebar() {
     const navigate = useNavigate();
-    const { ui, updateUi, openTableTab, activeTab } = useWorkspace();
+    const { ui, updateUi, openDatasetTab, openTableTab, activeTab } = useWorkspace();
 
     const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
     const [expandedDatasets, setExpandedDatasets] = useState<string[]>([]);
@@ -57,6 +58,12 @@ export function ResourceSidebar() {
                 setDatasetTables((m) => ({ ...m, [key]: tb }));
             }
         }
+    };
+
+    const onSelectDataset = (project: string, dataset: string) => {
+        openDatasetTab(project, dataset);
+        const id = resourceTabId('dataset', project, dataset);
+        navigate(tabRoutePath({ type: 'dataset', id, projectId: project, datasetId: dataset }));
     };
 
     const onSelectTable = (project: string, dataset: string, table: string) => {
@@ -139,19 +146,38 @@ export function ResourceSidebar() {
                                             const dk = `${p}-${d}`;
                                             return (
                                                 <li key={dk}>
-                                                    <button
-                                                        type="button"
-                                                        data-testid={`dataset-${d}`}
-                                                        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5"
-                                                        onClick={() => void onToggleDataset(p, d)}
-                                                    >
-                                                        {expandedDatasets.includes(dk) ? (
-                                                            <FolderOpen className="size-4 shrink-0" />
-                                                        ) : (
-                                                            <Folder className="size-4 shrink-0" />
-                                                        )}
-                                                        <span className="truncate">{d}</span>
-                                                    </button>
+                                                    <div className="flex w-full items-center gap-0.5 rounded px-0.5 hover:bg-white/5">
+                                                        <button
+                                                            type="button"
+                                                            data-testid={`dataset-toggle-${d}`}
+                                                            className="rounded p-0.5 hover:bg-white/10"
+                                                            aria-label={
+                                                                expandedDatasets.includes(dk)
+                                                                    ? `Collapse ${d}`
+                                                                    : `Expand ${d}`
+                                                            }
+                                                            onClick={() => void onToggleDataset(p, d)}
+                                                        >
+                                                            {expandedDatasets.includes(dk) ? (
+                                                                <ChevronDown className="size-4 shrink-0" />
+                                                            ) : (
+                                                                <ChevronRight className="size-4 shrink-0" />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            data-testid={`dataset-${d}`}
+                                                            className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left"
+                                                            onClick={() => onSelectDataset(p, d)}
+                                                        >
+                                                            {expandedDatasets.includes(dk) ? (
+                                                                <FolderOpen className="size-4 shrink-0" />
+                                                            ) : (
+                                                                <Folder className="size-4 shrink-0" />
+                                                            )}
+                                                            <span className="truncate">{d}</span>
+                                                        </button>
+                                                    </div>
                                                     {expandedDatasets.includes(dk) && (
                                                         <ul className="ml-4">
                                                             {(datasetTables[dk] ?? []).map((t) => {
