@@ -11,8 +11,18 @@ func TestMergeReport_PreservesOtherCases(t *testing.T) {
 		Timestamp: time.Unix(0, 0),
 		Targets:   []TargetName{TargetEmulator, TargetGoccy},
 		Results: []CaseResult{
-			{CaseName: "keep_me", Target: TargetEmulator, Outcome: OutcomeOK, Latency: LatencyStats{P50: 5 * time.Millisecond}},
-			{CaseName: "keep_me", Target: TargetGoccy, Outcome: OutcomeOK, Latency: LatencyStats{P50: 9 * time.Millisecond}},
+			{
+				CaseName: "keep_me",
+				Target:   TargetEmulator,
+				Outcome:  OutcomeOK,
+				Latency:  LatencyStats{P50: 5 * time.Millisecond},
+			},
+			{
+				CaseName: "keep_me",
+				Target:   TargetGoccy,
+				Outcome:  OutcomeOK,
+				Latency:  LatencyStats{P50: 9 * time.Millisecond},
+			},
 			{CaseName: "create_view_100k", Target: TargetEmulator, Outcome: OutcomeError, Error: "old failure"},
 			{CaseName: "create_view_100k", Target: TargetGoccy, Outcome: OutcomeError, Error: "old failure"},
 		},
@@ -21,8 +31,18 @@ func TestMergeReport_PreservesOtherCases(t *testing.T) {
 		Timestamp: time.Unix(100, 0),
 		Targets:   []TargetName{TargetEmulator, TargetGoccy},
 		Results: []CaseResult{
-			{CaseName: "create_view_100k", Target: TargetEmulator, Outcome: OutcomeOK, Latency: LatencyStats{P50: 12 * time.Millisecond}},
-			{CaseName: "create_view_100k", Target: TargetGoccy, Outcome: OutcomeOK, Latency: LatencyStats{P50: 20 * time.Millisecond}},
+			{
+				CaseName: "create_view_100k",
+				Target:   TargetEmulator,
+				Outcome:  OutcomeOK,
+				Latency:  LatencyStats{P50: 12 * time.Millisecond},
+			},
+			{
+				CaseName: "create_view_100k",
+				Target:   TargetGoccy,
+				Outcome:  OutcomeOK,
+				Latency:  LatencyStats{P50: 20 * time.Millisecond},
+			},
 		},
 	}
 

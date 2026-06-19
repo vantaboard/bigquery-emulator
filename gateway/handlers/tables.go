@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -333,7 +334,7 @@ func insertLogicalView(
 		Sql:       ddl,
 	})
 	if err == nil && stream == nil {
-		err = fmt.Errorf("engine returned no result stream for view registration")
+		err = errors.New("engine returned no result stream for view registration")
 	}
 	if err == nil {
 		_, _, _, _, _, _, err = drainSyncStream(stream)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,14 +20,14 @@ var badgeReleaseCacheBusterRe = regexp.MustCompile(
 func readmeBadgeCacheVersion(version string) (string, error) {
 	version = strings.TrimSpace(version)
 	if version == "" {
-		return "", fmt.Errorf("version is required")
+		return "", errors.New("version is required")
 	}
 	return strings.TrimPrefix(version, "v"), nil
 }
 
 func patchReadmeBadgeCacheBuster(readme []byte, cacheVersion string) ([]byte, bool, error) {
 	if !badgeReleaseCacheBusterRe.Match(readme) {
-		return nil, false, fmt.Errorf("README release badge cache buster not found")
+		return nil, false, errors.New("README release badge cache buster not found")
 	}
 	replacement := []byte("${1}" + cacheVersion)
 	out := badgeReleaseCacheBusterRe.ReplaceAll(readme, replacement)

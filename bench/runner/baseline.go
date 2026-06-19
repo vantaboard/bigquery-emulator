@@ -3,6 +3,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"time"
 )
@@ -101,9 +102,7 @@ func MergeBaseline(existing, fresh BaselineFile) BaselineFile {
 	if fresh.ProjectHash != "" {
 		out.ProjectHash = fresh.ProjectHash
 	}
-	for name, c := range fresh.Cases {
-		out.Cases[name] = c
-	}
+	maps.Copy(out.Cases, fresh.Cases)
 	return out
 }
 

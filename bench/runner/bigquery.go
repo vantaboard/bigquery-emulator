@@ -282,7 +282,7 @@ func retryOnRateLimit(
 		}
 		// Parent deadline/cancellation reached: no budget left to back off.
 		if cerr := ctx.Err(); cerr != nil {
-			return nil, fmt.Errorf("rate limit: parent context done after %d attempts: %w (last error: %v)",
+			return nil, fmt.Errorf("rate limit: parent context done after %d attempts: %w (last error: %w)",
 				attempt+1, cerr, err)
 		}
 		// Full jitter: wait in [0, backoff] to avoid synchronized retries.
@@ -291,7 +291,7 @@ func retryOnRateLimit(
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, fmt.Errorf("rate limit: backoff aborted after %d attempts: %w (last error: %v)",
+			return nil, fmt.Errorf("rate limit: backoff aborted after %d attempts: %w (last error: %w)",
 				attempt+1, ctx.Err(), err)
 		case <-timer.C:
 		}
