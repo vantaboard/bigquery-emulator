@@ -1,0 +1,14 @@
+name: ctas_agg_100k
+tags: [ddl, ctas]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.src AS
+      SELECT id, MOD(id, 100) AS k, CAST(id AS FLOAT64) / 7 AS v
+      FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+query: |
+  CREATE OR REPLACE TABLE {{ds}}.dst AS
+  SELECT k, COUNT(*) AS cnt, SUM(v) AS total
+  FROM {{ds}}.src
+  GROUP BY k
+iterations: 10
+warmup: 2

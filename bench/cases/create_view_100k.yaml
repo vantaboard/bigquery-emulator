@@ -1,0 +1,14 @@
+name: create_view_100k
+tags: [ddl, view]
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.base AS
+      SELECT id, MOD(id, 100) AS k
+      FROM UNNEST(GENERATE_ARRAY(1, 100000)) AS id
+query: |
+  CREATE OR REPLACE VIEW {{ds}}.v_dyn AS
+  SELECT k, COUNT(*) AS cnt
+  FROM {{ds}}.base
+  GROUP BY k
+iterations: 10
+warmup: 2

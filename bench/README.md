@@ -46,6 +46,18 @@ raised `max_ms` so slower targets (notably goccy) can finish. Capture a fresh
 BigQuery baseline (`task bench:baseline`) after adding heavy cases so they are
 gated and charted.
 
+> **`GENERATE_ARRAY` cap:** BigQuery rejects a single `GENERATE_ARRAY` that
+> produces more than 1,048,576 elements (`Error 400: ... produced too many
+> elements`). To build >1M-row tables, `CROSS JOIN` two smaller
+> `UNNEST(GENERATE_ARRAY(...))` sources (see `join_hash_2m`) instead of one
+> giant array.
+
+Cases tagged `ddl` / `view` exercise metadata + materialization paths that pure
+`SELECT` cases miss: `view_agg_100k` queries *through* a view, `ctas_agg_100k`
+times a `CREATE OR REPLACE TABLE ... AS SELECT`, and `create_view_100k` times a
+`CREATE OR REPLACE VIEW`. DDL statements return no rows, so their result hash is
+the empty-set hash on every target.
+
 ## BigQuery golden baseline
 
 Capture requires ADC and a billing project:
