@@ -131,6 +131,7 @@ cc_library(
         ":query_internal",
         "//backend/catalog:googlesql_catalog",
         "//backend/sqltools:catalog_names",
+        "//backend/sqltools:sql_references",
         "//backend/sqltools:sql_tools",
         "//backend/storage",
         "//proto:emulator_cc_grpc",

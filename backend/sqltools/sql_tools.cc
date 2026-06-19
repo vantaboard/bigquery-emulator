@@ -28,17 +28,6 @@ namespace backend {
 namespace sqltools {
 namespace {
 
-SqlDiagnostic DiagnosticFromStatus(const absl::Status& status) {
-  SqlDiagnostic diag;
-  diag.message = std::string(status.message());
-  ::googlesql::ErrorLocation location;
-  if (::googlesql::GetErrorLocation(status, &location)) {
-    diag.line = static_cast<int>(location.line());
-    diag.column = static_cast<int>(location.column());
-  }
-  return diag;
-}
-
 std::string TokenKindLabel(const ::googlesql::ParseToken& token) {
   if (token.IsEndOfInput()) return "end_of_input";
   if (token.IsComment()) return "comment";
@@ -46,185 +35,6 @@ std::string TokenKindLabel(const ::googlesql::ParseToken& token) {
   if (token.IsIdentifier()) return "identifier";
   if (token.IsKeyword()) return "keyword";
   return "unknown";
-}
-
-bool IsTableContextKeyword(absl::string_view keyword) {
-  static const absl::flat_hash_set<std::string>* kKeywords =
-      new absl::flat_hash_set<std::string>{
-          "FROM",   "JOIN",  "INNER", "LEFT",   "RIGHT", "FULL",
-          "CROSS",  "INTO",  "UPDATE", "TABLE", "MERGE", "USING",
-          "DELETE", "TRUNCATE"};
-  return kKeywords->contains(std::string(keyword));
-}
-
-bool IsColumnContextKeyword(absl::string_view keyword) {
-  static const absl::flat_hash_set<std::string>* kKeywords =
-      new absl::flat_hash_set<std::string>{
-          "SELECT", "WHERE", "ON",     "BY",      "HAVING", "QUALIFY",
-          "SET",    "AND",   "OR",     "NOT",     "WHEN",   "THEN",
-          "ELSE",   "CASE",  "GROUP",  "ORDER",   "PARTITION"};
-  return kKeywords->contains(std::string(keyword));
-}
-
-std::string TokenText(const ::googlesql::ParseToken& token) {
-  if (token.IsIdentifier()) return token.GetIdentifier();
-  if (token.IsKeyword()) return token.GetKeyword();
-  return std::string(token.GetImage());
-}
-
-void AppendUniqueCandidate(std::vector<CompletionCandidate>* out,
-                           CompletionCandidate candidate) {
-  for (const CompletionCandidate& existing : *out) {
-    if (existing.label == candidate.label && existing.kind == candidate.kind) {
-      return;
-    }
-  }
-  out->push_back(std::move(candidate));
-}
-
-void AppendPrefixMatches(absl::string_view prefix,
-                         absl::string_view kind,
-                         const std::vector<std::string>& names,
-                         std::vector<CompletionCandidate>* out) {
-  for (const std::string& name : names) {
-    if (prefix.empty() ||
-        absl::StartsWithIgnoreCase(name, prefix)) {
-      AppendUniqueCandidate(out,
-                            CompletionCandidate{name, std::string(kind), name});
-    }
-  }
-}
-
-const std::vector<std::string>& SqlKeywords() {
-  static const std::vector<std::string>* kKeywords = new std::vector<std::string>{
-      "ALL",        "AND",       "ANY",         "ARRAY",     "AS",       "ASC",
-      "BETWEEN",    "BY",        "CASE",        "CAST",      "COLLATE",  "CREATE",
-      "CROSS",      "CUBE",      "CURRENT",     "DEFAULT",   "DELETE",   "DESC",
-      "DISTINCT",   "DROP",      "ELSE",        "END",       "EXCEPT",   "EXISTS",
-      "FALSE",      "FOR",       "FROM",        "FULL",      "GROUP",    "GROUPING",
-      "HAVING",     "IF",        "IN",          "INNER",     "INSERT",   "INTERSECT",
-      "INTO",       "IS",        "JOIN",        "LEFT",      "LIKE",     "LIMIT",
-      "MERGE",      "NOT",       "NULL",        "NULLS",     "OF",       "OFFSET",
-      "ON",         "OR",        "ORDER",       "OUTER",     "OVER",     "PARTITION",
-      "PIVOT",      "QUALIFY",   "REGEXP",      "RIGHT",     "ROLLUP",   "ROW",
-      "ROWS",       "SAFE_CAST", "SELECT",      "SET",       "SOME",     "STRUCT",
-      "TABLE",      "THEN",      "TO",          "TRUE",      "UNION",    "UNNEST",
-      "UPDATE",     "USING",     "WHEN",        "WHERE",     "WINDOW",   "WITH",
-      "WITHIN"};
-  return *kKeywords;
-}
-
-void AppendFunctionCandidates(::googlesql::Catalog* catalog,
-                              absl::string_view prefix,
-                              std::vector<CompletionCandidate>* out) {
-  auto* simple = dynamic_cast<::googlesql::SimpleCatalog*>(catalog);
-  if (simple == nullptr) return;
-  absl::flat_hash_set<const ::googlesql::Function*> functions;
-  if (!simple->GetFunctions(&functions).ok()) return;
-  for (const ::googlesql::Function* function : functions) {
-    if (function == nullptr) continue;
-    const std::string name = function->Name();
-    if (prefix.empty() || absl::StartsWithIgnoreCase(name, prefix)) {
-      AppendUniqueCandidate(
-          out, CompletionCandidate{name, "function", name + "("});
-    }
-  }
-}
-
-void AppendColumnCandidatesForTable(::googlesql::Catalog* catalog,
-                                    absl::string_view project_id,
-                                    absl::string_view default_dataset,
-                                    absl::string_view table_ref,
-                                    absl::string_view prefix,
-                                    std::vector<CompletionCandidate>* out) {
-  std::vector<std::string> path;
-  for (absl::string_view part :
-       absl::StrSplit(table_ref, '.', absl::SkipEmpty())) {
-    path.push_back(std::string(part));
-  }
-  if (path.size() == 1 && !default_dataset.empty()) {
-    path.insert(path.begin(), std::string(default_dataset));
-  }
-  if (path.size() == 1 && !project_id.empty()) {
-    // Single unqualified name with no default dataset: try as table in catalog.
-  }
-  const ::googlesql::Table* table = nullptr;
-  if (catalog->FindTable(path, &table).ok() && table != nullptr) {
-    for (int i = 0; i < table->NumColumns(); ++i) {
-      const std::string col = std::string(table->GetColumn(i)->Name());
-      if (prefix.empty() || absl::StartsWithIgnoreCase(col, prefix)) {
-        AppendUniqueCandidate(out, CompletionCandidate{col, "column", col});
-      }
-    }
-  }
-}
-
-enum class CompletionContextKind {
-  kGeneral,
-  kTable,
-  kColumn,
-  kMember,
-};
-
-struct CompletionContext {
-  CompletionContextKind kind = CompletionContextKind::kGeneral;
-  std::string qualifier;
-};
-
-CompletionContext InferCompletionContext(
-    const std::vector<::googlesql::ParseToken>& tokens) {
-  CompletionContext ctx;
-  if (tokens.empty()) return ctx;
-
-  int idx = static_cast<int>(tokens.size()) - 1;
-  while (idx >= 0 && tokens[idx].IsEndOfInput()) {
-    --idx;
-  }
-  if (idx < 0) return ctx;
-
-  if (idx > 0 && tokens[idx - 1].GetKeyword() == ".") {
-    ctx.kind = CompletionContextKind::kMember;
-    ctx.qualifier = TokenText(tokens[idx - 2]);
-    return ctx;
-  }
-
-  const std::string last_keyword = tokens[idx].GetKeyword();
-  if (IsTableContextKeyword(last_keyword)) {
-    ctx.kind = CompletionContextKind::kTable;
-    return ctx;
-  }
-
-  for (int i = idx; i >= 0; --i) {
-    if (!tokens[i].IsKeyword()) continue;
-    const std::string kw = tokens[i].GetKeyword();
-    if (IsTableContextKeyword(kw)) {
-      ctx.kind = CompletionContextKind::kTable;
-      return ctx;
-    }
-    if (IsColumnContextKeyword(kw)) {
-      ctx.kind = CompletionContextKind::kColumn;
-      return ctx;
-    }
-  }
-  return ctx;
-}
-
-void FindReplacementSpan(absl::string_view sql, size_t cursor,
-                         int* replacement_start, int* replacement_end,
-                         std::string* prefix) {
-  *replacement_start = static_cast<int>(cursor);
-  *replacement_end = static_cast<int>(cursor);
-  prefix->clear();
-  if (cursor > sql.size()) cursor = sql.size();
-  size_t start = cursor;
-  while (start > 0) {
-    const char c = sql[start - 1];
-    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') break;
-    --start;
-  }
-  *replacement_start = static_cast<int>(start);
-  *replacement_end = static_cast<int>(cursor);
-  prefix->assign(sql.substr(start, cursor - start));
 }
 
 ::googlesql::ParserOptions MakeParserOptions(
@@ -235,6 +45,95 @@ void FindReplacementSpan(absl::string_view sql, size_t cursor,
 }
 
 }  // namespace
+
+namespace {
+
+int ByteOffsetFromLineAndColumn(absl::string_view sql, int line, int column) {
+  if (line <= 0 || column <= 0) {
+    return -1;
+  }
+  int current_line = 1;
+  int current_column = 1;
+  for (int i = 0; i < static_cast<int>(sql.size()); ++i) {
+    if (current_line == line && current_column == column) {
+      return i;
+    }
+    if (sql[static_cast<size_t>(i)] == '\n') {
+      ++current_line;
+      current_column = 1;
+    } else {
+      ++current_column;
+    }
+  }
+  if (current_line == line && current_column == column) {
+    return static_cast<int>(sql.size());
+  }
+  return -1;
+}
+
+}  // namespace
+
+SqlDiagnostic DiagnosticFromStatusWithSql(const absl::Status& status,
+                                          absl::string_view sql) {
+  SqlDiagnostic diag;
+  diag.message = std::string(status.message());
+
+  ::googlesql::ErrorLocation location;
+  if (::googlesql::GetErrorLocation(status, &location)) {
+    diag.line = static_cast<int>(location.line());
+    diag.column = static_cast<int>(location.column());
+  }
+
+  if (sql.empty() || diag.line <= 0 || diag.column <= 0) {
+    return diag;
+  }
+
+  const int start_byte =
+      ByteOffsetFromLineAndColumn(sql, diag.line, diag.column);
+  if (start_byte < 0) {
+    return diag;
+  }
+
+  diag.start_byte = start_byte;
+  int end_byte = start_byte + 1;
+
+  ::googlesql::ParseTokenOptions token_options;
+  token_options.language_options = MakeSqlToolsLanguageOptions();
+  ::googlesql::ParseResumeLocation token_resume =
+      ::googlesql::ParseResumeLocation::FromStringView(sql);
+  std::vector<::googlesql::ParseToken> tokens;
+  if (::googlesql::GetParseTokens(token_options, &token_resume, &tokens).ok()) {
+    for (const ::googlesql::ParseToken& token : tokens) {
+      const ::googlesql::ParseLocationRange range = token.GetLocationRange();
+      const int token_start = static_cast<int>(range.start().GetByteOffset());
+      const int token_end = static_cast<int>(range.end().GetByteOffset());
+      if (start_byte >= token_start && start_byte < token_end) {
+        end_byte = token_end;
+        break;
+      }
+    }
+  }
+
+  if (end_byte <= start_byte) {
+    end_byte = std::min(static_cast<int>(sql.size()), start_byte + 1);
+  }
+  diag.end_byte = end_byte;
+
+  int end_line = diag.line;
+  int end_column = diag.column;
+  for (int i = start_byte; i < end_byte && i < static_cast<int>(sql.size());
+       ++i) {
+    if (sql[static_cast<size_t>(i)] == '\n') {
+      ++end_line;
+      end_column = 1;
+    } else {
+      ++end_column;
+    }
+  }
+  diag.end_line = end_line;
+  diag.end_column = end_column;
+  return diag;
+}
 
 ::googlesql::LanguageOptions MakeSqlToolsLanguageOptions() {
   ::googlesql::LanguageOptions language;
@@ -262,11 +161,11 @@ absl::StatusOr<FormatResult> FormatSqlText(absl::string_view sql,
   if (options.strict) {
     status = ::googlesql::FormatSql(sql, &result.formatted_sql);
   } else {
-    status = ::googlesql::LenientFormatSql(sql, &result.formatted_sql,
-                                           options.formatter_options);
+    status = ::googlesql::LenientFormatSql(
+        sql, &result.formatted_sql, options.formatter_options);
   }
   if (!status.ok()) {
-    result.diagnostics.push_back(DiagnosticFromStatus(status));
+    result.diagnostics.push_back(DiagnosticFromStatusWithSql(status, sql));
   }
   return result;
 }
@@ -283,7 +182,8 @@ absl::StatusOr<ParseResult> ParseSqlText(
     const absl::Status parse_status = ::googlesql::ParseNextStatement(
         &resume, parser_options, &output, &at_end);
     if (!parse_status.ok()) {
-      result.diagnostics.push_back(DiagnosticFromStatus(parse_status));
+      result.diagnostics.push_back(
+          DiagnosticFromStatusWithSql(parse_status, sql));
       break;
     }
     if (output != nullptr && output->statement() != nullptr) {
@@ -295,7 +195,8 @@ absl::StatusOr<ParseResult> ParseSqlText(
 }
 
 absl::StatusOr<TokenizeResult> TokenizeSqlText(
-    absl::string_view sql, const ::googlesql::LanguageOptions& language,
+    absl::string_view sql,
+    const ::googlesql::LanguageOptions& language,
     const TokenizeOptions& options) {
   TokenizeResult result;
   ::googlesql::ParseTokenOptions token_options;
@@ -307,7 +208,8 @@ absl::StatusOr<TokenizeResult> TokenizeSqlText(
   const absl::Status token_status =
       ::googlesql::GetParseTokens(token_options, &resume, &parse_tokens);
   if (!token_status.ok()) {
-    result.diagnostics.push_back(DiagnosticFromStatus(token_status));
+    result.diagnostics.push_back(
+        DiagnosticFromStatusWithSql(token_status, sql));
     return result;
   }
   result.tokens.reserve(parse_tokens.size());
@@ -320,73 +222,6 @@ absl::StatusOr<TokenizeResult> TokenizeSqlText(
     out.end_byte = static_cast<int>(range.end().GetByteOffset());
     result.tokens.push_back(std::move(out));
   }
-  return result;
-}
-
-absl::StatusOr<CompleteResult> CompleteSqlText(
-    absl::string_view sql, size_t cursor_byte_offset,
-    const ::googlesql::LanguageOptions& language, ::googlesql::Catalog* catalog,
-    const CatalogNames& catalog_names, absl::string_view default_dataset_id) {
-  CompleteResult result;
-  if (catalog == nullptr) {
-    return absl::InvalidArgumentError("CompleteSqlText: catalog is required");
-  }
-  if (cursor_byte_offset > sql.size()) {
-    cursor_byte_offset = sql.size();
-  }
-  const absl::string_view prefix_sql = sql.substr(0, cursor_byte_offset);
-
-  std::string prefix;
-  FindReplacementSpan(sql, cursor_byte_offset, &result.replacement_start,
-                      &result.replacement_end, &prefix);
-
-  ::googlesql::ParseTokenOptions token_options;
-  token_options.language_options = language;
-  ::googlesql::ParseResumeLocation resume =
-      ::googlesql::ParseResumeLocation::FromStringView(prefix_sql);
-  std::vector<::googlesql::ParseToken> tokens;
-  const absl::Status token_status =
-      ::googlesql::GetParseTokens(token_options, &resume, &tokens);
-  if (!token_status.ok()) {
-    return token_status;
-  }
-
-  const CompletionContext ctx = InferCompletionContext(tokens);
-
-  switch (ctx.kind) {
-    case CompletionContextKind::kTable:
-      AppendPrefixMatches(prefix, "dataset", catalog_names.datasets,
-                          &result.candidates);
-      AppendPrefixMatches(prefix, "table", catalog_names.tables,
-                          &result.candidates);
-      break;
-    case CompletionContextKind::kMember:
-      AppendColumnCandidatesForTable(catalog, catalog->FullName(),
-                                     default_dataset_id, ctx.qualifier, prefix,
-                                     &result.candidates);
-      AppendPrefixMatches(prefix, "column", catalog_names.columns,
-                          &result.candidates);
-      break;
-    case CompletionContextKind::kColumn:
-      AppendPrefixMatches(prefix, "column", catalog_names.columns,
-                          &result.candidates);
-      AppendFunctionCandidates(catalog, prefix, &result.candidates);
-      AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
-      break;
-    case CompletionContextKind::kGeneral:
-      AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
-      AppendFunctionCandidates(catalog, prefix, &result.candidates);
-      AppendPrefixMatches(prefix, "dataset", catalog_names.datasets,
-                          &result.candidates);
-      AppendPrefixMatches(prefix, "table", catalog_names.tables,
-                          &result.candidates);
-      break;
-  }
-
-  std::sort(result.candidates.begin(), result.candidates.end(),
-            [](const CompletionCandidate& a, const CompletionCandidate& b) {
-              return a.label < b.label;
-            });
   return result;
 }
 

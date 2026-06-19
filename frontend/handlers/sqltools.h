@@ -29,6 +29,10 @@ class SqlToolsService final : public v1::SqlTools::Service {
                           const v1::CompleteSqlRequest* request,
                           v1::CompleteSqlResponse* response) override;
 
+  ::grpc::Status Analyze(::grpc::ServerContext* context,
+                         const v1::AnalyzeSqlRequest* request,
+                         v1::AnalyzeSqlResponse* response) override;
+
  private:
   backend::storage::Storage* storage_;
 };

@@ -3,6 +3,7 @@
 #include "absl/status/statusor.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/sqltools/catalog_names.h"
+#include "backend/sqltools/sql_references.h"
 #include "backend/sqltools/sql_tools.h"
 #include "frontend/handlers/query_internal.h"
 #include "googlesql/public/types/type_factory.h"
@@ -19,6 +20,18 @@ void CopyDiagnostic(const backend::sqltools::SqlDiagnostic& in,
   out->set_column(in.column);
   out->set_message(in.message);
   out->set_severity(in.severity);
+  if (in.end_line > 0) {
+    out->set_end_line(in.end_line);
+  }
+  if (in.end_column > 0) {
+    out->set_end_column(in.end_column);
+  }
+  if (in.start_byte >= 0) {
+    out->set_start_byte(in.start_byte);
+  }
+  if (in.end_byte >= 0) {
+    out->set_end_byte(in.end_byte);
+  }
 }
 
 ::googlesql::FormatterOptions FormatterOptionsFromRequest(
@@ -146,9 +159,10 @@ SqlToolsService::SqlToolsService(backend::storage::Storage* storage)
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
                           "SqlToolsService::Complete: project_id is required");
   }
-  if (request->sql().empty()) {
+  if (request->sql().empty() && request->cursor_byte_offset() != 0) {
     return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
-                          "SqlToolsService::Complete: sql is required");
+                          "SqlToolsService::Complete: empty sql requires "
+                          "cursor_byte_offset 0");
   }
   if (storage_ == nullptr) {
     return ::grpc::Status(
@@ -159,25 +173,45 @@ SqlToolsService::SqlToolsService(backend::storage::Storage* storage)
   ::googlesql::TypeFactory type_factory;
   const ::googlesql::LanguageOptions language =
       backend::sqltools::MakeSqlToolsLanguageOptions();
-  backend::catalog::GoogleSqlCatalog catalog(request->project_id(), storage_,
-                                             &type_factory, language,
+  backend::catalog::GoogleSqlCatalog catalog(request->project_id(),
+                                             storage_,
+                                             &type_factory,
+                                             language,
                                              request->default_dataset_id());
 
   backend::sqltools::CatalogNames names;
   const absl::Status populate =
       backend::sqltools::PopulateCatalogNamesFromStorage(
-          request->project_id(), request->default_dataset_id(), storage_,
+          request->project_id(),
+          request->default_dataset_id(),
+          storage_,
           &names);
   if (!populate.ok()) {
     return AnalyzeStatusToGrpc(populate);
   }
 
-  const size_t cursor = request->cursor_byte_offset() < 0
-                            ? request->sql().size()
-                            : static_cast<size_t>(request->cursor_byte_offset());
+  if (!request->sql().empty()) {
+    const absl::StatusOr<backend::sqltools::AnalyzeResult> analyze =
+        backend::sqltools::AnalyzeSqlText(request->sql(),
+                                          request->project_id(),
+                                          request->default_dataset_id(),
+                                          &catalog,
+                                          language);
+    if (analyze.ok()) {
+      backend::sqltools::PopulateInScopeTablesFromAnalyze(*analyze, &names);
+    }
+  }
+
+  const size_t cursor =
+      request->cursor_byte_offset() < 0
+          ? request->sql().size()
+          : static_cast<size_t>(request->cursor_byte_offset());
   const absl::StatusOr<backend::sqltools::CompleteResult> result =
-      backend::sqltools::CompleteSqlText(request->sql(), cursor, language,
-                                         &catalog, names,
+      backend::sqltools::CompleteSqlText(request->sql(),
+                                         cursor,
+                                         language,
+                                         &catalog,
+                                         names,
                                          request->default_dataset_id());
   if (!result.ok()) {
     return AnalyzeStatusToGrpc(result.status());
@@ -191,6 +225,72 @@ SqlToolsService::SqlToolsService(backend::storage::Storage* storage)
     out->set_label(candidate.label);
     out->set_kind(candidate.kind);
     out->set_insert_text(candidate.insert_text);
+    if (!candidate.detail.empty()) {
+      out->set_detail(candidate.detail);
+    }
+  }
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status SqlToolsService::Analyze(::grpc::ServerContext* /*context*/,
+                                        const v1::AnalyzeSqlRequest* request,
+                                        v1::AnalyzeSqlResponse* response) {
+  if (response == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "SqlToolsService::Analyze: response is null");
+  }
+  response->Clear();
+  if (request == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "SqlToolsService::Analyze: request is null");
+  }
+  if (request->project_id().empty()) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "SqlToolsService::Analyze: project_id is required");
+  }
+  if (request->sql().empty()) {
+    return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                          "SqlToolsService::Analyze: sql is required");
+  }
+  if (storage_ == nullptr) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        "SqlToolsService::Analyze: storage backend is not configured");
+  }
+
+  ::googlesql::TypeFactory type_factory;
+  const ::googlesql::LanguageOptions language =
+      backend::sqltools::MakeSqlToolsLanguageOptions();
+  backend::catalog::GoogleSqlCatalog catalog(request->project_id(),
+                                             storage_,
+                                             &type_factory,
+                                             language,
+                                             request->default_dataset_id());
+
+  const absl::StatusOr<backend::sqltools::AnalyzeResult> result =
+      backend::sqltools::AnalyzeSqlText(request->sql(),
+                                        request->project_id(),
+                                        request->default_dataset_id(),
+                                        &catalog,
+                                        language);
+  if (!result.ok()) {
+    return AnalyzeStatusToGrpc(result.status());
+  }
+
+  for (const backend::sqltools::SqlDiagnostic& diag : result->diagnostics) {
+    CopyDiagnostic(diag, response->add_diagnostics());
+  }
+  for (const std::string& kind : result->statement_kinds) {
+    response->add_statement_kinds(kind);
+  }
+  for (const backend::sqltools::ReferencedTable& table :
+       result->referenced_tables) {
+    v1::ReferencedTable* out = response->add_referenced_tables();
+    out->set_project_id(table.project_id);
+    out->set_dataset_id(table.dataset_id);
+    out->set_table_id(table.table_id);
+    out->set_alias(table.alias);
+    out->set_kind(table.kind);
   }
   return ::grpc::Status::OK;
 }

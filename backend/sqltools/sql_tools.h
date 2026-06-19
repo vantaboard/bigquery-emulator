@@ -2,6 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_SQLTOOLS_SQL_TOOLS_H_
 
 #include <cstddef>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,10 @@ struct SqlDiagnostic {
   int column = 0;
   std::string message;
   std::string severity = "error";
+  int end_line = 0;
+  int end_column = 0;
+  int start_byte = -1;
+  int end_byte = -1;
 };
 
 struct FormatOptions {
@@ -57,16 +62,45 @@ struct TokenizeResult {
 // from emulator storage for dataset/table enumeration). The core library
 // stays storage-agnostic; handlers fill this from GoogleSqlCatalog's
 // backing store.
+struct CatalogColumnEntry {
+  std::string name;
+  std::string type;
+};
+
+struct CatalogTableEntry {
+  std::string label;
+  std::string fqn;
+  std::string kind;
+  std::string detail;
+};
+
+struct CatalogRoutineEntry {
+  std::string label;
+  std::string fqn;
+  std::string kind = "routine";
+  std::string detail;
+};
+
+struct InScopeTableRef {
+  std::string alias;
+  std::string table_key;
+  std::vector<CatalogColumnEntry> columns;
+};
+
 struct CatalogNames {
   std::vector<std::string> datasets;
-  std::vector<std::string> tables;
-  std::vector<std::string> columns;
+  std::vector<CatalogTableEntry> tables;
+  std::vector<CatalogRoutineEntry> routines;
+  std::vector<CatalogColumnEntry> columns;
+  std::map<std::string, std::vector<CatalogColumnEntry>> columns_by_table;
+  std::vector<InScopeTableRef> in_scope_tables;
 };
 
 struct CompletionCandidate {
   std::string label;
   std::string kind;
   std::string insert_text;
+  std::string detail;
 };
 
 struct CompleteResult {
@@ -77,6 +111,11 @@ struct CompleteResult {
 
 ::googlesql::LanguageOptions MakeSqlToolsLanguageOptions();
 
+// Builds a diagnostic from a GoogleSQL status, optionally enriching
+// span fields when `sql` is provided.
+SqlDiagnostic DiagnosticFromStatusWithSql(const absl::Status& status,
+                                          absl::string_view sql = {});
+
 absl::StatusOr<FormatResult> FormatSqlText(absl::string_view sql,
                                            const FormatOptions& options);
 
@@ -84,12 +123,15 @@ absl::StatusOr<ParseResult> ParseSqlText(
     absl::string_view sql, const ::googlesql::LanguageOptions& language);
 
 absl::StatusOr<TokenizeResult> TokenizeSqlText(
-    absl::string_view sql, const ::googlesql::LanguageOptions& language,
+    absl::string_view sql,
+    const ::googlesql::LanguageOptions& language,
     const TokenizeOptions& options);
 
 absl::StatusOr<CompleteResult> CompleteSqlText(
-    absl::string_view sql, size_t cursor_byte_offset,
-    const ::googlesql::LanguageOptions& language, ::googlesql::Catalog* catalog,
+    absl::string_view sql,
+    size_t cursor_byte_offset,
+    const ::googlesql::LanguageOptions& language,
+    ::googlesql::Catalog* catalog,
     const CatalogNames& catalog_names,
     absl::string_view default_dataset_id = "");
 

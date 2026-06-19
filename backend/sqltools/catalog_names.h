@@ -12,10 +12,11 @@ namespace sqltools {
 
 // Populates dataset and table name lists from durable storage. Used by
 // the SqlTools gRPC handler before calling CompleteSqlText.
-absl::Status PopulateCatalogNamesFromStorage(absl::string_view project_id,
-                                             absl::string_view default_dataset_id,
-                                             storage::Storage* storage,
-                                             CatalogNames* names);
+absl::Status PopulateCatalogNamesFromStorage(
+    absl::string_view project_id,
+    absl::string_view default_dataset_id,
+    storage::Storage* storage,
+    CatalogNames* names);
 
 }  // namespace sqltools
 }  // namespace backend

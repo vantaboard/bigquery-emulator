@@ -1,21 +1,19 @@
-# Bazel build for GoogleSQL-backed SQL tooling (format, parse, tokenize,
-# catalog-aware completion). Intended as a standalone library for downstream
-# UIs and linters as well as the engine SqlTools gRPC service.
-
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "sql_tools",
-    srcs = ["sql_tools.cc"],
+    srcs = [
+        "sql_tools.cc",
+        "sql_tools_complete.cc",
+    ],
     hdrs = ["sql_tools.h"],
     deps = [
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_split",
         "@googlesql//googlesql/public:catalog",
         "@googlesql//googlesql/public:error_helpers",
         "@googlesql//googlesql/public:error_location_cc_proto",
@@ -36,10 +34,36 @@ cc_library(
     hdrs = ["catalog_names.h"],
     deps = [
         ":sql_tools",
+        "//backend/catalog:view_registry",
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sql_references",
+    srcs = ["sql_references.cc"],
+    hdrs = ["sql_references.h"],
+    deps = [
+        ":sql_tools",
+        "//backend/catalog:storage_table",
+        "//backend/catalog:view_registry",
+        "//backend/engine/coordinator:sql_preprocess",
         "//backend/storage",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/parser:ast_node",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:types",
+        "@googlesql//googlesql/resolved_ast:resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_ast_visitor",
     ],
 )
 

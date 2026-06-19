@@ -60,8 +60,8 @@ TEST_F(SqlToolsTest, TokenizeSelectReturnsKeywords) {
 TEST_F(SqlToolsTest, CompleteAfterSelectIncludesKeywords) {
   CatalogNames names;
   const std::string sql = "SELECT ";
-  const absl::StatusOr<CompleteResult> result = CompleteSqlText(
-      sql, sql.size(), language_, catalog_.get(), names, "");
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "");
   ASSERT_TRUE(result.ok()) << result.status();
   bool found_from = false;
   for (const CompletionCandidate& candidate : result->candidates) {
@@ -73,9 +73,37 @@ TEST_F(SqlToolsTest, CompleteAfterSelectIncludesKeywords) {
   EXPECT_TRUE(found_from);
 }
 
+TEST_F(SqlToolsTest, ParseInvalidSqlReturnsDiagnosticWithSpan) {
+  const absl::StatusOr<ParseResult> result = ParseSqlText("SELEC 1", language_);
+  ASSERT_TRUE(result.ok()) << result.status();
+  ASSERT_FALSE(result->diagnostics.empty());
+  const SqlDiagnostic& diag = result->diagnostics.front();
+  EXPECT_GE(diag.start_byte, 0);
+  EXPECT_GT(diag.end_byte, diag.start_byte);
+}
+
+TEST_F(SqlToolsTest, CompleteEmptyEditorAtCursorZero) {
+  CatalogNames names;
+  names.datasets = {"analytics"};
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText("", 0, language_, catalog_.get(), names, "analytics");
+  ASSERT_TRUE(result.ok()) << result.status();
+  bool found_select = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "SELECT") {
+      found_select = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_select);
+}
+
 TEST_F(SqlToolsTest, CompleteAfterFromUsesCatalogTables) {
   CatalogNames names;
-  names.tables = {"analytics.events", "events"};
+  names.tables.push_back(
+      CatalogTableEntry{"analytics.events", "p.analytics.events", "table", ""});
+  names.tables.push_back(
+      CatalogTableEntry{"events", "p.analytics.events", "table", ""});
   const std::string sql = "SELECT * FROM ev";
   const absl::StatusOr<CompleteResult> result = CompleteSqlText(
       sql, sql.size(), language_, catalog_.get(), names, "analytics");

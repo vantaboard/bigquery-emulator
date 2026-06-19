@@ -16,9 +16,9 @@
 
 #include "frontend/handlers/catalog.h"
 #include "frontend/handlers/query.h"
+#include "frontend/handlers/sqltools.h"
 #include "frontend/handlers/storage_read.h"
 #include "frontend/handlers/storage_write.h"
-#include "frontend/handlers/sqltools.h"
 
 namespace bigquery_emulator {
 namespace frontend {
