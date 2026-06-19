@@ -52,6 +52,17 @@ export class ApiClient {
             body: body !== undefined ? JSON.stringify(body) : undefined,
         });
     }
+
+    patch<T>(path: string, body?: unknown) {
+        return this.fetchJson<T>(path, {
+            method: 'PATCH',
+            body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+    }
+
+    del<T>(path: string) {
+        return this.fetchJson<T>(path, { method: 'DELETE' });
+    }
 }
 
 export const apiClient = new ApiClient();
