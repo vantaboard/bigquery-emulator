@@ -47,13 +47,11 @@ For a static build that talks to the API on another origin, set **`VITE_API_URL`
 
 ## Docker
 
-`docker compose up` runs the **goccy** emulator as **`bigquery`** and the static UI (**`bq-ui`**) on **8080**. Nginx proxies **`/bigquery`** to **`http://bigquery:9050`**.
-
-For the Vantaboard emulator image, use **`docker-compose.local.yaml`** to override the `bigquery` service.
+`docker compose up` runs [`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`](https://github.com/vantaboard/bigquery-emulator) as **`bigquery`** and the static UI (**`bq-ui`**) on **8080**. Nginx proxies **`/bigquery`** to **`http://bigquery:9050`**. Sample data is loaded from **`data/data.yaml`**.
 
 ## E2E testing
 
-End-to-end tests use a dedicated Compose stack with the pinned Vantaboard emulator **`ghcr.io/vantaboard/bigquery-emulator:v0.3.1`**:
+End-to-end tests use the same emulator image with a smaller fixture in **`e2e/fixtures/seed.yaml`** via **`docker-compose.e2e.yaml`**:
 
 ```bash
 npm install

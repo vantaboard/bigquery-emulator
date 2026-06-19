@@ -1,16 +1,19 @@
-version: '3.7'
 services:
   bigquery:
+    image: ghcr.io/vantaboard/bigquery-emulator:v0.3.1
     platform: linux/x86_64
-    image: ghcr.io/goccy/bigquery-emulator:latest
     ports:
       - "9050:9050"
-      - "9060:9060"
     volumes:
-      - ./data:/data
-    command: --project=local-project --data-from-yaml=/data/data.yaml
+      - ./data/data.yaml:/data/seed.yaml:ro
+    command: ["--project-id=local-project", "--seed-data-file=/data/seed.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9050/healthz | grep -q ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
 
-  # Static UI + nginx. Proxies /bigquery to the emulator on port 9050.
   bq-ui:
     build:
       context: .
@@ -19,4 +22,5 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - bigquery
+      bigquery:
+        condition: service_healthy
