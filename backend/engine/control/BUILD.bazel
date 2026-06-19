@@ -112,6 +112,31 @@ cc_test(
 )
 
 cc_test(
+    name = "control_op_executor_ctas_test",
+    srcs = ["control_op_executor_ctas_test.cc"],
+    deps = [
+        ":control_op_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
     name = "control_op_executor_test",
     srcs = ["control_op_executor_test.cc"],
     deps = [

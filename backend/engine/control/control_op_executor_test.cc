@@ -17,11 +17,9 @@
 
 #include "backend/engine/control/control_op_executor.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <random>
 #include <string>
@@ -35,7 +33,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
-#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
@@ -336,161 +333,6 @@ TEST_F(ControlOpExecutorTest, DropViewMissingSurfacesNotFound) {
 TEST_F(ControlOpExecutorTest, DropViewIfExistsSwallowsMissingView) {
   absl::Status s = RunDdl("DROP VIEW IF EXISTS ds.absent");
   EXPECT_TRUE(s.ok()) << s;
-}
-
-// --- CREATE TABLE AS SELECT ----------------------------------------------
-
-TEST_F(ControlOpExecutorTest, CreateTableAsSelectMaterializesSourceRows) {
-  CreatePeopleTable();
-  absl::Status s =
-      RunDdl("CREATE TABLE ds.people_copy AS SELECT id, name FROM ds.people");
-  ASSERT_TRUE(s.ok()) << s;
-
-  auto schema = storage_->GetSchema({"proj-test", "ds", "people_copy"});
-  ASSERT_TRUE(schema.ok()) << schema.status();
-  ASSERT_EQ(schema->columns.size(), 2u);
-
-  auto scan = storage_->ScanRows({"proj-test", "ds", "people_copy"});
-  ASSERT_TRUE(scan.ok()) << scan.status();
-  std::vector<std::pair<int64_t, std::string>> seen;
-  storage::Row row;
-  while (true) {
-    auto has = (*scan)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 2u);
-    seen.emplace_back(row.cells[0].int64_value(), row.cells[1].string_value());
-  }
-  std::sort(seen.begin(), seen.end());
-  std::vector<std::pair<int64_t, std::string>> want = {
-      {1, "ada"}, {2, "linus"}, {3, "grace"}};
-  EXPECT_EQ(seen, want);
-}
-
-TEST_F(ControlOpExecutorTest, CreateTableAsSelectUnnestNarrowsToOutputSchema) {
-  // Regression for TestCopiesAndExtracts / generateTableCTAS: UNNEST
-  // ordinality adds `__bq_input_rn` to the inner scan emit; without the
-  // outer projection narrow the drained DuckDB table has one extra
-  // column and `arrow_to_bq` rejects the schema mismatch.
-  absl::Status s = RunDdl(
-      "CREATE TABLE ds.unnest_copy AS "
-      "SELECT 2000 + r AS year, IF(r > 1, 'foo', 'bar') AS token "
-      "FROM UNNEST(GENERATE_ARRAY(0, 2)) AS r");
-  ASSERT_TRUE(s.ok()) << s;
-
-  auto schema = storage_->GetSchema({"proj-test", "ds", "unnest_copy"});
-  ASSERT_TRUE(schema.ok()) << schema.status();
-  ASSERT_EQ(schema->columns.size(), 2u);
-  ASSERT_EQ(schema->columns[0].name, "year");
-  ASSERT_EQ(schema->columns[1].name, "token");
-
-  auto scan = storage_->ScanRows({"proj-test", "ds", "unnest_copy"});
-  ASSERT_TRUE(scan.ok()) << scan.status();
-  storage::Row row;
-  int rows = 0;
-  while (true) {
-    auto has = (*scan)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 2u);
-    ++rows;
-  }
-  EXPECT_EQ(rows, 3);
-}
-
-TEST_F(ControlOpExecutorTest, CreateTableAsSelectCrossJoinUnnestSubquery) {
-  // Bench heavy-case setup: CTAS over a subquery whose FROM is two
-  // standalone UNNEST relations cross-joined (BigQuery's >1M-row
-  // GENERATE_ARRAY pattern).
-  absl::Status s = RunDdl(
-      "CREATE TABLE ds.cross_join_ctas AS "
-      "SELECT id, MOD(id, 7) AS k "
-      "FROM ("
-      "  SELECT n + (m - 1) * 10 AS id "
-      "  FROM UNNEST(GENERATE_ARRAY(1, 3)) AS n "
-      "  CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m"
-      ")");
-  ASSERT_TRUE(s.ok()) << s;
-
-  auto schema = storage_->GetSchema({"proj-test", "ds", "cross_join_ctas"});
-  ASSERT_TRUE(schema.ok()) << schema.status();
-  ASSERT_EQ(schema->columns.size(), 2u);
-
-  auto scan = storage_->ScanRows({"proj-test", "ds", "cross_join_ctas"});
-  ASSERT_TRUE(scan.ok()) << scan.status();
-  int rows = 0;
-  storage::Row row;
-  while (true) {
-    auto has = (*scan)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 2u);
-    ++rows;
-  }
-  EXPECT_EQ(rows, 6);
-}
-
-TEST_F(ControlOpExecutorTest, CreateTableAsSelectExceptRowNumberDedup) {
-  schema::TableSchema src_schema;
-  schema::ColumnSchema id;
-  id.name = "id";
-  id.type = schema::ColumnType::kString;
-  id.mode = schema::ColumnMode::kRequired;
-  src_schema.columns.push_back(id);
-  schema::ColumnSchema tie;
-  tie.name = "tie_break";
-  tie.type = schema::ColumnType::kInt64;
-  tie.mode = schema::ColumnMode::kRequired;
-  src_schema.columns.push_back(tie);
-  schema::ColumnSchema value;
-  value.name = "value";
-  value.type = schema::ColumnType::kInt64;
-  value.mode = schema::ColumnMode::kRequired;
-  src_schema.columns.push_back(value);
-  ASSERT_TRUE(
-      storage_->CreateTable({"proj-test", "ds", "merge_src"}, src_schema).ok());
-
-  std::vector<storage::Row> seed = {
-      storage::Row{{storage::Value::String("a"),
-                    storage::Value::Int64(1),
-                    storage::Value::Int64(10)}},
-      storage::Row{{storage::Value::String("a"),
-                    storage::Value::Int64(2),
-                    storage::Value::Int64(20)}},
-      storage::Row{{storage::Value::String("b"),
-                    storage::Value::Int64(1),
-                    storage::Value::Int64(30)}},
-  };
-  ASSERT_TRUE(storage_
-                  ->AppendRows({"proj-test", "ds", "merge_src"},
-                               absl::MakeConstSpan(seed))
-                  .ok());
-
-  absl::Status s = RunDdl(
-      "CREATE OR REPLACE TABLE ds.merge_deduped AS "
-      "SELECT * EXCEPT(rn) FROM ("
-      "  SELECT *, ROW_NUMBER() OVER ("
-      "    PARTITION BY id ORDER BY tie_break DESC"
-      "  ) AS rn FROM ds.merge_src"
-      ") WHERE rn = 1");
-  ASSERT_TRUE(s.ok()) << s;
-
-  auto schema = storage_->GetSchema({"proj-test", "ds", "merge_deduped"});
-  ASSERT_TRUE(schema.ok()) << schema.status();
-  ASSERT_EQ(schema->columns.size(), 3u);
-
-  auto scan = storage_->ScanRows({"proj-test", "ds", "merge_deduped"});
-  ASSERT_TRUE(scan.ok()) << scan.status();
-  storage::Row row;
-  int rows = 0;
-  while (true) {
-    auto has = (*scan)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    if (!*has) break;
-    ASSERT_EQ(row.cells.size(), 3u);
-    ++rows;
-  }
-  EXPECT_EQ(rows, 2);
 }
 
 // --- ANALYZE -------------------------------------------------------------
