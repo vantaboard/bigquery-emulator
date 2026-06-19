@@ -143,13 +143,12 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
     goccy = {r["case_name"]: r for r in results["results"] if r["target"] == "goccy"}
     bq = baseline.get("cases", {})
 
-    labels, emu_wall_ms, emu_engine_ms, goccy_ms, bq_ms = [], [], [], [], []
+    labels, emu_wall_ms, goccy_ms, bq_ms = [], [], [], []
     goccy_skipped_x: list[int] = []
     for case in cases:
         labels.append(case)
         xi = len(labels) - 1
         emu_wall_ms.append(_emu_wall_ms(emu.get(case)))
-        emu_engine_ms.append(_emu_server_ms(emu.get(case)))
         row = goccy.get(case)
         if row and row.get("outcome") == "skipped":
             goccy_ms.append(math.nan)
@@ -160,18 +159,16 @@ def comparison_chart(results: dict, baseline: dict, out: Path) -> None:
         bq_ms.append(bq_val if bq_val is not None else math.nan)
 
     x = range(len(labels))
-    # Four grouped bars: vantaboard wall (apples-to-apples vs goccy wall),
-    # vantaboard engine-only, goccy wall, and BQ server-side job duration.
-    width = 0.2
-    offsets = (-1.5 * width, -0.5 * width, 0.5 * width, 1.5 * width)
+    # Three grouped bars: vantaboard wall, goccy wall, BQ server-side job duration.
+    width = 0.25
+    offsets = (-width, 0.0, width)
     fig, ax = plt.subplots(figsize=(max(10, len(labels) * 0.7), 6))
     ax.bar([i + offsets[0] for i in x], emu_wall_ms, width, label="vantaboard (wall)")
-    ax.bar([i + offsets[1] for i in x], emu_engine_ms, width, label="vantaboard (total_engine)")
-    ax.bar([i + offsets[2] for i in x], goccy_ms, width, label="goccy (wall)")
-    ax.bar([i + offsets[3] for i in x], bq_ms, width, label="bigquery (job duration)")
+    ax.bar([i + offsets[1] for i in x], goccy_ms, width, label="goccy (wall)")
+    ax.bar([i + offsets[2] for i in x], bq_ms, width, label="bigquery (job duration)")
     if goccy_skipped_x:
         ax.scatter(
-            [i + offsets[2] for i in goccy_skipped_x],
+            [i + offsets[1] for i in goccy_skipped_x],
             [SKIPPED_MARKER_MS] * len(goccy_skipped_x),
             marker="x",
             color=OUTCOMES["skipped"],
