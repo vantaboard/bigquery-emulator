@@ -85,7 +85,8 @@ func MergeReport(existing, fresh RunReport) RunReport {
 		}
 		kept = append(kept, r)
 	}
-	out.Results = append(kept, fresh.Results...)
+	kept = append(kept, fresh.Results...)
+	out.Results = kept
 	slices.SortFunc(out.Results, func(a, b CaseResult) int {
 		if c := strings.Compare(a.CaseName, b.CaseName); c != 0 {
 			return c

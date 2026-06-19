@@ -231,20 +231,20 @@ func TestQueryRunDefaultDatasetFallback(t *testing.T) {
 
 	t.Run("server-default-used-when-request-omits", func(t *testing.T) {
 		fake := newFake()
-		deps := Dependencies{Query: fake, DefaultDatasetID: "ds_main"}
+		deps := Dependencies{Query: fake, DefaultDatasetID: testDefaultDatasetIDMain}
 		body := `{"query":"SELECT * FROM t","dryRun":true,"useLegacySql":false}`
 		rec := runQueryWithDeps(t, testProjectID, deps, body)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 		}
-		if got := fake.lastDryRun.GetDefaultDatasetId(); got != "ds_main" {
-			t.Errorf("default_dataset_id forwarded = %q, want server default %q", got, "ds_main")
+		if got := fake.lastDryRun.GetDefaultDatasetId(); got != testDefaultDatasetIDMain {
+			t.Errorf("default_dataset_id forwarded = %q, want server default %q", got, testDefaultDatasetIDMain)
 		}
 	})
 
 	t.Run("request-default-beats-server-default", func(t *testing.T) {
 		fake := newFake()
-		deps := Dependencies{Query: fake, DefaultDatasetID: "ds_main"}
+		deps := Dependencies{Query: fake, DefaultDatasetID: testDefaultDatasetIDMain}
 		body := `{"query":"SELECT * FROM t","dryRun":true,"useLegacySql":false,"defaultDataset":{"datasetId":"ds_req"}}`
 		rec := runQueryWithDeps(t, testProjectID, deps, body)
 		if rec.Code != http.StatusOK {

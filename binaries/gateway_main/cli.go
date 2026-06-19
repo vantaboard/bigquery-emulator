@@ -135,14 +135,14 @@ type Config struct {
 	// empty.
 	SeedAPISeedToken string
 
-	// EnableSqlToolsAPI registers POST /api/emulator/sql/* routes.
-	EnableSqlToolsAPI bool
+	// EnableSQLToolsAPI registers POST /api/emulator/sql/* routes.
+	EnableSQLToolsAPI bool
 
-	// SqlToolsAPIAllowRemote allows non-loopback SQL tools callers.
-	SqlToolsAPIAllowRemote bool
+	// SQLToolsAPIAllowRemote allows non-loopback SQL tools callers.
+	SQLToolsAPIAllowRemote bool
 
-	// SqlToolsAPISeedToken protects remote SQL tools access.
-	SqlToolsAPISeedToken string
+	// SQLToolsAPISeedToken protects remote SQL tools access.
+	SQLToolsAPISeedToken string
 
 	// SeedFiles is the repeatable list of YAML seed-data files to
 	// apply once the engine is SERVING. Maps to `--seed-data-file`
@@ -264,11 +264,11 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 			"seed request. Falls back to $BIGQUERY_EMULATOR_SEED_TOKEN.")
 	registerStringSlice(fs, &cfg.SeedFiles, []string{"seed-data-file", "seed-yaml", "data-from-yaml"},
 		"YAML seed-data file to apply once the engine reports SERVING (repeatable).")
-	registerBool(fs, &cfg.EnableSqlToolsAPI, []string{"enable-sql-tools-api"},
+	registerBool(fs, &cfg.EnableSQLToolsAPI, []string{"enable-sql-tools-api"},
 		"Register POST /api/emulator/sql/* parser/formatter/completion routes.")
-	registerBool(fs, &cfg.SqlToolsAPIAllowRemote, []string{"sql-tools-api-allow-remote"},
+	registerBool(fs, &cfg.SQLToolsAPIAllowRemote, []string{"sql-tools-api-allow-remote"},
 		"Allow non-loopback callers to invoke the SQL tools API.")
-	registerString(fs, &cfg.SqlToolsAPISeedToken,
+	registerString(fs, &cfg.SQLToolsAPISeedToken,
 		[]string{"sql-tools-api-token"},
 		"Required value for the X-BigQuery-Emulator-SqlTools-Token header on every "+
 			"SQL tools request. Falls back to $BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN.")
@@ -318,9 +318,9 @@ func applyEnvFallbacks(cfg *Config, getenv envLookup) {
 			cfg.SeedAPISeedToken = v
 		}
 	}
-	if cfg.SqlToolsAPISeedToken == "" {
+	if cfg.SQLToolsAPISeedToken == "" {
 		if v, ok := getenv("BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN"); ok {
-			cfg.SqlToolsAPISeedToken = v
+			cfg.SQLToolsAPISeedToken = v
 		}
 	}
 }

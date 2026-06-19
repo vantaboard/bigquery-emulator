@@ -113,12 +113,12 @@ func TestMergeBaseline_PreservesExistingCases(t *testing.T) {
 		CapturedAt: time.Unix(0, 0),
 		Project:    "proj",
 		Cases: map[string]BaselineCase{
-			"keep_me":          {ContentHash: "old-keep", ExecutionP50MS: 100, ResultHash: "rk"},
-			"create_view_100k": {ContentHash: "old-view", ExecutionP50MS: 999, ResultHash: "stale"},
+			testCaseKeepMe:         {ContentHash: "old-keep", ExecutionP50MS: 100, ResultHash: "rk"},
+			testCaseCreateView100k: {ContentHash: "old-view", ExecutionP50MS: 999, ResultHash: "stale"},
 		},
 	}
 	fresh := BuildBaselineFromResults("proj", []CaseResult{{
-		CaseName:     "create_view_100k",
+		CaseName:     testCaseCreateView100k,
 		Target:       TargetBigQuery,
 		Outcome:      OutcomeOK,
 		ContentHash:  "new-view",
@@ -130,12 +130,12 @@ func TestMergeBaseline_PreservesExistingCases(t *testing.T) {
 	if len(merged.Cases) != 2 {
 		t.Fatalf("merged cases = %d, want 2", len(merged.Cases))
 	}
-	if got := merged.Cases["keep_me"]; got.ContentHash != "old-keep" || got.ExecutionP50MS != 100 {
-		t.Fatalf("keep_me was altered: %+v", got)
+	if got := merged.Cases[testCaseKeepMe]; got.ContentHash != "old-keep" || got.ExecutionP50MS != 100 {
+		t.Fatalf("%s was altered: %+v", testCaseKeepMe, got)
 	}
-	updated := merged.Cases["create_view_100k"]
+	updated := merged.Cases[testCaseCreateView100k]
 	if updated.ContentHash != "new-view" || updated.ExecutionP50MS != 120 || updated.ResultHash != "fresh" {
-		t.Fatalf("create_view_100k not updated: %+v", updated)
+		t.Fatalf("%s not updated: %+v", testCaseCreateView100k, updated)
 	}
 	if !merged.CapturedAt.Equal(fresh.CapturedAt) {
 		t.Fatalf("CapturedAt = %v, want fresh %v", merged.CapturedAt, fresh.CapturedAt)

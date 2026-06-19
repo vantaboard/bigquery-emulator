@@ -185,51 +185,10 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if !populateViewSchema(w, deps, r, projectID, &t) {
 			return
 		}
-		switch {
-		case t.View != nil && t.View.Query != "":
-			// A logical view must be registered in the engine's view
-			// registry (the same path CREATE VIEW DDL takes) so reads
-			// inline its stored definition. Registering an empty backing
-			// table instead — as the generic branch below does — shadows
-			// the view in the engine catalog (FindTable resolves storage
-			// before the view registry), so SELECT ... FROM <view>
-			// silently returns zero rows. This is the REST-API analogue
-			// of the CREATE-VIEW-on-read fix.
-			if !insertLogicalView(w, r, deps, projectID, datasetID, tableID, t.View.Query) {
-				return
-			}
-		case t.ExternalDataConfiguration != nil:
-			if !insertExternalTable(w, r, deps, projectID, datasetID, tableID, &t) {
-				return
-			}
-		default:
-			if _, err := deps.Catalog.RegisterTable(r.Context(), &enginepb.RegisterTableRequest{
-				Table: &enginepb.TableRef{
-					ProjectId: projectID,
-					DatasetId: datasetID,
-					TableId:   tableID,
-				},
-				Schema: schemaToProto(t.Schema),
-			}); grpcToHTTPError(w, err) {
-				return
-			}
+		if !registerInsertedTable(w, r, deps, projectID, datasetID, tableID, &t) {
+			return
 		}
-		if t.DefaultCollation != "" {
-			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
-		}
-		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
-		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
-		created := nowMillis()
-		if deps.Snapshots != nil {
-			if ms, parseErr := strconv.ParseInt(created, 10, 64); parseErr == nil {
-				deps.Snapshots.RecordCreation(projectID, datasetID, tableID, ms)
-			}
-		}
-		out := t
-		if out.DefaultCollation != "" {
-			out.Schema = bqtypes.ApplyDefaultCollationToStringFields(out.Schema, out.DefaultCollation)
-		}
-		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, out))
+		writeInsertedTableResponse(w, deps, r, projectID, datasetID, tableID, t)
 	}
 }
 

@@ -84,7 +84,7 @@ func writeGrpcError(w http.ResponseWriter, err error) {
 }
 
 func (d HandlerDeps) requireClient(w http.ResponseWriter) bool {
-	if d.Client == nil || d.Client.SqlTools == nil {
+	if d.Client == nil || d.Client.SQLTools == nil {
 		writeJSON(w, http.StatusServiceUnavailable, errEnvelope{
 			Code:    http.StatusServiceUnavailable,
 			Status:  statusInvalid,
@@ -154,7 +154,7 @@ func (d HandlerDeps) handleFormat(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err := d.Client.SqlTools.Format(r.Context(), &enginepb.FormatSqlRequest{
+	resp, err := d.Client.SQLTools.Format(r.Context(), &enginepb.FormatSqlRequest{
 		Sql:               req.SQL,
 		Strict:            req.Strict,
 		LineLengthLimit:   req.LineLengthLimit,
@@ -203,7 +203,7 @@ func (d HandlerDeps) handleParse(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err := d.Client.SqlTools.Parse(r.Context(), &enginepb.ParseSqlRequest{Sql: req.SQL})
+	resp, err := d.Client.SQLTools.Parse(r.Context(), &enginepb.ParseSqlRequest{Sql: req.SQL})
 	if err != nil {
 		writeGrpcError(w, err)
 		return
@@ -255,7 +255,7 @@ func (d HandlerDeps) handleTokenize(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err := d.Client.SqlTools.Tokenize(r.Context(), &enginepb.TokenizeSqlRequest{
+	resp, err := d.Client.SQLTools.Tokenize(r.Context(), &enginepb.TokenizeSqlRequest{
 		Sql: req.SQL, IncludeComments: req.IncludeComments,
 	})
 	if err != nil {
@@ -324,7 +324,7 @@ func (d HandlerDeps) handleComplete(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err := d.Client.SqlTools.Complete(r.Context(), &enginepb.CompleteSqlRequest{
+	resp, err := d.Client.SQLTools.Complete(r.Context(), &enginepb.CompleteSqlRequest{
 		ProjectId:        req.ProjectID,
 		DefaultDatasetId: req.DefaultDatasetID,
 		Sql:              req.SQL,

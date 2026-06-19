@@ -44,7 +44,7 @@ func NewServer(opts Options, deps handlers.Dependencies, eng *engine.Client) htt
 	mountMigration(mux, deps)
 	mountDataTransfer(mux)
 	mountSeedAPI(mux, opts, eng)
-	mountSqlToolsAPI(mux, opts, eng)
+	mountSQLToolsAPI(mux, opts, eng)
 
 	return wrapMiddleware(opts, mux)
 }
@@ -252,15 +252,15 @@ func mountSeedAPI(mux *http.ServeMux, opts Options, eng *engine.Client) {
 	})
 }
 
-// mountSqlToolsAPI registers POST /api/emulator/sql/* when enabled.
-func mountSqlToolsAPI(mux *http.ServeMux, opts Options, eng *engine.Client) {
-	if !opts.EnableSqlToolsAPI {
+// mountSQLToolsAPI registers POST /api/emulator/sql/* when enabled.
+func mountSQLToolsAPI(mux *http.ServeMux, opts Options, eng *engine.Client) {
+	if !opts.EnableSQLToolsAPI {
 		return
 	}
 	sqltools.RegisterRoutes(mux, sqltools.HandlerDeps{
 		Access: sqltools.AccessConfig{
-			AllowRemote: opts.SqlToolsAPIAllowRemote,
-			Token:       opts.SqlToolsAPISeedToken,
+			AllowRemote: opts.SQLToolsAPIAllowRemote,
+			Token:       opts.SQLToolsAPISeedToken,
 		},
 		Client: eng,
 	})

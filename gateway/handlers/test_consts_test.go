@@ -10,6 +10,9 @@ const (
 	testProjectID = "proj"
 	testDatasetID = "ds1"
 	testTableID   = "t1"
+	// testDefaultDatasetIDMain is the server-default dataset used by
+	// query handler tests that assert default_dataset_id forwarding.
+	testDefaultDatasetIDMain = "ds_main"
 )
 
 // Common synthetic field name used by handler regression tests when

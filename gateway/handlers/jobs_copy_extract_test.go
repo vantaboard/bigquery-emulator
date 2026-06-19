@@ -20,7 +20,7 @@ func TestJobInsertCopySingleSource(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
 		{Name: "id", Type: sqlTypeINTEGER},
-		{Name: "name", Type: sqlTypeSTRING},
+		{Name: testColumnName, Type: sqlTypeSTRING},
 	}}
 	srcRows := []*enginepb.DataRow{
 		{Cells: []*enginepb.Cell{
@@ -184,7 +184,7 @@ func TestJobInsertExtractCSVToGCS(t *testing.T) {
 	t.Setenv("STORAGE_EMULATOR_HOST", srv.URL)
 
 	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
-		{Name: "name", Type: sqlTypeSTRING},
+		{Name: testColumnName, Type: sqlTypeSTRING},
 	}}
 	rows := []*enginepb.DataRow{
 		{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "test"}}}},
