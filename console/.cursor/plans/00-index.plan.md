@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: m2-02
     content: Execute m2-02-table-detail-page.plan.md (Schema read, Details, Preview, Query button, Unplanned tabs); verify.
-    status: pending
+    status: completed
   - id: m3-01
     content: Execute m3-01-create-table-modal.plan.md (Create Table modal, all sources/schema/options); verify.
     status: pending
