@@ -420,7 +420,7 @@ absl::Status RunDropTable(storage::Storage& storage,
       return absl::OkStatus();
     }
     if (!dropped.ok()) return dropped;
-    return catalog::DeletePersistedView(storage, vid);
+    return catalog::DeletePersistedView(&storage, vid);
   }
   if (stmt->object_type() != "TABLE") {
     return absl::UnimplementedError(
