@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { ActionToolbar, ToolbarButton } from '@/components/ui/ActionToolbar';
-import { Modal } from '@/components/ui/Modal';
 import { TabBar } from '@/components/ui/TabBar';
 import { UnplannedTab } from '@/components/ui/UnplannedTab';
 import { Breadcrumbs, datasetBreadcrumbs } from '@/features/workspace/components/Breadcrumbs';
 
+import { CopyDatasetModal } from './copyDataset/CopyDatasetModal';
 import { CreateTableModal } from './createTable/CreateTableModal';
+import { DeleteDatasetDialog } from './delete/DeleteResourceDialogs';
 import { DatasetDetailsTab } from './dataset/DatasetDetailsTab';
 import { DatasetOverviewTab } from './dataset/DatasetOverviewTab';
 
@@ -21,19 +22,13 @@ const RESOURCE_TABS = [
 
 type ResourceTab = (typeof RESOURCE_TABS)[number]['id'];
 
-type StubAction = 'copy' | 'delete';
-
-const STUB_TITLES: Record<StubAction, string> = {
-    copy: 'Copy dataset',
-    delete: 'Delete dataset',
-};
-
 export function DatasetTabPage() {
     const { projectId = '', datasetId = '' } = useParams();
     const queryClient = useQueryClient();
     const [resourceTab, setResourceTab] = useState<ResourceTab>('overview');
     const [createTableOpen, setCreateTableOpen] = useState(false);
-    const [stubAction, setStubAction] = useState<StubAction | null>(null);
+    const [copyOpen, setCopyOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     const onRefresh = () => {
         void queryClient.invalidateQueries({ queryKey: ['explorer'] });
@@ -51,8 +46,19 @@ export function DatasetTabPage() {
                     testId="create-table-button"
                     onClick={() => setCreateTableOpen(true)}
                 />
-                <ToolbarButton icon={Copy} label="Copy" onClick={() => setStubAction('copy')} />
-                <ToolbarButton icon={Trash2} label="Delete" variant="danger" onClick={() => setStubAction('delete')} />
+                <ToolbarButton
+                    icon={Copy}
+                    label="Copy"
+                    testId="copy-dataset-button"
+                    onClick={() => setCopyOpen(true)}
+                />
+                <ToolbarButton
+                    icon={Trash2}
+                    label="Delete"
+                    variant="danger"
+                    testId="delete-dataset-button"
+                    onClick={() => setDeleteOpen(true)}
+                />
                 <ToolbarButton icon={RefreshCw} label="Refresh" onClick={onRefresh} />
             </ActionToolbar>
 
@@ -83,26 +89,18 @@ export function DatasetTabPage() {
                 datasetId={datasetId}
                 onClose={() => setCreateTableOpen(false)}
             />
-
-            <Modal
-                open={stubAction !== null}
-                onClose={() => setStubAction(null)}
-                title={stubAction ? STUB_TITLES[stubAction] : ''}
-                footer={
-                    <button
-                        type="button"
-                        className="rounded-md border border-[var(--bq-border)] px-3 py-1.5 text-sm hover:bg-white/5"
-                        onClick={() => setStubAction(null)}
-                    >
-                        Close
-                    </button>
-                }
-            >
-                <p className="text-sm text-[var(--bq-muted)]">
-                    TODO (M3): {stubAction ? STUB_TITLES[stubAction] : 'Action'} workflow will be implemented in
-                    milestone M3.
-                </p>
-            </Modal>
+            <CopyDatasetModal
+                open={copyOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                onClose={() => setCopyOpen(false)}
+            />
+            <DeleteDatasetDialog
+                open={deleteOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                onClose={() => setDeleteOpen(false)}
+            />
         </div>
     );
 }

@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { ToolbarButton } from '@/components/ui/ActionToolbar';
 import { explorerQueries } from '@/features/explorer/api';
 
+import { EditSchemaModal } from '../editSchema/EditSchemaModal';
 import { formatSchemaAsJson, formatSchemaAsTable, schemaGridRows } from './schemaCopy';
 
 interface TableSchemaTabProps {
@@ -32,6 +33,7 @@ async function copyText(value: string): Promise<void> {
 export function TableSchemaTab({ projectId, datasetId, tableId }: TableSchemaTabProps) {
     const [filter, setFilter] = useState('');
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [editSchemaOpen, setEditSchemaOpen] = useState(false);
 
     const { data, isLoading, isError, error } = useQuery({
         queryKey: ['explorer', 'tableSchema', projectId, datasetId, tableId],
@@ -127,9 +129,9 @@ export function TableSchemaTab({ projectId, datasetId, tableId }: TableSchemaTab
                 />
                 <button
                     type="button"
-                    className="rounded-md border border-[var(--bq-border)] px-3 py-1.5 text-sm opacity-50"
-                    disabled
-                    title="Schema editing is planned for M3"
+                    className="rounded-md border border-[var(--bq-border)] px-3 py-1.5 text-sm hover:bg-white/5"
+                    data-testid="edit-schema-button"
+                    onClick={() => setEditSchemaOpen(true)}
                 >
                     Edit schema
                 </button>
@@ -195,6 +197,14 @@ export function TableSchemaTab({ projectId, datasetId, tableId }: TableSchemaTab
             {filteredRows.length === 0 ? (
                 <p className="mt-2 text-sm text-[var(--bq-muted)]">No fields match the current filter.</p>
             ) : null}
+
+            <EditSchemaModal
+                open={editSchemaOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                tableId={tableId}
+                onClose={() => setEditSchemaOpen(false)}
+            />
         </div>
     );
 }

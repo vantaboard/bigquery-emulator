@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { ActionToolbar, ToolbarButton } from '@/components/ui/ActionToolbar';
-import { Modal } from '@/components/ui/Modal';
 import { TabBar } from '@/components/ui/TabBar';
 import { UnplannedTab } from '@/components/ui/UnplannedTab';
 import { explorerQueries } from '@/features/explorer/api';
@@ -12,6 +11,9 @@ import { Breadcrumbs, tableBreadcrumbs } from '@/features/workspace/components/B
 import { useWorkspace } from '@/features/workspace/store';
 import type { ResourceType } from '@/types/api';
 
+import { CopyTableModal } from './copyTable/CopyTableModal';
+import { DeleteTableDialog } from './delete/DeleteResourceDialogs';
+import { CreateSnapshotModal } from './snapshot/CreateSnapshotModal';
 import { TableDetailsTab } from './table/TableDetailsTab';
 import { TablePreviewTab } from './table/TablePreviewTab';
 import { TableSchemaTab } from './table/TableSchemaTab';
@@ -28,14 +30,6 @@ const RESOURCE_TABS = [
 ] as const;
 
 type ResourceTab = (typeof RESOURCE_TABS)[number]['id'];
-
-type StubAction = 'copy' | 'snapshot' | 'delete';
-
-const STUB_TITLES: Record<StubAction, string> = {
-    copy: 'Copy table',
-    snapshot: 'Create table snapshot',
-    delete: 'Delete table',
-};
 
 const UNPLANNED_MESSAGES: Record<
     Extract<ResourceTab, 'table-explorer' | 'insights' | 'lineage' | 'data-profile' | 'data-quality'>,
@@ -73,7 +67,9 @@ export function TableTabPage() {
     const queryClient = useQueryClient();
     const { openQueryForTable } = useWorkspace();
     const [resourceTab, setResourceTab] = useState<ResourceTab>('schema');
-    const [stubAction, setStubAction] = useState<StubAction | null>(null);
+    const [copyOpen, setCopyOpen] = useState(false);
+    const [snapshotOpen, setSnapshotOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     const { data: metadata } = useQuery({
         queryKey: ['explorer', 'tableSchema', projectId, datasetId, tableId],
@@ -101,15 +97,26 @@ export function TableTabPage() {
                     testId="open-query-from-table"
                     onClick={onQuery}
                 />
-                <ToolbarButton icon={Copy} label="Copy" onClick={() => setStubAction('copy')} />
+                <ToolbarButton
+                    icon={Copy}
+                    label="Copy"
+                    testId="copy-table-button"
+                    onClick={() => setCopyOpen(true)}
+                />
                 {showSnapshotButton(metadata?.resourceType) ? (
-                    <ToolbarButton icon={Camera} label="Snapshot" onClick={() => setStubAction('snapshot')} />
+                    <ToolbarButton
+                        icon={Camera}
+                        label="Snapshot"
+                        testId="create-snapshot-button"
+                        onClick={() => setSnapshotOpen(true)}
+                    />
                 ) : null}
                 <ToolbarButton
                     icon={Trash2}
                     label="Delete"
                     variant="danger"
-                    onClick={() => setStubAction('delete')}
+                    testId="delete-table-button"
+                    onClick={() => setDeleteOpen(true)}
                 />
                 <ToolbarButton icon={RefreshCw} label="Refresh" onClick={onRefresh} />
             </ActionToolbar>
@@ -158,25 +165,29 @@ export function TableTabPage() {
                 ) : null}
             </div>
 
-            <Modal
-                open={stubAction !== null}
-                onClose={() => setStubAction(null)}
-                title={stubAction ? STUB_TITLES[stubAction] : ''}
-                footer={
-                    <button
-                        type="button"
-                        className="rounded-md border border-[var(--bq-border)] px-3 py-1.5 text-sm hover:bg-white/5"
-                        onClick={() => setStubAction(null)}
-                    >
-                        Close
-                    </button>
-                }
-            >
-                <p className="text-sm text-[var(--bq-muted)]">
-                    TODO (M3): {stubAction ? STUB_TITLES[stubAction] : 'Action'} workflow will be implemented in
-                    milestone M3.
-                </p>
-            </Modal>
+            <CopyTableModal
+                open={copyOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                tableId={tableId}
+                onClose={() => setCopyOpen(false)}
+            />
+            {showSnapshotButton(metadata?.resourceType) ? (
+                <CreateSnapshotModal
+                    open={snapshotOpen}
+                    projectId={projectId}
+                    datasetId={datasetId}
+                    tableId={tableId}
+                    onClose={() => setSnapshotOpen(false)}
+                />
+            ) : null}
+            <DeleteTableDialog
+                open={deleteOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                tableId={tableId}
+                onClose={() => setDeleteOpen(false)}
+            />
         </div>
     );
 }
