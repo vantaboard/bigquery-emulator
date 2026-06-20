@@ -189,11 +189,82 @@ test.describe('BigQuery Explorer', () => {
     test('formats SQL without error', async ({ page }) => {
         await openQueryFromTable(page);
         const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        const before = (await editor.textContent()) ?? '';
-        await page.getByRole('button', { name: 'Format SQL' }).click();
+        await editor.click();
+        await editor.press('Control+a');
+        await editor.fill('select*from`local-project.test-dataset.table_a`limit 1000');
+        await page.getByTestId('format-sql').click();
         const after = (await editor.textContent()) ?? '';
         expect(after.length).toBeGreaterThan(0);
-        expect(after).not.toBe(before);
+        expect(after.toLowerCase()).toContain('select');
+        expect(after).toContain('table_a');
+    });
+
+    test('shows autocompletion suggestions while typing', async ({ page }) => {
+        await openQueryFromTable(page);
+        const editor = page.getByTestId('sql-editor').locator('.cm-content');
+        await editor.click();
+        await editor.press('Control+a');
+        await editor.fill('SELECT * FROM ');
+
+        await Promise.race([
+            page.waitForResponse(
+                (r) => r.url().includes('/api/emulator/sql/complete') && r.ok(),
+                { timeout: 5000 },
+            ),
+            page.waitForResponse(
+                (r) => r.url().includes('/datasets/') && r.ok(),
+                { timeout: 5000 },
+            ),
+        ]);
+
+        await editor.press('Control+Space');
+
+        const autocomplete = page.locator('.cm-tooltip-autocomplete');
+        await expect(autocomplete).toBeVisible({ timeout: 10_000 });
+        await expect(autocomplete.locator('.cm-completionLabel', { hasText: /^table_a$/ }).first()).toBeVisible();
+    });
+
+    test('saves a query to localStorage and restores after reload', async ({ page }) => {
+        await openQueryFromTable(page);
+        await page.getByTestId('save-query-menu').click();
+        await page.getByTestId('save-query-classic').click();
+
+        const stored = await page.evaluate(() => localStorage.getItem('bigqueryWorkspaceSession'));
+        expect(stored).toBeTruthy();
+        const session = JSON.parse(stored!) as { savedQueriesClassic: { title: string; sql: string }[] };
+        expect(session.savedQueriesClassic.length).toBeGreaterThan(0);
+        expect(session.savedQueriesClassic[0].sql).toContain('table_a');
+
+        await page.reload();
+        const storedAfter = await page.evaluate(() => localStorage.getItem('bigqueryWorkspaceSession'));
+        const sessionAfter = JSON.parse(storedAfter!) as { savedQueriesClassic: unknown[] };
+        expect(sessionAfter.savedQueriesClassic.length).toBeGreaterThan(0);
+    });
+
+    test('saves a view via DDL', async ({ page }) => {
+        await openQueryFromTable(page);
+        await page.getByTestId('run-query').click();
+        await page.waitForResponse((r) => r.url().includes('/queries') && r.ok());
+
+        await page.getByTestId('save-query-menu').click();
+        await page.getByTestId('save-view').click();
+        await page.getByTestId('save-name-input').fill('e2e_saved_view');
+        const [response] = await Promise.all([
+            page.waitForResponse((r) => r.url().includes('/queries') && r.ok()),
+            page.getByTestId('save-name-submit').click(),
+        ]);
+        const body = (await response.json()) as { jobComplete?: boolean; statistics?: { query?: { statementType?: string } } };
+        expect(body.jobComplete).toBe(true);
+        expect(body.statistics?.query?.statementType).toBe('CREATE_VIEW');
+    });
+
+    test('reference panel shows tab-bound table schema', async ({ page }) => {
+        await openQueryFromTable(page);
+        await page.getByTestId('toggle-reference-panel').click();
+        const panel = page.getByTestId('query-reference-panel');
+        await expect(panel).toBeVisible();
+        await expect(panel.getByTestId('reference-field-id')).toBeVisible();
+        await expect(panel.getByTestId('reference-field-name')).toBeVisible();
     });
 
     test('share URL restores selection and query', async ({ page, context }) => {
