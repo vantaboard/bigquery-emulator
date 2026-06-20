@@ -46,6 +46,20 @@ omit the host and use `{x}` for path variables.
 | `datasets.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetDelete`][datasets] |
 | `datasets.undelete` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete` | wired | [`gateway/handlers/datasets.go::DatasetUndelete`][datasets] |
 
+**Dataset metadata:** REST-only fields (`friendlyName`, `description`,
+`labels`, `defaultCollation`, `defaultTableExpirationMs`,
+`defaultPartitionExpirationMs`, `defaultRoundingMode`,
+`maxTimeTravelHours`, `isCaseInsensitive`, `resourceTags`, `replicas[]`,
+`access`) persist in the gateway [`MetadataStore`][metadata-store] and
+merge on GET/PATCH/UPDATE. `creationTime` is stamped on insert and kept
+stable across GETs; `lastModifiedTime` advances on each write. Cross-region
+`replicas[]` is echo-only (no live replication).
+
+**Delete with contents:** `DELETE .../datasets/{datasetId}?deleteContents=true`
+drops the dataset and all tables in the engine catalog and evicts the
+matching metadata-store entries. Without `deleteContents=true`, deleting a
+non-empty dataset returns **400** (`failedPrecondition`).
+
 ### Tables (`bigquery.tables.*`)
 
 | Method | Path | Status | Handler |
@@ -59,6 +73,21 @@ omit the host and use `{x}` for path variables.
 | `tables.getIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy` | wired | [`gateway/handlers/tables.go::TableGetIamPolicy`][tables] |
 | `tables.setIamPolicy` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy` | wired | [`gateway/handlers/tables.go::TableSetIamPolicy`][tables] |
 | `tables.testIamPermissions` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions` | wired | [`gateway/handlers/tables.go::TableTestIamPermissions`][tables] |
+
+**Table metadata:** REST-only fields (`friendlyName`, `description`,
+`labels`, `expirationTime`, partitioning/clustering specs,
+`defaultCollation`, `defaultRoundingMode`, `caseInsensitive`,
+`resourceTags`, `tableConstraints`, `view` / `materializedView`
+definitions including `view.useLegacySql`, `requirePartitionFilter`,
+encryption/external config) persist in [`MetadataStore`][metadata-store].
+`type` includes `TABLE`, `VIEW`, `MATERIALIZED_VIEW`, `EXTERNAL`, and
+`SNAPSHOT` (copy-job destinations; see COPY jobs below).
+`creationTime` / `lastModifiedTime` follow the same overlay rules as
+datasets. **Storage stats:** `numRows` is computed from
+`Catalog.ListRows`; all byte counters (`numBytes`, `numLongTermBytes`,
+`numActiveLogicalBytes`, `numTotalLogicalBytes`, physical-byte fields,
+`numTimeTravelPhysicalBytes`) are explicitly stubbed to `"0"` until the
+engine exposes byte accounting.
 
 **External tables:** `tables.insert` accepts
 `externalDataConfiguration` (`sourceUris`, `sourceFormat`, `schema`,
