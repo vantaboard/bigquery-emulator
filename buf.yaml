@@ -32,6 +32,10 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
+    # WriteStream.Type values (COMMITTED, PENDING, BUFFERED) mirror
+    # google.cloud.bigquery.storage.v1; prefixing with TYPE_ would
+    # break parity with the public Storage Write SDK.
+    - ENUM_VALUE_PREFIX
 
 breaking:
   use:
