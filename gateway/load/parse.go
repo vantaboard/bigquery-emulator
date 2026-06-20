@@ -16,8 +16,11 @@ import (
 const (
 	fieldTypeString   = "STRING"
 	fieldTypeInteger  = "INTEGER"
+	fieldTypeInt64    = "INT64"
 	fieldTypeFloat    = "FLOAT"
+	fieldTypeFloat64  = "FLOAT64"
 	fieldTypeBoolean  = "BOOLEAN"
+	fieldTypeBool     = "BOOL"
 	fieldTypeRecord   = "RECORD"
 	fieldModeRequired = "REQUIRED"
 	fieldModeRepeated = "REPEATED"

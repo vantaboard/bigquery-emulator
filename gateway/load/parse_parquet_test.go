@@ -109,7 +109,10 @@ func TestMergeSchemasAllowFieldAddition(t *testing.T) {
 		{Name: testColAge, Type: fieldTypeInteger},
 		{Name: "IsMagic", Type: fieldTypeBoolean},
 	}}
-	merged, changed := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldAddition})
+	merged, changed, err := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldAddition}, false)
+	if err != nil {
+		t.Fatalf("mergeSchemas: %v", err)
+	}
 	if !changed {
 		t.Fatal("expected schema change")
 	}
@@ -127,7 +130,10 @@ func TestMergeSchemasAllowFieldRelaxation(t *testing.T) {
 	load := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
 		{Name: testColName, Type: fieldTypeString, Mode: fieldModeRequired},
 	}}
-	merged, changed := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldRelaxation})
+	merged, changed, err := mergeSchemas(existing, load, []string{schemaUpdateAllowFieldRelaxation}, false)
+	if err != nil {
+		t.Fatalf("mergeSchemas: %v", err)
+	}
 	if !changed {
 		t.Fatal("expected schema change")
 	}
@@ -147,7 +153,10 @@ func TestMergeSchemasAllowFieldRelaxation(t *testing.T) {
 		{Name: testColName, Type: fieldTypeString, Mode: fieldModeRequired},
 		{Name: "Age", Type: fieldTypeInteger, Mode: fieldModeRequired},
 	}}
-	merged2, changed2 := mergeSchemas(existing2, queryResult, []string{schemaUpdateAllowFieldRelaxation})
+	merged2, changed2, err := mergeSchemas(existing2, queryResult, []string{schemaUpdateAllowFieldRelaxation}, false)
+	if err != nil {
+		t.Fatalf("mergeSchemas: %v", err)
+	}
 	if !changed2 {
 		t.Fatal("expected query schema relaxation")
 	}

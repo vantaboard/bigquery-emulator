@@ -24,12 +24,13 @@ func extractPolicyFields(fields []TableFieldSchema) []TableFieldSchema {
 	for _, f := range fields {
 		nested := extractPolicyFields(f.Fields)
 		if f.PolicyTags != nil && len(f.PolicyTags.Names) > 0 ||
-			f.Collation != "" || len(nested) > 0 {
+			f.Collation != "" || f.DefaultValueExpression != "" || len(nested) > 0 {
 			out = append(out, TableFieldSchema{
-				Name:       f.Name,
-				Collation:  f.Collation,
-				PolicyTags: f.PolicyTags,
-				Fields:     nested,
+				Name:                   f.Name,
+				Collation:              f.Collation,
+				PolicyTags:             f.PolicyTags,
+				DefaultValueExpression: f.DefaultValueExpression,
+				Fields:                 nested,
 			})
 			continue
 		}
@@ -71,6 +72,9 @@ func mergeFieldPolicyTags(base, overlay []TableFieldSchema) []TableFieldSchema {
 		}
 		if ov.Collation != "" {
 			out[i].Collation = ov.Collation
+		}
+		if ov.DefaultValueExpression != "" {
+			out[i].DefaultValueExpression = ov.DefaultValueExpression
 		}
 		if len(f.Fields) > 0 || len(ov.Fields) > 0 {
 			out[i].Fields = mergeFieldPolicyTags(f.Fields, ov.Fields)

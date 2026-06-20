@@ -1,16 +1,13 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
-	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
 
 // tableKind is the value the BigQuery REST API returns for the `kind`
@@ -384,34 +381,7 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 			grpcToHTTPError(w, err)
 			return
 		}
-		t := tableFromDescribeResponse(resp)
-		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok && overlay.Location != "" {
-			t.Location = overlay.Location
-		}
-		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
-			t = applyTableMetadataOverlay(t, overlay)
-		}
-		if t.DefaultCollation != "" {
-			t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
-		}
-		if deps.Snapshots != nil {
-			if ct, ok := deps.Snapshots.CreationTimeMs(projectID, datasetID, tableID); ok {
-				t.CreationTime = strconv.FormatInt(ct, 10)
-			}
-		}
-		if rowsResp, listErr := deps.Catalog.ListRows(r.Context(), &enginepb.ListRowsRequest{
-			Table: &enginepb.TableRef{
-				ProjectId: projectID,
-				DatasetId: datasetID,
-				TableId:   tableID,
-			},
-			StartIndex: 0,
-			MaxResults: 0,
-		}); listErr == nil {
-			t.NumRows = strconv.FormatInt(rowsResp.GetTotalRows(), 10)
-		} else if t.NumRows == "" {
-			t.NumRows = "0"
-		}
+		t := catalogTable(r.Context(), deps, projectID, datasetID, tableID, resp)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
 	}
 }
@@ -454,47 +424,27 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		deps.Metadata.MergeTable(projectID, datasetID, tableID, t)
-		syncPatchedTableSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
+		if err := syncPatchedTableSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema); err != nil {
+			writeError(w, http.StatusBadRequest, reasonInvalid, err.Error())
+			return
+		}
 		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
-		if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
-			t = applyTableMetadataOverlay(t, overlay)
+		tableRef := &enginepb.TableRef{
+			ProjectId: projectID,
+			DatasetId: datasetID,
+			TableId:   tableID,
 		}
-		if t.LabelsPatchPresent() && len(t.Labels) == 0 {
-			t.SetOmitEmptyLabelsOnWire(true)
+		desc, err := deps.Catalog.DescribeTable(r.Context(), &enginepb.DescribeTableRequest{Table: tableRef})
+		if err != nil {
+			grpcToHTTPError(w, err)
+			return
 		}
-		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
+		out := catalogTable(r.Context(), deps, projectID, datasetID, tableID, desc)
+		if out.LabelsPatchPresent() && len(out.Labels) == 0 {
+			out.SetOmitEmptyLabelsOnWire(true)
+		}
+		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, out))
 	}
-}
-
-// syncPatchedTableSchema registers schema fields added via tables.patch
-// (setMetadata) so tables.get returns engine-backed column types instead
-// of overlay-only stubs.
-func syncPatchedTableSchema(
-	ctx context.Context,
-	deps Dependencies,
-	projectID, datasetID, tableID string,
-	patchSchema *bqtypes.TableSchema,
-) {
-	if deps.Catalog == nil || patchSchema == nil || len(patchSchema.Fields) == 0 {
-		return
-	}
-	tableRef := &enginepb.TableRef{
-		ProjectId: projectID,
-		DatasetId: datasetID,
-		TableId:   tableID,
-	}
-	desc, err := deps.Catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
-	if err != nil {
-		return
-	}
-	existing := schemaFromProto(desc.GetSchema())
-	_, changed := load.MergeSchemasForAppend(existing, patchSchema,
-		[]string{"ALLOW_FIELD_ADDITION"})
-	if !changed {
-		return
-	}
-	_, _ = load.ApplySchemaUpdate(ctx, deps.Catalog, tableRef, patchSchema,
-		[]string{"ALLOW_FIELD_ADDITION"})
 }
 
 // TableDelete implements `bigquery.tables.delete`:

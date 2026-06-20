@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -15,6 +16,13 @@ const (
 	schemaUpdateAllowFieldAddition   = "ALLOW_FIELD_ADDITION"
 	schemaUpdateAllowFieldRelaxation = "ALLOW_FIELD_RELAXATION"
 )
+
+// TablePatchSchemaOptions are the schemaUpdateOptions honored by
+// tables.patch when syncing schema changes to the engine catalog.
+var TablePatchSchemaOptions = []string{
+	schemaUpdateAllowFieldAddition,
+	schemaUpdateAllowFieldRelaxation,
+}
 
 // existingDestinationSchema returns the catalog schema for a destination
 // table when the load job omits an explicit schema and autodetect=false.
@@ -69,7 +77,10 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 	if explicit == nil || len(explicit.Fields) == 0 {
 		explicit = loadSchema
 	}
-	merged, changed := mergeSchemas(existing, explicit, cfg.SchemaUpdateOptions)
+	merged, changed, err := mergeSchemas(existing, explicit, cfg.SchemaUpdateOptions, false)
+	if err != nil {
+		return nil, err
+	}
 	if !changed {
 		return SchemaToProto(existing), nil
 	}
@@ -105,7 +116,21 @@ func MergeSchemasForAppend(
 	query *bqtypes.TableSchema,
 	opts []string,
 ) (*bqtypes.TableSchema, bool) {
-	return mergeSchemas(existing, query, opts)
+	merged, changed, err := mergeSchemas(existing, query, opts, false)
+	if err != nil {
+		return existing, false
+	}
+	return merged, changed
+}
+
+// MergeSchemasForTablePatch merges a PATCH body schema into the catalog
+// schema, updating descriptions and relaxing REQUIRED→NULLABLE. Returns
+// an error when the patch narrows modes or changes types.
+func MergeSchemasForTablePatch(
+	existing *bqtypes.TableSchema,
+	patch *bqtypes.TableSchema,
+) (*bqtypes.TableSchema, bool, error) {
+	return mergeSchemas(existing, patch, TablePatchSchemaOptions, true)
 }
 
 // ApplySchemaUpdate merges querySchema into the destination catalog
@@ -127,7 +152,10 @@ func ApplySchemaUpdate(ctx context.Context, catalog enginepb.CatalogClient,
 		return nil, fmt.Errorf("describe destination table: %w", err)
 	}
 	existing := schemaFromProto(desc.GetSchema())
-	merged, changed := mergeSchemas(existing, querySchema, opts)
+	merged, changed, err := mergeSchemas(existing, querySchema, opts, false)
+	if err != nil {
+		return nil, err
+	}
 	if !changed {
 		return desc.GetSchema(), nil
 	}
@@ -163,45 +191,143 @@ func mergeSchemas(
 	existing *bqtypes.TableSchema,
 	load *bqtypes.TableSchema,
 	opts []string,
-) (*bqtypes.TableSchema, bool) {
+	strictPatch bool,
+) (*bqtypes.TableSchema, bool, error) {
 	if existing == nil {
 		existing = &bqtypes.TableSchema{}
+	}
+	if load == nil {
+		return existing, false, nil
 	}
 	allowAdd := slices.Contains(opts, schemaUpdateAllowFieldAddition)
 	allowRelax := slices.Contains(opts, schemaUpdateAllowFieldRelaxation)
 	if !allowAdd && !allowRelax {
-		return existing, false
+		return existing, false, nil
+	}
+
+	if strictPatch {
+		if err := validatePatchAgainstExisting(existing, load); err != nil {
+			return nil, false, err
+		}
 	}
 
 	merged := cloneBQSchema(existing)
-	changed := false
+	changed := applySchemaFieldAdditions(merged, load, allowAdd)
+	changed = applySchemaRelaxationAndDescriptions(merged, load, allowRelax) || changed
+	return merged, changed, nil
+}
 
-	if allowAdd && load != nil {
-		for _, f := range load.Fields {
-			if fieldIndex(merged.Fields, f.Name) >= 0 {
-				continue
-			}
-			nf := f
-			if nf.Mode == fieldModeRequired {
-				nf.Mode = ""
-			}
-			merged.Fields = append(merged.Fields, nf)
-			changed = true
+func validatePatchAgainstExisting(existing *bqtypes.TableSchema, load *bqtypes.TableSchema) error {
+	for _, f := range load.Fields {
+		idx := fieldIndex(existing.Fields, f.Name)
+		if idx < 0 {
+			continue
+		}
+		if err := validatePatchFieldCompatibility(existing.Fields[idx], f); err != nil {
+			return err
 		}
 	}
-	if allowRelax {
-		for i := range merged.Fields {
-			if merged.Fields[i].Mode != fieldModeRequired {
-				continue
-			}
-			if loadKeepsFieldRequired(load, merged.Fields[i].Name) {
-				continue
-			}
+	return nil
+}
+
+func applySchemaFieldAdditions(merged *bqtypes.TableSchema, load *bqtypes.TableSchema, allowAdd bool) bool {
+	if !allowAdd {
+		return false
+	}
+	changed := false
+	for _, f := range load.Fields {
+		if fieldIndex(merged.Fields, f.Name) >= 0 {
+			continue
+		}
+		nf := f
+		if nf.Mode == fieldModeRequired {
+			nf.Mode = ""
+		}
+		merged.Fields = append(merged.Fields, nf)
+		changed = true
+	}
+	return changed
+}
+
+func applySchemaRelaxationAndDescriptions(
+	merged *bqtypes.TableSchema,
+	load *bqtypes.TableSchema,
+	allowRelax bool,
+) bool {
+	changed := false
+	for i := range merged.Fields {
+		name := merged.Fields[i].Name
+		if allowRelax &&
+			merged.Fields[i].Mode == fieldModeRequired &&
+			!loadKeepsFieldRequired(load, name) {
 			merged.Fields[i].Mode = ""
 			changed = true
 		}
+		patchIdx := fieldIndex(load.Fields, name)
+		if patchIdx < 0 {
+			continue
+		}
+		patchField := load.Fields[patchIdx]
+		if patchField.Description != "" &&
+			merged.Fields[i].Description != patchField.Description {
+			merged.Fields[i].Description = patchField.Description
+			changed = true
+		}
 	}
-	return merged, changed
+	return changed
+}
+
+func validatePatchFieldCompatibility(
+	existing, patch bqtypes.TableFieldSchema,
+) error {
+	if !fieldTypesCompatible(existing.Type, patch.Type) {
+		return fmt.Errorf(
+			"schema update: cannot change type of field %q from %s to %s",
+			existing.Name, existing.Type, patch.Type,
+		)
+	}
+	exMode := normalizeFieldMode(existing.Mode)
+	patchMode := normalizeFieldMode(patch.Mode)
+	if exMode != fieldModeRequired && patchMode == fieldModeRequired {
+		return fmt.Errorf(
+			"schema update: cannot change mode of field %q from %s to REQUIRED",
+			existing.Name, modeLabel(exMode),
+		)
+	}
+	return nil
+}
+
+func fieldTypesCompatible(existingType, patchType string) bool {
+	a := strings.ToUpper(strings.TrimSpace(existingType))
+	b := strings.ToUpper(strings.TrimSpace(patchType))
+	if a == b {
+		return true
+	}
+	// REST INTEGER vs engine INT64 round-trip.
+	if (a == fieldTypeInt64 || a == fieldTypeInteger) && (b == fieldTypeInt64 || b == fieldTypeInteger) {
+		return true
+	}
+	if (a == fieldTypeFloat64 || a == fieldTypeFloat) && (b == fieldTypeFloat64 || b == fieldTypeFloat) {
+		return true
+	}
+	if (a == fieldTypeBool || a == fieldTypeBoolean) && (b == fieldTypeBool || b == fieldTypeBoolean) {
+		return true
+	}
+	return false
+}
+
+func normalizeFieldMode(mode string) string {
+	if mode == "" || strings.EqualFold(mode, "NULLABLE") {
+		return ""
+	}
+	return strings.ToUpper(mode)
+}
+
+func modeLabel(mode string) string {
+	if mode == "" {
+		return "NULLABLE"
+	}
+	return mode
 }
 
 func loadKeepsFieldRequired(load *bqtypes.TableSchema, name string) bool {
