@@ -17,10 +17,13 @@ import {
     UI_DEFAULT,
     defaultSql,
     newQueryTabId,
+    newSavedQueryId,
     resourceTabId,
     type DatasetTabState,
     type QuerySubTab,
     type QueryTabState,
+    type SavedQueryClassic,
+    type SavedQueryVersioned,
     type TableTabState,
     type UiPrefs,
     type WorkspaceSession,
@@ -37,7 +40,9 @@ type WorkspaceAction =
     | { type: 'REORDER_TAB'; id: string; toIndex: number }
     | { type: 'RENAME_TAB'; id: string; title: string }
     | { type: 'UPDATE_QUERY_TAB'; id: string; patch: Partial<Omit<QueryTabState, 'type' | 'id'>> }
-    | { type: 'UPDATE_UI'; patch: Partial<UiPrefs> };
+    | { type: 'UPDATE_UI'; patch: Partial<UiPrefs> }
+    | { type: 'SAVE_QUERY_CLASSIC'; entry: SavedQueryClassic }
+    | { type: 'SAVE_QUERY_VERSIONED'; entry: SavedQueryVersioned; sql: string };
 
 function loadLegacyUiPrefs(): UiPrefs {
     try {
@@ -49,6 +54,9 @@ function loadLegacyUiPrefs(): UiPrefs {
             editorHeight: Number(p.editorHeight) || UI_DEFAULT.editorHeight,
             sidebarCollapsed: p.sidebarCollapsed === true,
             editorCollapsed: p.editorCollapsed === true,
+            useEmulatorParser: p.useEmulatorParser !== false,
+            strictFormat: p.strictFormat === true,
+            referencePanelOpen: p.referencePanelOpen === true,
         };
     } catch {
         return { ...UI_DEFAULT };
@@ -65,6 +73,12 @@ function parseSession(raw: string): WorkspaceSession | null {
             tabOrder: data.tabOrder as string[],
             activeTabId: typeof data.activeTabId === 'string' ? data.activeTabId : null,
             ui,
+            savedQueriesClassic: Array.isArray(data.savedQueriesClassic)
+                ? (data.savedQueriesClassic as SavedQueryClassic[])
+                : [],
+            savedQueriesVersioned: Array.isArray(data.savedQueriesVersioned)
+                ? (data.savedQueriesVersioned as SavedQueryVersioned[])
+                : [],
         };
     } catch {
         return null;
@@ -86,6 +100,8 @@ export function loadWorkspaceSession(): WorkspaceSession {
         tabOrder: [],
         activeTabId: null,
         ui: loadLegacyUiPrefs(),
+        savedQueriesClassic: [],
+        savedQueriesVersioned: [],
     };
 }
 
@@ -219,6 +235,31 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
         case 'UPDATE_UI':
             return { ...state, ui: { ...state.ui, ...action.patch } };
 
+        case 'SAVE_QUERY_CLASSIC':
+            return {
+                ...state,
+                savedQueriesClassic: [
+                    action.entry,
+                    ...state.savedQueriesClassic.filter((q) => q.id !== action.entry.id),
+                ],
+            };
+
+        case 'SAVE_QUERY_VERSIONED': {
+            const now = new Date().toISOString();
+            const existing = state.savedQueriesVersioned.find((q) => q.id === action.entry.id);
+            const versions = existing
+                ? [{ sql: action.sql, savedAt: now }, ...existing.versions]
+                : [{ sql: action.sql, savedAt: now }];
+            const entry: SavedQueryVersioned = { ...action.entry, versions };
+            return {
+                ...state,
+                savedQueriesVersioned: [
+                    entry,
+                    ...state.savedQueriesVersioned.filter((q) => q.id !== entry.id),
+                ],
+            };
+        }
+
         default:
             return state;
     }
@@ -240,6 +281,20 @@ export interface WorkspaceContextValue {
     reorderTab: (id: string, toIndex: number) => void;
     updateQueryTab: (id: string, patch: Partial<Omit<QueryTabState, 'type' | 'id'>>) => void;
     updateUi: (patch: Partial<UiPrefs>) => void;
+    saveQueryClassic: (opts: {
+        title: string;
+        sql: string;
+        projectId: string;
+        datasetId?: string;
+        tableId?: string;
+    }) => SavedQueryClassic;
+    saveQueryVersioned: (opts: {
+        title: string;
+        sql: string;
+        projectId: string;
+        datasetId?: string;
+        tableId?: string;
+    }) => SavedQueryVersioned;
     openQueryFromShare: (opts: {
         projectId: string;
         datasetId: string;
@@ -376,6 +431,54 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'UPDATE_UI', patch });
     }, []);
 
+    const saveQueryClassic = useCallback(
+        (opts: {
+            title: string;
+            sql: string;
+            projectId: string;
+            datasetId?: string;
+            tableId?: string;
+        }) => {
+            const entry: SavedQueryClassic = {
+                id: newSavedQueryId(),
+                title: opts.title,
+                sql: opts.sql,
+                projectId: opts.projectId,
+                datasetId: opts.datasetId,
+                tableId: opts.tableId,
+                savedAt: new Date().toISOString(),
+            };
+            dispatch({ type: 'SAVE_QUERY_CLASSIC', entry });
+            return entry;
+        },
+        [],
+    );
+
+    const saveQueryVersioned = useCallback(
+        (opts: {
+            title: string;
+            sql: string;
+            projectId: string;
+            datasetId?: string;
+            tableId?: string;
+        }) => {
+            const existing = session.savedQueriesVersioned.find(
+                (q) => q.title === opts.title && q.projectId === opts.projectId,
+            );
+            const entry: SavedQueryVersioned = existing ?? {
+                id: newSavedQueryId(),
+                title: opts.title,
+                projectId: opts.projectId,
+                datasetId: opts.datasetId,
+                tableId: opts.tableId,
+                versions: [],
+            };
+            dispatch({ type: 'SAVE_QUERY_VERSIONED', entry, sql: opts.sql });
+            return { ...entry, versions: [{ sql: opts.sql, savedAt: new Date().toISOString() }, ...entry.versions] };
+        },
+        [session.savedQueriesVersioned],
+    );
+
     const value = useMemo<WorkspaceContextValue>(
         () => ({
             session,
@@ -393,6 +496,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             reorderTab,
             updateQueryTab,
             updateUi,
+            saveQueryClassic,
+            saveQueryVersioned,
             openQueryFromShare,
         }),
         [
@@ -409,6 +514,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             reorderTab,
             updateQueryTab,
             updateUi,
+            saveQueryClassic,
+            saveQueryVersioned,
             openQueryFromShare,
         ],
     );

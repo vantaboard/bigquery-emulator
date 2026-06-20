@@ -38,6 +38,9 @@ describe('workspace session persistence', () => {
         expect(session.tabOrder).toEqual([]);
         expect(session.activeTabId).toBeNull();
         expect(session.ui.sidebarWidth).toBe(UI_DEFAULT.sidebarWidth);
+        expect(session.ui.useEmulatorParser).toBe(true);
+        expect(session.savedQueriesClassic).toEqual([]);
+        expect(session.savedQueriesVersioned).toEqual([]);
     });
 
     it('hydrates saved session from bigqueryWorkspaceSession', () => {
