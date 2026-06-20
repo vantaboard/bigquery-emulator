@@ -9,6 +9,7 @@ import { TabBar } from '@/components/ui/TabBar';
 import { UnplannedTab } from '@/components/ui/UnplannedTab';
 import { Breadcrumbs, datasetBreadcrumbs } from '@/features/workspace/components/Breadcrumbs';
 
+import { CreateTableModal } from './createTable/CreateTableModal';
 import { DatasetDetailsTab } from './dataset/DatasetDetailsTab';
 import { DatasetOverviewTab } from './dataset/DatasetOverviewTab';
 
@@ -20,10 +21,9 @@ const RESOURCE_TABS = [
 
 type ResourceTab = (typeof RESOURCE_TABS)[number]['id'];
 
-type StubAction = 'create-table' | 'copy' | 'delete';
+type StubAction = 'copy' | 'delete';
 
 const STUB_TITLES: Record<StubAction, string> = {
-    'create-table': 'Create table',
     copy: 'Copy dataset',
     delete: 'Delete dataset',
 };
@@ -32,6 +32,7 @@ export function DatasetTabPage() {
     const { projectId = '', datasetId = '' } = useParams();
     const queryClient = useQueryClient();
     const [resourceTab, setResourceTab] = useState<ResourceTab>('overview');
+    const [createTableOpen, setCreateTableOpen] = useState(false);
     const [stubAction, setStubAction] = useState<StubAction | null>(null);
 
     const onRefresh = () => {
@@ -47,7 +48,8 @@ export function DatasetTabPage() {
                     icon={Plus}
                     label="Create Table"
                     variant="primary"
-                    onClick={() => setStubAction('create-table')}
+                    testId="create-table-button"
+                    onClick={() => setCreateTableOpen(true)}
                 />
                 <ToolbarButton icon={Copy} label="Copy" onClick={() => setStubAction('copy')} />
                 <ToolbarButton icon={Trash2} label="Delete" variant="danger" onClick={() => setStubAction('delete')} />
@@ -74,6 +76,13 @@ export function DatasetTabPage() {
                     </div>
                 ) : null}
             </div>
+
+            <CreateTableModal
+                open={createTableOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                onClose={() => setCreateTableOpen(false)}
+            />
 
             <Modal
                 open={stubAction !== null}

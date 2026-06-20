@@ -8,12 +8,13 @@ import {
     RefreshCw,
     Table2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { cn } from '@/lib/utils';
 
 import { explorerQueries } from '@/features/explorer/api';
+import { EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
 import { tabRoutePath, useWorkspace } from '@/features/workspace/store';
 import { resourceTabId } from '@/features/workspace/types';
 
@@ -79,6 +80,26 @@ export function ResourceSidebar() {
         setDatasetTables({});
         await refetchProjects();
     };
+
+    useEffect(() => {
+        const onTablesChanged = (event: Event) => {
+            const detail = (event as CustomEvent<{ projectId: string; datasetId: string }>).detail;
+            if (!detail?.projectId || !detail?.datasetId) return;
+            const key = `${detail.projectId}-${detail.datasetId}`;
+            void (async () => {
+                const [datasets, tables] = await Promise.all([
+                    explorerQueries.datasets(detail.projectId),
+                    explorerQueries.tables(detail.projectId, detail.datasetId),
+                ]);
+                setProjectDatasets((m) => ({ ...m, [detail.projectId]: datasets }));
+                setDatasetTables((m) => ({ ...m, [key]: tables }));
+                setExpandedProjects((s) => (s.includes(detail.projectId) ? s : [...s, detail.projectId]));
+                setExpandedDatasets((s) => (s.includes(key) ? s : [...s, key]));
+            })();
+        };
+        window.addEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
+        return () => window.removeEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
+    }, []);
 
     const addProject = async () => {
         const id = newProjectId.trim();
