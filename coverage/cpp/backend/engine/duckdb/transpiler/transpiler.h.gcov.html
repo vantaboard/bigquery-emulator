@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-18 22:35:40</td>
+            <td class="headerValue">2026-06-20 05:07:15</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -367,116 +367,122 @@
 <span id="L305"><span class="lineNum">     305</span>              :   // empty-string-as-fallback contract as `EmitExpr`.</span>
 <span id="L306"><span class="lineNum">     306</span>              :   std::string EmitScan(const ::googlesql::ResolvedScan* scan);</span>
 <span id="L307"><span class="lineNum">     307</span>              : </span>
-<span id="L308"><span class="lineNum">     308</span>              :   // Lower one `ResolvedWindowFrameExpr` (PRECEDING / CURRENT ROW /</span>
-<span id="L309"><span class="lineNum">     309</span>              :   // FOLLOWING). Used by `EmitAnalyticScan` for the inner ROWS / RANGE</span>
-<span id="L310"><span class="lineNum">     310</span>              :   // BETWEEN ... AND ... clause; returns the empty string when the</span>
-<span id="L311"><span class="lineNum">     311</span>              :   // bound is malformed or when an offset bound carries an expression</span>
-<span id="L312"><span class="lineNum">     312</span>              :   // we cannot lower yet, so the caller can propagate the empty-string</span>
-<span id="L313"><span class="lineNum">     313</span>              :   // contract.</span>
-<span id="L314"><span class="lineNum">     314</span>              :   std::string EmitFrameBound(const ::googlesql::ResolvedWindowFrameExpr* expr);</span>
-<span id="L315"><span class="lineNum">     315</span>              : </span>
-<span id="L316"><span class="lineNum">     316</span>              :   // Per-clause helpers for `EmitAnalyticScan`. Each returns:</span>
-<span id="L317"><span class="lineNum">     317</span>              :   //   * `&quot;&quot;` when the clause is legally absent (e.g. no PARTITION BY)</span>
-<span id="L318"><span class="lineNum">     318</span>              :   //   * `kAnalyticBail` when the shape is not yet lowerable and the</span>
-<span id="L319"><span class="lineNum">     319</span>              :   //     caller must abandon the analytic emit and let the engine</span>
-<span id="L320"><span class="lineNum">     320</span>              :   //     surface UNIMPLEMENTED.</span>
-<span id="L321"><span class="lineNum">     321</span>              :   //   * the SQL fragment otherwise.</span>
-<span id="L322"><span class="lineNum">     322</span>              :   // The bail sentinel keeps the helpers' empty-string-as-fallback</span>
-<span id="L323"><span class="lineNum">     323</span>              :   // contract from colliding with the legitimate &quot;clause omitted&quot;</span>
-<span id="L324"><span class="lineNum">     324</span>              :   // value.</span>
-<span id="L325"><span class="lineNum">     325</span>              :   static constexpr absl::string_view kAnalyticBail =</span>
-<span id="L326"><span class="lineNum">     326</span>              :       &quot;\x01&quot;</span>
-<span id="L327"><span class="lineNum">     327</span>              :       &quot;bail&quot;;</span>
-<span id="L328"><span class="lineNum">     328</span>              :   std::string BuildPartitionClause(</span>
-<span id="L329"><span class="lineNum">     329</span>              :       const ::googlesql::ResolvedWindowPartitioning* p);</span>
-<span id="L330"><span class="lineNum">     330</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o);</span>
-<span id="L331"><span class="lineNum">     331</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o,</span>
-<span id="L332"><span class="lineNum">     332</span>              :                                bool bigquery_null_defaults,</span>
-<span id="L333"><span class="lineNum">     333</span>              :                                bool append_input_rn);</span>
-<span id="L334"><span class="lineNum">     334</span>              :   std::string BuildFrameClause(const ::googlesql::ResolvedWindowFrame* wf);</span>
-<span id="L335"><span class="lineNum">     335</span>              :   std::string BuildAnalyticProjection(</span>
-<span id="L336"><span class="lineNum">     336</span>              :       const ::googlesql::ResolvedComputedColumnBase* col,</span>
-<span id="L337"><span class="lineNum">     337</span>              :       absl::string_view partition_clause,</span>
-<span id="L338"><span class="lineNum">     338</span>              :       absl::string_view order_clause);</span>
-<span id="L339"><span class="lineNum">     339</span>              :   void CaptureAnalyticOutputOrder(</span>
-<span id="L340"><span class="lineNum">     340</span>              :       const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
-<span id="L341"><span class="lineNum">     341</span>              : </span>
-<span id="L342"><span class="lineNum">     342</span>              :   // Lower one `ResolvedSetOperationItem` into a derived-table SELECT</span>
-<span id="L343"><span class="lineNum">     343</span>              :   // that projects `parent-&gt;column_list()` in order. Each</span>
-<span id="L344"><span class="lineNum">     344</span>              :   // `output_column_list[i]` names the column the item's child scan</span>
-<span id="L345"><span class="lineNum">     345</span>              :   // exposes for the parent's `column_list(i)` slot, so we wrap the</span>
-<span id="L346"><span class="lineNum">     346</span>              :   // child scan as `FROM (&lt;scan&gt;)` and project `&quot;&lt;output_i&gt;&quot; AS</span>
-<span id="L347"><span class="lineNum">     347</span>              :   // &quot;&lt;parent_i&gt;&quot;` (collapsed when the names already match). Returns</span>
-<span id="L348"><span class="lineNum">     348</span>              :   // the empty string when the child scan cannot lower or the</span>
-<span id="L349"><span class="lineNum">     349</span>              :   // output/parent column counts disagree, so callers propagate the</span>
-<span id="L350"><span class="lineNum">     350</span>              :   // empty-string fallback contract.</span>
-<span id="L351"><span class="lineNum">     351</span>              :   std::string EmitSetOperationItem(</span>
-<span id="L352"><span class="lineNum">     352</span>              :       const ::googlesql::ResolvedSetOperationItem* item,</span>
-<span id="L353"><span class="lineNum">     353</span>              :       const ::googlesql::ResolvedSetOperationScan* parent);</span>
-<span id="L354"><span class="lineNum">     354</span>              : </span>
-<span id="L355"><span class="lineNum">     355</span>              :   // Look up (or assign) the DuckDB `$N` slot for a named GoogleSQL</span>
-<span id="L356"><span class="lineNum">     356</span>              :   // parameter. The first reference appends a new `ParameterRef` to</span>
-<span id="L357"><span class="lineNum">     357</span>              :   // `parameter_order_`; subsequent references reuse the same slot</span>
-<span id="L358"><span class="lineNum">     358</span>              :   // so a query like `WHERE @x AND @x` carries only one bind value.</span>
-<span id="L359"><span class="lineNum">     359</span>              :   // The returned slot is 1-based to match DuckDB's `$1` notation.</span>
-<span id="L360"><span class="lineNum">     360</span>              :   int LookupOrAssignNamedParameter(absl::string_view name);</span>
-<span id="L361"><span class="lineNum">     361</span>              : </span>
-<span id="L362"><span class="lineNum">     362</span>              :   // Append a new positional `ParameterRef` and return its 1-based</span>
-<span id="L363"><span class="lineNum">     363</span>              :   // slot. Positional GoogleSQL parameters are referentially distinct</span>
-<span id="L364"><span class="lineNum">     364</span>              :   // every time they appear, so we never dedupe them.</span>
-<span id="L365"><span class="lineNum">     365</span>              :   int AssignPositionalParameter(int analyzer_position);</span>
-<span id="L366"><span class="lineNum">     366</span>              : </span>
-<span id="L367"><span class="lineNum">     367</span>              :   // Bind-order accumulator. Each entry is a `ParameterRef` whose</span>
-<span id="L368"><span class="lineNum">     368</span>              :   // index `i` is the 0-based DuckDB placeholder slot (slot `i` is</span>
-<span id="L369"><span class="lineNum">     369</span>              :   // `$&lt;i+1&gt;`). Named parameter lookups go through</span>
-<span id="L370"><span class="lineNum">     370</span>              :   // `name_to_slot_` for dedup; positional ones always append.</span>
-<span id="L371"><span class="lineNum">     371</span>              :   std::vector&lt;ParameterRef&gt; parameter_order_;</span>
-<span id="L372"><span class="lineNum">     372</span>              :   absl::flat_hash_map&lt;std::string, int&gt; name_to_slot_;</span>
-<span id="L373"><span class="lineNum">     373</span>              : </span>
-<span id="L374"><span class="lineNum">     374</span>              :   // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes</span>
-<span id="L375"><span class="lineNum">     375</span>              :   // one entry per recursive CTE before lowering its body; the</span>
-<span id="L376"><span class="lineNum">     376</span>              :   // matching `EmitRecursiveRefScan` reads the back of the stack to</span>
-<span id="L377"><span class="lineNum">     377</span>              :   // discover the DuckDB-side CTE name and the analyzer-stable</span>
-<span id="L378"><span class="lineNum">     378</span>              :   // anchor column names the recursive arm references. Non-recursive</span>
-<span id="L379"><span class="lineNum">     379</span>              :   // entries do not touch the stack so a non-recursive CTE nested</span>
-<span id="L380"><span class="lineNum">     380</span>              :   // inside a recursive arm still sees the outer recursive context</span>
-<span id="L381"><span class="lineNum">     381</span>              :   // through the stack.</span>
-<span id="L382"><span class="lineNum">     382</span>              :   struct RecursiveCteContext {</span>
-<span id="L383"><span class="lineNum">     383</span>              :     std::string cte_name;</span>
-<span id="L384"><span class="lineNum">     384</span>              :     std::vector&lt;std::string&gt; column_names;</span>
-<span id="L385"><span class="lineNum">     385</span>              :   };</span>
-<span id="L386"><span class="lineNum">     386</span>              :   std::vector&lt;RecursiveCteContext&gt; recursive_cte_stack_;</span>
-<span id="L387"><span class="lineNum">     387</span>              : </span>
-<span id="L388"><span class="lineNum">     388</span>              :   // Set when the immediately-wrapped scan emit is a JOIN that projects</span>
-<span id="L389"><span class="lineNum">     389</span>              :   // analyzer columns under `__bq_j_&lt;column_id&gt;` aliases.</span>
-<span id="L390"><span class="lineNum">     390</span>              :   bool join_output_uses_id_aliases_ = false;</span>
-<span id="L391"><span class="lineNum">     391</span>              : </span>
-<span id="L392"><span class="lineNum">     392</span>              :   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST</span>
-<span id="L393"><span class="lineNum">     393</span>              :   // ordinality or an explicit row_number() stamp).</span>
-<span id="L394"><span class="lineNum">     394</span>              :   bool input_has_rn_column_ = false;</span>
-<span id="L395"><span class="lineNum">     395</span>              :   // Set when the final query needs ORDER BY using `__bq_input_rn` /</span>
-<span id="L396"><span class="lineNum">     396</span>              :   // analytic output order (window queries only).</span>
-<span id="L397"><span class="lineNum">     397</span>              :   bool input_rn_ordering_ = false;</span>
-<span id="L398"><span class="lineNum">     398</span>              :   // Final ORDER BY keys derived from the first analytic group's</span>
-<span id="L399"><span class="lineNum">     399</span>              :   // PARTITION BY / ORDER BY spec (BigQuery result ordering).</span>
-<span id="L400"><span class="lineNum">     400</span>              :   std::vector&lt;std::string&gt; output_order_items_;</span>
-<span id="L401"><span class="lineNum">     401</span>              :   // True when the user-visible SELECT list includes `__bq_input_rn`.</span>
-<span id="L402"><span class="lineNum">     402</span>              :   bool output_includes_input_rn_ = false;</span>
-<span id="L403"><span class="lineNum">     403</span>              :   // Suppresses appending `__bq_input_rn` to ProjectScan output when</span>
-<span id="L404"><span class="lineNum">     404</span>              :   // lowering the inner scan of a subquery expression (IN/SCALAR/...).</span>
-<span id="L405"><span class="lineNum">     405</span>              :   bool suppress_rn_in_project_ = false;</span>
-<span id="L406"><span class="lineNum">     406</span>              :   // User-visible output column names from `ResolvedQueryStmt`; used to</span>
-<span id="L407"><span class="lineNum">     407</span>              :   // decide whether PARTITION BY keys belong in the final ORDER BY.</span>
-<span id="L408"><span class="lineNum">     408</span>              :   std::vector&lt;std::string&gt; query_output_column_names_;</span>
-<span id="L409"><span class="lineNum">     409</span>              : };</span>
-<span id="L410"><span class="lineNum">     410</span>              : </span>
-<span id="L411"><span class="lineNum">     411</span>              : }  // namespace transpiler</span>
-<span id="L412"><span class="lineNum">     412</span>              : }  // namespace duckdb</span>
-<span id="L413"><span class="lineNum">     413</span>              : }  // namespace engine</span>
-<span id="L414"><span class="lineNum">     414</span>              : }  // namespace backend</span>
-<span id="L415"><span class="lineNum">     415</span>              : }  // namespace bigquery_emulator</span>
+<span id="L308"><span class="lineNum">     308</span>              :   // Lower explicit `CROSS JOIN UNNEST(...) CROSS JOIN UNNEST(...)` shapes</span>
+<span id="L309"><span class="lineNum">     309</span>              :   // the analyzer represents either as a multi-array `ResolvedArrayScan`</span>
+<span id="L310"><span class="lineNum">     310</span>              :   // without `array_zip_mode`, or as a chain of nested single-array scans.</span>
+<span id="L311"><span class="lineNum">     311</span>              :   std::string EmitUnnestCrossProductScan(</span>
+<span id="L312"><span class="lineNum">     312</span>              :       const ::googlesql::ResolvedArrayScan* node);</span>
+<span id="L313"><span class="lineNum">     313</span>              : </span>
+<span id="L314"><span class="lineNum">     314</span>              :   // Lower one `ResolvedWindowFrameExpr` (PRECEDING / CURRENT ROW /</span>
+<span id="L315"><span class="lineNum">     315</span>              :   // FOLLOWING). Used by `EmitAnalyticScan` for the inner ROWS / RANGE</span>
+<span id="L316"><span class="lineNum">     316</span>              :   // BETWEEN ... AND ... clause; returns the empty string when the</span>
+<span id="L317"><span class="lineNum">     317</span>              :   // bound is malformed or when an offset bound carries an expression</span>
+<span id="L318"><span class="lineNum">     318</span>              :   // we cannot lower yet, so the caller can propagate the empty-string</span>
+<span id="L319"><span class="lineNum">     319</span>              :   // contract.</span>
+<span id="L320"><span class="lineNum">     320</span>              :   std::string EmitFrameBound(const ::googlesql::ResolvedWindowFrameExpr* expr);</span>
+<span id="L321"><span class="lineNum">     321</span>              : </span>
+<span id="L322"><span class="lineNum">     322</span>              :   // Per-clause helpers for `EmitAnalyticScan`. Each returns:</span>
+<span id="L323"><span class="lineNum">     323</span>              :   //   * `&quot;&quot;` when the clause is legally absent (e.g. no PARTITION BY)</span>
+<span id="L324"><span class="lineNum">     324</span>              :   //   * `kAnalyticBail` when the shape is not yet lowerable and the</span>
+<span id="L325"><span class="lineNum">     325</span>              :   //     caller must abandon the analytic emit and let the engine</span>
+<span id="L326"><span class="lineNum">     326</span>              :   //     surface UNIMPLEMENTED.</span>
+<span id="L327"><span class="lineNum">     327</span>              :   //   * the SQL fragment otherwise.</span>
+<span id="L328"><span class="lineNum">     328</span>              :   // The bail sentinel keeps the helpers' empty-string-as-fallback</span>
+<span id="L329"><span class="lineNum">     329</span>              :   // contract from colliding with the legitimate &quot;clause omitted&quot;</span>
+<span id="L330"><span class="lineNum">     330</span>              :   // value.</span>
+<span id="L331"><span class="lineNum">     331</span>              :   static constexpr absl::string_view kAnalyticBail =</span>
+<span id="L332"><span class="lineNum">     332</span>              :       &quot;\x01&quot;</span>
+<span id="L333"><span class="lineNum">     333</span>              :       &quot;bail&quot;;</span>
+<span id="L334"><span class="lineNum">     334</span>              :   std::string BuildPartitionClause(</span>
+<span id="L335"><span class="lineNum">     335</span>              :       const ::googlesql::ResolvedWindowPartitioning* p);</span>
+<span id="L336"><span class="lineNum">     336</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o);</span>
+<span id="L337"><span class="lineNum">     337</span>              :   std::string BuildOrderClause(const ::googlesql::ResolvedWindowOrdering* o,</span>
+<span id="L338"><span class="lineNum">     338</span>              :                                bool bigquery_null_defaults,</span>
+<span id="L339"><span class="lineNum">     339</span>              :                                bool append_input_rn);</span>
+<span id="L340"><span class="lineNum">     340</span>              :   std::string BuildFrameClause(const ::googlesql::ResolvedWindowFrame* wf);</span>
+<span id="L341"><span class="lineNum">     341</span>              :   std::string BuildAnalyticProjection(</span>
+<span id="L342"><span class="lineNum">     342</span>              :       const ::googlesql::ResolvedComputedColumnBase* col,</span>
+<span id="L343"><span class="lineNum">     343</span>              :       absl::string_view partition_clause,</span>
+<span id="L344"><span class="lineNum">     344</span>              :       absl::string_view order_clause);</span>
+<span id="L345"><span class="lineNum">     345</span>              :   void CaptureAnalyticOutputOrder(</span>
+<span id="L346"><span class="lineNum">     346</span>              :       const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
+<span id="L347"><span class="lineNum">     347</span>              : </span>
+<span id="L348"><span class="lineNum">     348</span>              :   // Lower one `ResolvedSetOperationItem` into a derived-table SELECT</span>
+<span id="L349"><span class="lineNum">     349</span>              :   // that projects `parent-&gt;column_list()` in order. Each</span>
+<span id="L350"><span class="lineNum">     350</span>              :   // `output_column_list[i]` names the column the item's child scan</span>
+<span id="L351"><span class="lineNum">     351</span>              :   // exposes for the parent's `column_list(i)` slot, so we wrap the</span>
+<span id="L352"><span class="lineNum">     352</span>              :   // child scan as `FROM (&lt;scan&gt;)` and project `&quot;&lt;output_i&gt;&quot; AS</span>
+<span id="L353"><span class="lineNum">     353</span>              :   // &quot;&lt;parent_i&gt;&quot;` (collapsed when the names already match). Returns</span>
+<span id="L354"><span class="lineNum">     354</span>              :   // the empty string when the child scan cannot lower or the</span>
+<span id="L355"><span class="lineNum">     355</span>              :   // output/parent column counts disagree, so callers propagate the</span>
+<span id="L356"><span class="lineNum">     356</span>              :   // empty-string fallback contract.</span>
+<span id="L357"><span class="lineNum">     357</span>              :   std::string EmitSetOperationItem(</span>
+<span id="L358"><span class="lineNum">     358</span>              :       const ::googlesql::ResolvedSetOperationItem* item,</span>
+<span id="L359"><span class="lineNum">     359</span>              :       const ::googlesql::ResolvedSetOperationScan* parent);</span>
+<span id="L360"><span class="lineNum">     360</span>              : </span>
+<span id="L361"><span class="lineNum">     361</span>              :   // Look up (or assign) the DuckDB `$N` slot for a named GoogleSQL</span>
+<span id="L362"><span class="lineNum">     362</span>              :   // parameter. The first reference appends a new `ParameterRef` to</span>
+<span id="L363"><span class="lineNum">     363</span>              :   // `parameter_order_`; subsequent references reuse the same slot</span>
+<span id="L364"><span class="lineNum">     364</span>              :   // so a query like `WHERE @x AND @x` carries only one bind value.</span>
+<span id="L365"><span class="lineNum">     365</span>              :   // The returned slot is 1-based to match DuckDB's `$1` notation.</span>
+<span id="L366"><span class="lineNum">     366</span>              :   int LookupOrAssignNamedParameter(absl::string_view name);</span>
+<span id="L367"><span class="lineNum">     367</span>              : </span>
+<span id="L368"><span class="lineNum">     368</span>              :   // Append a new positional `ParameterRef` and return its 1-based</span>
+<span id="L369"><span class="lineNum">     369</span>              :   // slot. Positional GoogleSQL parameters are referentially distinct</span>
+<span id="L370"><span class="lineNum">     370</span>              :   // every time they appear, so we never dedupe them.</span>
+<span id="L371"><span class="lineNum">     371</span>              :   int AssignPositionalParameter(int analyzer_position);</span>
+<span id="L372"><span class="lineNum">     372</span>              : </span>
+<span id="L373"><span class="lineNum">     373</span>              :   // Bind-order accumulator. Each entry is a `ParameterRef` whose</span>
+<span id="L374"><span class="lineNum">     374</span>              :   // index `i` is the 0-based DuckDB placeholder slot (slot `i` is</span>
+<span id="L375"><span class="lineNum">     375</span>              :   // `$&lt;i+1&gt;`). Named parameter lookups go through</span>
+<span id="L376"><span class="lineNum">     376</span>              :   // `name_to_slot_` for dedup; positional ones always append.</span>
+<span id="L377"><span class="lineNum">     377</span>              :   std::vector&lt;ParameterRef&gt; parameter_order_;</span>
+<span id="L378"><span class="lineNum">     378</span>              :   absl::flat_hash_map&lt;std::string, int&gt; name_to_slot_;</span>
+<span id="L379"><span class="lineNum">     379</span>              : </span>
+<span id="L380"><span class="lineNum">     380</span>              :   // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes</span>
+<span id="L381"><span class="lineNum">     381</span>              :   // one entry per recursive CTE before lowering its body; the</span>
+<span id="L382"><span class="lineNum">     382</span>              :   // matching `EmitRecursiveRefScan` reads the back of the stack to</span>
+<span id="L383"><span class="lineNum">     383</span>              :   // discover the DuckDB-side CTE name and the analyzer-stable</span>
+<span id="L384"><span class="lineNum">     384</span>              :   // anchor column names the recursive arm references. Non-recursive</span>
+<span id="L385"><span class="lineNum">     385</span>              :   // entries do not touch the stack so a non-recursive CTE nested</span>
+<span id="L386"><span class="lineNum">     386</span>              :   // inside a recursive arm still sees the outer recursive context</span>
+<span id="L387"><span class="lineNum">     387</span>              :   // through the stack.</span>
+<span id="L388"><span class="lineNum">     388</span>              :   struct RecursiveCteContext {</span>
+<span id="L389"><span class="lineNum">     389</span>              :     std::string cte_name;</span>
+<span id="L390"><span class="lineNum">     390</span>              :     std::vector&lt;std::string&gt; column_names;</span>
+<span id="L391"><span class="lineNum">     391</span>              :   };</span>
+<span id="L392"><span class="lineNum">     392</span>              :   std::vector&lt;RecursiveCteContext&gt; recursive_cte_stack_;</span>
+<span id="L393"><span class="lineNum">     393</span>              : </span>
+<span id="L394"><span class="lineNum">     394</span>              :   // Set when the immediately-wrapped scan emit is a JOIN that projects</span>
+<span id="L395"><span class="lineNum">     395</span>              :   // analyzer columns under `__bq_j_&lt;column_id&gt;` aliases.</span>
+<span id="L396"><span class="lineNum">     396</span>              :   bool join_output_uses_id_aliases_ = false;</span>
+<span id="L397"><span class="lineNum">     397</span>              : </span>
+<span id="L398"><span class="lineNum">     398</span>              :   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST</span>
+<span id="L399"><span class="lineNum">     399</span>              :   // ordinality or an explicit row_number() stamp).</span>
+<span id="L400"><span class="lineNum">     400</span>              :   bool input_has_rn_column_ = false;</span>
+<span id="L401"><span class="lineNum">     401</span>              :   // Set when the final query needs ORDER BY using `__bq_input_rn` /</span>
+<span id="L402"><span class="lineNum">     402</span>              :   // analytic output order (window queries only).</span>
+<span id="L403"><span class="lineNum">     403</span>              :   bool input_rn_ordering_ = false;</span>
+<span id="L404"><span class="lineNum">     404</span>              :   // Final ORDER BY keys derived from the first analytic group's</span>
+<span id="L405"><span class="lineNum">     405</span>              :   // PARTITION BY / ORDER BY spec (BigQuery result ordering).</span>
+<span id="L406"><span class="lineNum">     406</span>              :   std::vector&lt;std::string&gt; output_order_items_;</span>
+<span id="L407"><span class="lineNum">     407</span>              :   // True when the user-visible SELECT list includes `__bq_input_rn`.</span>
+<span id="L408"><span class="lineNum">     408</span>              :   bool output_includes_input_rn_ = false;</span>
+<span id="L409"><span class="lineNum">     409</span>              :   // Suppresses appending `__bq_input_rn` to ProjectScan output when</span>
+<span id="L410"><span class="lineNum">     410</span>              :   // lowering the inner scan of a subquery expression (IN/SCALAR/...).</span>
+<span id="L411"><span class="lineNum">     411</span>              :   bool suppress_rn_in_project_ = false;</span>
+<span id="L412"><span class="lineNum">     412</span>              :   // User-visible output column names from `ResolvedQueryStmt`; used to</span>
+<span id="L413"><span class="lineNum">     413</span>              :   // decide whether PARTITION BY keys belong in the final ORDER BY.</span>
+<span id="L414"><span class="lineNum">     414</span>              :   std::vector&lt;std::string&gt; query_output_column_names_;</span>
+<span id="L415"><span class="lineNum">     415</span>              : };</span>
 <span id="L416"><span class="lineNum">     416</span>              : </span>
-<span id="L417"><span class="lineNum">     417</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
+<span id="L417"><span class="lineNum">     417</span>              : }  // namespace transpiler</span>
+<span id="L418"><span class="lineNum">     418</span>              : }  // namespace duckdb</span>
+<span id="L419"><span class="lineNum">     419</span>              : }  // namespace engine</span>
+<span id="L420"><span class="lineNum">     420</span>              : }  // namespace backend</span>
+<span id="L421"><span class="lineNum">     421</span>              : }  // namespace bigquery_emulator</span>
+<span id="L422"><span class="lineNum">     422</span>              : </span>
+<span id="L423"><span class="lineNum">     423</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
         </pre>
               </td>
             </tr>

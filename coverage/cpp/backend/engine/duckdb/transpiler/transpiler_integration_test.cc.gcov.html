@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">99.2&nbsp;%</td>
-            <td class="headerCovTableEntry">240</td>
-            <td class="headerCovTableEntry">238</td>
+            <td class="headerCovTableEntry">261</td>
+            <td class="headerCovTableEntry">259</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-18 22:35:40</td>
+            <td class="headerValue">2026-06-20 05:07:15</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">17</td>
-            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">19</td>
+            <td class="headerCovTableEntry">19</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -358,11 +358,34 @@
 <span id="L296"><span class="lineNum">     296</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;\&quot;cnt\&quot;&quot;), std::string::npos) &lt;&lt; sql;</span></span>
 <span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">           1 : }</span></span>
 <span id="L298"><span class="lineNum">     298</span>              : </span>
-<span id="L299"><span class="lineNum">     299</span>              : }  // namespace transpiler</span>
-<span id="L300"><span class="lineNum">     300</span>              : }  // namespace duckdb</span>
-<span id="L301"><span class="lineNum">     301</span>              : }  // namespace engine</span>
-<span id="L302"><span class="lineNum">     302</span>              : }  // namespace backend</span>
-<span id="L303"><span class="lineNum">     303</span>              : }  // namespace bigquery_emulator</span>
+<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestSelect) {</span></span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">           1 :       &quot;SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
+<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;cross join unnest select must transpile&quot;;</span></span>
+<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L309"><span class="lineNum">     309</span>              : </span>
+<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestComputedSelect) {</span></span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">           1 :       &quot;SELECT n + (m - 1) * 1000000 AS id &quot;</span></span>
+<span id="L313"><span class="lineNum">     313</span> <span class="tlaGNC">           1 :       &quot;FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
+<span id="L314"><span class="lineNum">     314</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
+<span id="L315"><span class="lineNum">     315</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;computed cross join unnest must transpile&quot;;</span></span>
+<span id="L319"><span class="lineNum">     319</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L321"><span class="lineNum">     321</span>              : </span>
+<span id="L322"><span class="lineNum">     322</span>              : }  // namespace transpiler</span>
+<span id="L323"><span class="lineNum">     323</span>              : }  // namespace duckdb</span>
+<span id="L324"><span class="lineNum">     324</span>              : }  // namespace engine</span>
+<span id="L325"><span class="lineNum">     325</span>              : }  // namespace backend</span>
+<span id="L326"><span class="lineNum">     326</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

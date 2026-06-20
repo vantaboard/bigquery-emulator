@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-18 22:35:40</td>
+            <td class="headerValue">2026-06-20 05:07:15</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">41.7&nbsp;%</td>
@@ -94,9 +94,9 @@
 <span id="L32"><span class="lineNum">      32</span>              : // Double-quote escape a DuckDB identifier. DuckDB doubles embedded</span>
 <span id="L33"><span class="lineNum">      33</span>              : // `&quot;` characters; we do the same so column / table names with quotes</span>
 <span id="L34"><span class="lineNum">      34</span>              : // or hyphens round-trip safely through the emitted SQL.</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        1162 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        1162 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        1162 : }</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        1208 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        1208 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        1208 : }</span></span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span>              : // Single-quote escape a DuckDB string literal. DuckDB doubles embedded</span>
 <span id="L40"><span class="lineNum">      40</span>              : // `'` characters; we do the same so BQ string literals with embedded</span>
