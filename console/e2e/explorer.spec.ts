@@ -224,4 +224,88 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByRole('tab', { name: 'table_a' })).toBeVisible();
         await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
     });
+
+    test('deletes a table and removes it from the sidebar', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('create-table-button').click();
+        await page.getByTestId('create-table-name').fill('e2e_delete_table');
+
+        const fieldInputs = page.getByTestId('schema-builder').locator('input[placeholder="Field name"]');
+        await fieldInputs.nth(0).fill('row_id');
+        await fieldInputs.nth(1).fill('row_label');
+
+        await Promise.all([
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes('/datasets/test-dataset/tables') &&
+                    r.request().method() === 'POST' &&
+                    r.ok(),
+            ),
+            page.getByTestId('create-table-submit').click(),
+        ]);
+
+        await expect(page.getByTestId('table-e2e_delete_table')).toBeVisible({ timeout: 10_000 });
+        await page.getByTestId('table-e2e_delete_table').click();
+        await expect(page.getByTestId('table-tab-page')).toBeVisible();
+
+        await page.getByTestId('delete-table-button').click();
+        await Promise.all([
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes('/tables/e2e_delete_table') &&
+                    r.request().method() === 'DELETE' &&
+                    r.ok(),
+            ),
+            page.getByTestId('delete-table-confirm').click(),
+        ]);
+
+        await expect(page.getByTestId('table-e2e_delete_table')).not.toBeVisible({ timeout: 10_000 });
+    });
+
+    test('edits schema by changing field mode and adding a field', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('create-table-button').click();
+        await page.getByTestId('create-table-name').fill('e2e_edit_schema_table');
+
+        const fieldInputs = page.getByTestId('schema-builder').locator('input[placeholder="Field name"]');
+        await fieldInputs.nth(0).fill('metric_id');
+        await fieldInputs.nth(1).fill('metric_value');
+
+        const modeSelects = page.getByTestId('schema-builder').locator('select').filter({ hasText: 'NULLABLE' });
+        await modeSelects.first().selectOption('REQUIRED');
+
+        await Promise.all([
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes('/datasets/test-dataset/tables') &&
+                    r.request().method() === 'POST' &&
+                    r.ok(),
+            ),
+            page.getByTestId('create-table-submit').click(),
+        ]);
+
+        await page.getByTestId('table-e2e_edit_schema_table').click();
+        await expect(page.getByTestId('table-tab-schema')).toBeVisible();
+
+        await page.getByTestId('edit-schema-button').click();
+        await expect(page.getByTestId('edit-schema-modal')).toBeVisible();
+
+        await page.getByTestId('edit-schema-mode-metric_id').selectOption('NULLABLE');
+        await page.getByTestId('edit-schema-add-field').click();
+        await page.getByTestId('edit-schema-new-field-name').fill('recorded_at');
+
+        await Promise.all([
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes('/tables/e2e_edit_schema_table') &&
+                    r.request().method() === 'PATCH' &&
+                    r.ok(),
+            ),
+            page.getByTestId('edit-schema-submit').click(),
+        ]);
+
+        await expect(page.getByTestId('edit-schema-modal')).not.toBeVisible();
+        await expect(page.getByTestId('schema-field-metric_id')).toContainText('NULLABLE');
+        await expect(page.getByTestId('schema-field-recorded_at')).toBeVisible();
+    });
 });
