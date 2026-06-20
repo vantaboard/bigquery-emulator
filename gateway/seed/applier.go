@@ -252,6 +252,12 @@ func nullCell() *enginepb.Cell {
 //   - map[string]any -> Struct (field order = map iteration order;
 //     callers that need a deterministic order should pre-marshal to
 //     a slice of {k, v} pairs and pass it through []any).
+//
+// Do not use this helper for typed STRUCT or REPEATED columns: it
+// ignores map keys and assigns values in Go map iteration order,
+// which swaps named subfields (e.g. REPEATED STRUCT<key STRING,
+// value JSON>). Always route STRUCT/REPEATED values through
+// cellFromJSONForField with the table schema.
 func ValueToCell(v any) *enginepb.Cell {
 	if v == nil {
 		return nullCell()
@@ -294,6 +300,7 @@ func ValueToCell(v any) *enginepb.Cell {
 		}
 		return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: arr}}
 	case map[string]any:
+		// Schema-blind: values only, keys discarded. See doc comment.
 		st := &enginepb.Struct{Fields: make([]*enginepb.Cell, 0, len(val))}
 		for _, fv := range val {
 			st.Fields = append(st.Fields, ValueToCell(fv))

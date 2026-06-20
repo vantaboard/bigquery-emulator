@@ -60,6 +60,25 @@ datasets:
 - Rows are key/value maps. Missing keys become `NULL` cells; extra
   keys not in the schema are silently dropped, matching the
   `tabledata.insertAll` REST handler.
+- **REPEATED STRUCT** columns (including subfields typed `JSON`) must
+  be written as YAML sequences of maps keyed by subfield name. The
+  loader maps subfields by name against the table schema; a schema-blind
+  fallback would iterate map values only and can swap columns (e.g.
+  feeding `"profile"` into a JSON slot). Example:
+
+  ```yaml
+  schema:
+    - name: structarr
+      type: STRUCT
+      mode: REPEATED
+      fields:
+        - {name: key, type: STRING}
+        - {name: value, type: JSON}
+  rows:
+    - structarr:
+        - key: profile
+          value: '{"age": 10}'
+  ```
 
 ### Quickstart
 
