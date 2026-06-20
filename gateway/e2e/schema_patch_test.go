@@ -48,7 +48,7 @@ func TestTablePatchSchemaRelaxRequiredToNullable(t *testing.T) {
 	if err := json.Unmarshal(body, &patched); err != nil {
 		t.Fatalf("decode patch: %v", err)
 	}
-	if patched.Schema == nil || patched.Schema.Fields[0].Mode != "" {
+	if patched.Schema == nil || !isNullableMode(patched.Schema.Fields[0].Mode) {
 		t.Fatalf("patch response schema = %#v, want NULLABLE id", patched.Schema)
 	}
 
@@ -60,7 +60,11 @@ func TestTablePatchSchemaRelaxRequiredToNullable(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode get: %v", err)
 	}
-	if got.Schema == nil || got.Schema.Fields[0].Mode != "" {
+	if got.Schema == nil || !isNullableMode(got.Schema.Fields[0].Mode) {
 		t.Fatalf("get schema = %#v, want NULLABLE id", got.Schema)
 	}
+}
+
+func isNullableMode(mode string) bool {
+	return mode == "" || mode == "NULLABLE"
 }
