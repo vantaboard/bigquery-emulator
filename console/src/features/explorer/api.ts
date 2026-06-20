@@ -130,6 +130,49 @@ export const explorerQueries = {
         return tableDataFromBq(data, meta.schema);
     },
 
+    insertTable: async (
+        projectId: string,
+        datasetId: string,
+        body: Record<string, unknown> | { tableReference: { projectId: string; datasetId: string; tableId: string } },
+    ): Promise<TableMetadata> => {
+        const table = await apiClient.post<BqTable>(`${datasetPath(projectId, datasetId)}/tables`, body as Record<string, unknown>);
+        const tableId =
+            (body.tableReference as { tableId?: string } | undefined)?.tableId ??
+            table.tableReference?.tableId ??
+            '';
+        return tableMetadataFromBq(projectId, datasetId, tableId, table);
+    },
+
+    submitLoadJobWithUpload: async (
+        projectId: string,
+        file: File,
+        configuration: Record<string, unknown>,
+    ): Promise<JobRef> => {
+        const formData = new FormData();
+        formData.append(
+            'job',
+            new Blob([JSON.stringify({ configuration })], { type: 'application/json' }),
+        );
+        formData.append('file', file);
+        const data = await apiClient.postMultipart<BqJob>(
+            `/upload/bigquery/v2/projects/${encodeURIComponent(projectId)}/jobs?uploadType=multipart`,
+            formData,
+        );
+        const job = jobRefFromBq(data);
+        if (job.jobId) {
+            let current = job;
+            for (let i = 0; i < 120; i += 1) {
+                if (current.state === 'DONE') break;
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                current = await explorerQueries.getJob(projectId, job.jobId);
+            }
+            if (current.errorResult?.message) {
+                throw new Error(current.errorResult.message);
+            }
+        }
+        return job;
+    },
+
     patchTableSchema: async (
         projectId: string,
         datasetId: string,

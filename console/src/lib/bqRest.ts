@@ -39,6 +39,7 @@ interface BqPrimaryKeyColumn {
 }
 
 interface BqTable {
+    tableReference?: { projectId?: string; datasetId?: string; tableId?: string };
     schema?: { fields?: BqSchemaField[] };
     numRows?: string;
     numBytes?: string;

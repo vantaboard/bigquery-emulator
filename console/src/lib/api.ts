@@ -53,6 +53,19 @@ export class ApiClient {
         });
     }
 
+    async postMultipart<T>(path: string, formData: FormData): Promise<T> {
+        const res = await fetch(this.url(path), {
+            method: 'POST',
+            body: formData,
+        });
+        const text = await res.text();
+        const data = text ? (JSON.parse(text) as unknown) : null;
+        if (!res.ok) {
+            throw new Error(extractApiError(data, res.status));
+        }
+        return data as T;
+    }
+
     patch<T>(path: string, body?: unknown) {
         return this.fetchJson<T>(path, {
             method: 'PATCH',
