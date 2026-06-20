@@ -14,9 +14,13 @@ The Docker entrypoint shim (`docker/gateway_main.sh`) injects `--enable-sql-tool
 by default unless the caller already passed the flag.
 
 By default, only loopback callers may use the API. For remote access (CI, LAN
-UI), combine `--sql-tools-api-allow-remote` with `--sql-tools-api-token` (or
-`BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN`) and send the header
-`X-BigQuery-Emulator-SqlTools-Token` on each request.
+UI), combine `--sql-tools-api-allow-remote` with an optional
+`--sql-tools-api-token` (or `BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN`) and send the
+header `X-BigQuery-Emulator-SqlTools-Token` on each request when configured.
+
+POST endpoints (`format`, `parse`, `tokenize`, `complete`, `analyze`) require a
+running engine subprocess; the gateway returns **503** when the SqlTools gRPC
+client is unavailable. **GET** `/capabilities` works without the engine.
 
 ## Capabilities probe
 
@@ -151,7 +155,24 @@ accept `statementIndex` or `cursorByteOffset` to scope parse work.
 ```
 
 Diagnostics include optional span fields: `endLine`, `endColumn`, `startByte`,
-`endByte` (and `startUtf16` / `endUtf16` when `offsetUnit` is `utf16`).
+`endByte` (and `startUtf16` / `endUtf16` when `offsetUnit` is `utf16`). Span
+fields are omitted when the engine has no byte range; when present, `startByte: 0`
+is serialized explicitly (not elided).
+
+### Statement kind naming
+
+Both `/parse` and `/analyze` return `statementKinds`, but the strings differ in
+source:
+
+| Endpoint | Source | Example values |
+|----------|--------|------------------|
+| `/parse` | Parse tree node names | `QueryStatement`, `CreateTableStmt`, … |
+| `/analyze` | Resolved AST node names (same strings today) | `QueryStatement`, … |
+
+UIs that expect coarse labels like `"SELECT"` should map from these resolved /
+parse node names locally. `/analyze` only populates `referencedTables` when the
+full statement analyzes successfully; parse-only or incomplete SQL may return
+diagnostics with an empty `referencedTables` array.
 
 ## Tokenize
 
@@ -213,7 +234,9 @@ allowed when `cursorByteOffset === 0` (blank editor tab).
 ```
 
 Candidate `kind` values include `keyword`, `function`, `dataset`, `table`,
-`view`, `routine`, and `column`.
+`view`, `routine`, `procedure`, and `column`. Table/view candidates include
+`dataset.table` and `project.dataset.table` forms when catalog entries exist.
+Routine `detail` summarizes language and routine kind (e.g. `SQL scalar function`).
 
 ## Analyze
 
