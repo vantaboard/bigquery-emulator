@@ -199,7 +199,9 @@ surface through the `Catalog.ListRoutines` / `GetRoutine` /
 `UpsertRoutine` / `DeleteRoutine` gRPC RPCs. REST
 insert/get/list/update/delete delegates to those RPCs when the gateway
 is wired to `emulator_main`; the in-memory [`gateway/routines/`][routines-pkg]
-store mirrors responses for the synchronous query path.
+store mirrors responses for the synchronous query path and supplies
+`creationTime` / `lastModifiedTime` / `etag` on catalog-backed reads.
+`routines.list` unions catalog and store entries when both are active.
 `CREATE FUNCTION` / `CREATE PROCEDURE` DDL via `jobs.query` also
 registers routines and surfaces `ddlTargetRoutine` on the job
 statistics envelope.

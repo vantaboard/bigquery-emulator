@@ -155,8 +155,8 @@ func mountTables(mount mountFunc, deps handlers.Dependencies) {
 
 // mountModelsAndRoutines registers the BQML and routines (UDF / TVF
 // / stored procedure) endpoints. BQML has no engine backing; routines
-// store today; the handlers return wired stubs (empty list page,
-// 404 on get/delete) so client probes behave predictably.
+// delegate to the engine catalog when wired to emulator_main and mirror
+// metadata in the gateway routines store for timestamps and DDL paths.
 func mountModelsAndRoutines(mount mountFunc, deps handlers.Dependencies) {
 	mount("GET", "/projects/{projectId}/datasets/{datasetId}/models", handlers.ModelList(deps))
 	mount("GET", "/projects/{projectId}/datasets/{datasetId}/models/{modelId}", handlers.ModelGet(deps))
