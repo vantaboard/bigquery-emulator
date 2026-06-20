@@ -75,13 +75,16 @@ func tableResource(projectID, datasetID, tableID string, t bqtypes.Table) bqtype
 	if t.CreationTime == "" {
 		t.CreationTime = nowMillis()
 	}
-	t.LastModifiedTime = nowMillis()
+	if t.LastModifiedTime == "" {
+		t.LastModifiedTime = t.CreationTime
+	}
 	if t.Labels == nil {
 		t.Labels = bqtypes.ResourceLabels{}
 	}
 	if t.Location == "" {
 		t.Location = "US"
 	}
+	applyTableStorageStats(&t)
 	return t
 }
 

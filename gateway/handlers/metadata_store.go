@@ -62,7 +62,11 @@ func (s *MetadataStore) PutTable(projectID, datasetID, tableID string, t bqtypes
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.tables[tableKey(projectID, datasetID, tableID)] = stripEngineOwnedTableFields(t)
+	key := tableKey(projectID, datasetID, tableID)
+	existing, hadExisting := s.tables[key]
+	stored := stripEngineOwnedTableFields(t)
+	bumpTableTimestamps(&stored, existing, hadExisting)
+	s.tables[key] = stored
 }
 
 // MergeTable overlays sparse PATCH/UPDATE fields onto any cached entry.
@@ -74,7 +78,9 @@ func (s *MetadataStore) MergeTable(projectID, datasetID, tableID string, patch b
 	defer s.mu.Unlock()
 	key := tableKey(projectID, datasetID, tableID)
 	existing := s.tables[key]
-	s.tables[key] = mergeTableMetadataOverlay(existing, stripEngineOwnedTableFields(patch))
+	merged := mergeTableMetadataOverlay(existing, stripEngineOwnedTableFields(patch))
+	bumpTableTimestamps(&merged, existing, true)
+	s.tables[key] = merged
 }
 
 // GetTable returns the cached REST-only metadata for the table and a
@@ -109,7 +115,11 @@ func (s *MetadataStore) PutDataset(projectID, datasetID string, ds bqtypes.Datas
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.datasets[datasetKey(projectID, datasetID)] = stripEngineOwnedDatasetFields(ds)
+	key := datasetKey(projectID, datasetID)
+	existing, hadExisting := s.datasets[key]
+	stored := stripEngineOwnedDatasetFields(ds)
+	bumpDatasetTimestamps(&stored, existing, hadExisting)
+	s.datasets[key] = stored
 }
 
 // MergeDataset overlays sparse PATCH/UPDATE fields onto any cached entry.
@@ -121,7 +131,9 @@ func (s *MetadataStore) MergeDataset(projectID, datasetID string, patch bqtypes.
 	defer s.mu.Unlock()
 	key := datasetKey(projectID, datasetID)
 	existing := s.datasets[key]
-	s.datasets[key] = mergeDatasetMetadataOverlay(existing, stripEngineOwnedDatasetFields(patch))
+	merged := mergeDatasetMetadataOverlay(existing, stripEngineOwnedDatasetFields(patch))
+	bumpDatasetTimestamps(&merged, existing, true)
+	s.datasets[key] = merged
 }
 
 // GetDataset returns the cached REST-only metadata for the dataset.
@@ -182,6 +194,13 @@ func stripEngineOwnedTableFields(t bqtypes.Table) bqtypes.Table {
 		Clustering:                t.Clustering,
 		DefaultCollation:          t.DefaultCollation,
 		DefaultCollationSet:       t.DefaultCollationSet,
+		DefaultRoundingMode:       t.DefaultRoundingMode,
+		CaseInsensitive:           t.CaseInsensitive,
+		ResourceTags:              t.ResourceTags,
+		TableConstraints:          t.TableConstraints,
+		Replicas:                  t.Replicas,
+		CreationTime:              t.CreationTime,
+		LastModifiedTime:          t.LastModifiedTime,
 		Type:                      t.Type,
 		View:                      t.View,
 		MaterializedView:          t.MaterializedView,
@@ -204,6 +223,13 @@ func stripEngineOwnedDatasetFields(ds bqtypes.Dataset) bqtypes.Dataset {
 		DefaultPartitionExpirationMs: ds.DefaultPartitionExpirationMs,
 		DefaultCollation:             ds.DefaultCollation,
 		DefaultCollationSet:          ds.DefaultCollationSet,
+		DefaultRoundingMode:          ds.DefaultRoundingMode,
+		MaxTimeTravelHours:           ds.MaxTimeTravelHours,
+		IsCaseInsensitive:            ds.IsCaseInsensitive,
+		ResourceTags:                 ds.ResourceTags,
+		Replicas:                     ds.Replicas,
+		CreationTime:                 ds.CreationTime,
+		LastModifiedTime:             ds.LastModifiedTime,
 	}
 }
 
@@ -237,27 +263,8 @@ func applyTableMetadataOverlay(base bqtypes.Table, overlay bqtypes.Table) bqtype
 		base.DefaultCollation = overlay.DefaultCollation
 		base.DefaultCollationSet = true
 	}
-	if overlay.Type != "" {
-		base.Type = overlay.Type
-	}
-	if overlay.View != nil {
-		base.View = overlay.View
-	}
-	if overlay.MaterializedView != nil {
-		base.MaterializedView = overlay.MaterializedView
-	}
-	if overlay.RequirePartitionFilter != nil {
-		base.RequirePartitionFilter = overlay.RequirePartitionFilter
-	}
-	if overlay.ExternalDataConfiguration != nil {
-		base.ExternalDataConfiguration = overlay.ExternalDataConfiguration
-	}
-	if overlay.EncryptionConfiguration != nil {
-		base.EncryptionConfiguration = overlay.EncryptionConfiguration
-	}
-	if overlay.Schema != nil {
-		base.Schema = bqtypes.MergeSchemaPolicyTags(base.Schema, overlay.Schema)
-	}
+	overlayTableExtendedFields(&base, overlay)
+	overlayTableDefinitionFields(&base, overlay)
 	return base
 }
 
@@ -296,28 +303,57 @@ func mergeTableMetadataOverlay(base, patch bqtypes.Table) bqtypes.Table {
 		base.DefaultCollation = patch.DefaultCollation
 		base.DefaultCollationSet = true
 	}
-	if patch.Type != "" {
-		base.Type = patch.Type
-	}
-	if patch.View != nil {
-		base.View = patch.View
-	}
-	if patch.MaterializedView != nil {
-		base.MaterializedView = patch.MaterializedView
-	}
-	if patch.RequirePartitionFilter != nil {
-		base.RequirePartitionFilter = patch.RequirePartitionFilter
-	}
-	if patch.ExternalDataConfiguration != nil {
-		base.ExternalDataConfiguration = patch.ExternalDataConfiguration
-	}
-	if patch.EncryptionConfiguration != nil {
-		base.EncryptionConfiguration = patch.EncryptionConfiguration
-	}
-	if patch.Schema != nil {
-		base.Schema = bqtypes.MergeSchemaPolicyTags(base.Schema, patch.Schema)
-	}
+	overlayTableExtendedFields(&base, patch)
+	overlayTableDefinitionFields(&base, patch)
 	return base
+}
+
+func overlayTableExtendedFields(base *bqtypes.Table, src bqtypes.Table) {
+	if src.DefaultRoundingMode != "" {
+		base.DefaultRoundingMode = src.DefaultRoundingMode
+	}
+	if src.CaseInsensitive != nil {
+		base.CaseInsensitive = src.CaseInsensitive
+	}
+	if src.ResourceTags != nil {
+		base.ResourceTags = src.ResourceTags
+	}
+	if src.TableConstraints != nil {
+		base.TableConstraints = src.TableConstraints
+	}
+	if src.Replicas != nil {
+		base.Replicas = src.Replicas
+	}
+	if src.CreationTime != "" {
+		base.CreationTime = src.CreationTime
+	}
+	if src.LastModifiedTime != "" {
+		base.LastModifiedTime = src.LastModifiedTime
+	}
+}
+
+func overlayTableDefinitionFields(base *bqtypes.Table, src bqtypes.Table) {
+	if src.Type != "" {
+		base.Type = src.Type
+	}
+	if src.View != nil {
+		base.View = src.View
+	}
+	if src.MaterializedView != nil {
+		base.MaterializedView = src.MaterializedView
+	}
+	if src.RequirePartitionFilter != nil {
+		base.RequirePartitionFilter = src.RequirePartitionFilter
+	}
+	if src.ExternalDataConfiguration != nil {
+		base.ExternalDataConfiguration = src.ExternalDataConfiguration
+	}
+	if src.EncryptionConfiguration != nil {
+		base.EncryptionConfiguration = src.EncryptionConfiguration
+	}
+	if src.Schema != nil {
+		base.Schema = bqtypes.MergeSchemaPolicyTags(base.Schema, src.Schema)
+	}
 }
 
 // applyDatasetMetadataOverlay is the dataset analogue.
@@ -346,6 +382,27 @@ func applyDatasetMetadataOverlay(base bqtypes.Dataset, overlay bqtypes.Dataset) 
 	if overlay.DefaultCollationSet {
 		base.DefaultCollation = overlay.DefaultCollation
 		base.DefaultCollationSet = true
+	}
+	if overlay.DefaultRoundingMode != "" {
+		base.DefaultRoundingMode = overlay.DefaultRoundingMode
+	}
+	if overlay.MaxTimeTravelHours != "" {
+		base.MaxTimeTravelHours = overlay.MaxTimeTravelHours
+	}
+	if overlay.IsCaseInsensitive != nil {
+		base.IsCaseInsensitive = overlay.IsCaseInsensitive
+	}
+	if overlay.ResourceTags != nil {
+		base.ResourceTags = overlay.ResourceTags
+	}
+	if overlay.Replicas != nil {
+		base.Replicas = overlay.Replicas
+	}
+	if overlay.CreationTime != "" {
+		base.CreationTime = overlay.CreationTime
+	}
+	if overlay.LastModifiedTime != "" {
+		base.LastModifiedTime = overlay.LastModifiedTime
 	}
 	return base
 }
@@ -381,5 +438,38 @@ func mergeDatasetMetadataOverlay(base, patch bqtypes.Dataset) bqtypes.Dataset {
 		base.DefaultCollation = patch.DefaultCollation
 		base.DefaultCollationSet = true
 	}
+	if patch.DefaultRoundingMode != "" {
+		base.DefaultRoundingMode = patch.DefaultRoundingMode
+	}
+	if patch.MaxTimeTravelHours != "" {
+		base.MaxTimeTravelHours = patch.MaxTimeTravelHours
+	}
+	if patch.IsCaseInsensitive != nil {
+		base.IsCaseInsensitive = patch.IsCaseInsensitive
+	}
+	if patch.ResourceTags != nil {
+		base.ResourceTags = patch.ResourceTags
+	}
+	if patch.Replicas != nil {
+		base.Replicas = patch.Replicas
+	}
 	return base
+}
+
+func bumpDatasetTimestamps(stored *bqtypes.Dataset, existing bqtypes.Dataset, hadExisting bool) {
+	if hadExisting && existing.CreationTime != "" {
+		stored.CreationTime = existing.CreationTime
+	} else if stored.CreationTime == "" {
+		stored.CreationTime = nowMillis()
+	}
+	stored.LastModifiedTime = nowMillis()
+}
+
+func bumpTableTimestamps(stored *bqtypes.Table, existing bqtypes.Table, hadExisting bool) {
+	if hadExisting && existing.CreationTime != "" {
+		stored.CreationTime = existing.CreationTime
+	} else if stored.CreationTime == "" {
+		stored.CreationTime = nowMillis()
+	}
+	stored.LastModifiedTime = nowMillis()
 }

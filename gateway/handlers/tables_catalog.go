@@ -28,7 +28,7 @@ func catalogTable(
 		t.Schema = bqtypes.ApplyDefaultCollationToStringFields(t.Schema, t.DefaultCollation)
 	}
 	if deps.Snapshots != nil {
-		if ct, ok := deps.Snapshots.CreationTimeMs(projectID, datasetID, tableID); ok {
+		if ct, ok := deps.Snapshots.CreationTimeMs(projectID, datasetID, tableID); ok && t.CreationTime == "" {
 			t.CreationTime = strconv.FormatInt(ct, 10)
 		}
 	}
@@ -47,7 +47,42 @@ func catalogTable(
 			t.NumRows = "0"
 		}
 	}
+	applyTableStorageStats(&t)
 	return t
+}
+
+// applyTableStorageStats fills output-only byte counters so the console
+// Details tab shows explicit zeros instead of em dashes. NumRows is
+// computed from Catalog.ListRows; byte breakdowns are stubbed until
+// the engine exposes storage statistics RPCs.
+func applyTableStorageStats(t *bqtypes.Table) {
+	if t.NumBytes == "" {
+		t.NumBytes = "0"
+	}
+	if t.NumLongTermBytes == "" {
+		t.NumLongTermBytes = "0"
+	}
+	if t.NumActiveLogicalBytes == "" {
+		t.NumActiveLogicalBytes = "0"
+	}
+	if t.NumTotalLogicalBytes == "" {
+		t.NumTotalLogicalBytes = "0"
+	}
+	if t.NumCurrentPhysicalBytes == "" {
+		t.NumCurrentPhysicalBytes = "0"
+	}
+	if t.NumPhysicalBytes == "" {
+		t.NumPhysicalBytes = "0"
+	}
+	if t.NumActivePhysicalBytes == "" {
+		t.NumActivePhysicalBytes = "0"
+	}
+	if t.NumLongTermPhysicalBytes == "" {
+		t.NumLongTermPhysicalBytes = "0"
+	}
+	if t.NumTimeTravelPhysicalBytes == "" {
+		t.NumTimeTravelPhysicalBytes = "0"
+	}
 }
 
 // syncPatchedTableSchema registers schema fields added via tables.patch

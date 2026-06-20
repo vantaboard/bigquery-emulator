@@ -90,6 +90,18 @@ type Dataset struct {
 	// shape they expect. See
 	// docs/bigquery/docs/reference/rest/v2/datasets/get.md.
 	DefaultCollation string `json:"defaultCollation,omitempty"`
+	// DefaultRoundingMode is inherited by new NUMERIC/BIGNUMERIC columns in
+	// tables created in this dataset. Round-trips via the gateway overlay.
+	DefaultRoundingMode string `json:"defaultRoundingMode,omitempty"`
+	// MaxTimeTravelHours is the dataset time-travel window (48–168 hours).
+	MaxTimeTravelHours string `json:"maxTimeTravelHours,omitempty"`
+	// IsCaseInsensitive marks dataset/table name lookups as case-insensitive.
+	IsCaseInsensitive *bool `json:"isCaseInsensitive,omitempty"`
+	// ResourceTags are GCP resource manager tags attached to the dataset.
+	ResourceTags map[string]string `json:"resourceTags,omitempty"`
+	// Replicas echoes cross-region replica references supplied on write;
+	// the emulator does not model active replication.
+	Replicas []TableReference `json:"replicas,omitempty"`
 
 	labelsWire            labelsWireState    `json:"-"`
 	defaultCollationWire  collationWireState `json:"-"`
@@ -174,19 +186,29 @@ func (d Dataset) MarshalJSON() ([]byte, error) {
 // upstream `getTableLabels` sample's `Object.entries(table.metadata.labels)`
 // returns an empty iterator instead of erroring.
 type Table struct {
-	Kind             string         `json:"kind,omitempty"` // bigquery#table
-	ID               string         `json:"id,omitempty"`
-	TableReference   TableReference `json:"tableReference"`
-	FriendlyName     string         `json:"friendlyName,omitempty"`
-	Description      string         `json:"description,omitempty"`
-	Schema           *TableSchema   `json:"schema,omitempty"`
-	Type             string         `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
-	NumRows          string         `json:"numRows,omitempty"`
-	NumBytes         string         `json:"numBytes,omitempty"`
-	CreationTime     string         `json:"creationTime,omitempty"`
-	LastModifiedTime string         `json:"lastModifiedTime,omitempty"`
-	Etag             string         `json:"etag,omitempty"`
-	Labels           ResourceLabels `json:"labels"`
+	Kind           string         `json:"kind,omitempty"` // bigquery#table
+	ID             string         `json:"id,omitempty"`
+	TableReference TableReference `json:"tableReference"`
+	FriendlyName   string         `json:"friendlyName,omitempty"`
+	Description    string         `json:"description,omitempty"`
+	Schema         *TableSchema   `json:"schema,omitempty"`
+	Type           string         `json:"type,omitempty"` // TABLE | VIEW | EXTERNAL
+	NumRows        string         `json:"numRows,omitempty"`
+	NumBytes       string         `json:"numBytes,omitempty"`
+	// Output-only storage breakdown fields. The gateway stubs these to "0"
+	// until the engine exposes byte accounting RPCs.
+	NumLongTermBytes           string         `json:"numLongTermBytes,omitempty"`
+	NumActiveLogicalBytes      string         `json:"numActiveLogicalBytes,omitempty"`
+	NumTotalLogicalBytes       string         `json:"numTotalLogicalBytes,omitempty"`
+	NumCurrentPhysicalBytes    string         `json:"numCurrentPhysicalBytes,omitempty"`
+	NumPhysicalBytes           string         `json:"numPhysicalBytes,omitempty"`
+	NumActivePhysicalBytes     string         `json:"numActivePhysicalBytes,omitempty"`
+	NumLongTermPhysicalBytes   string         `json:"numLongTermPhysicalBytes,omitempty"`
+	NumTimeTravelPhysicalBytes string         `json:"numTimeTravelPhysicalBytes,omitempty"`
+	CreationTime               string         `json:"creationTime,omitempty"`
+	LastModifiedTime           string         `json:"lastModifiedTime,omitempty"`
+	Etag                       string         `json:"etag,omitempty"`
+	Labels                     ResourceLabels `json:"labels"`
 	// ExpirationTime is the wall-clock time at which the table
 	// expires, encoded as a decimal string of milliseconds since
 	// epoch -- BigQuery REST always serializes int64 timestamps
@@ -235,6 +257,17 @@ type Table struct {
 	// EncryptionConfiguration stores the opaque CMEK kmsKeyName the
 	// client supplied on create/load/update. Not enforced by the emulator.
 	EncryptionConfiguration *EncryptionConfiguration `json:"encryptionConfiguration,omitempty"`
+	// DefaultRoundingMode is inherited by new NUMERIC/BIGNUMERIC columns.
+	DefaultRoundingMode string `json:"defaultRoundingMode,omitempty"`
+	// CaseInsensitive marks table name lookups as case-insensitive within
+	// a case-insensitive dataset.
+	CaseInsensitive *bool `json:"caseInsensitive,omitempty"`
+	// ResourceTags are GCP resource manager tags attached to the table.
+	ResourceTags map[string]string `json:"resourceTags,omitempty"`
+	// TableConstraints carries primary/foreign key metadata (not enforced).
+	TableConstraints *TableConstraints `json:"tableConstraints,omitempty"`
+	// Replicas echoes cross-region replica references on write.
+	Replicas []TableReference `json:"replicas,omitempty"`
 
 	labelsWire            labelsWireState    `json:"-"`
 	defaultCollationWire  collationWireState `json:"-"`
@@ -432,6 +465,16 @@ func (o *GoogleSheetsOptions) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("googleSheetsOptions.skipLeadingRows: unsupported type %T", v)
 	}
 	return nil
+}
+
+// TableConstraints mirrors the BigQuery REST tableConstraints object.
+type TableConstraints struct {
+	PrimaryKey *PrimaryKey `json:"primaryKey,omitempty"`
+}
+
+// PrimaryKey is the primaryKey sub-object of TableConstraints.
+type PrimaryKey struct {
+	Columns []string `json:"columns,omitempty"`
 }
 
 // ViewDefinition is the BigQuery REST view sub-object. See
