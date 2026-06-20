@@ -3,15 +3,18 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 	"github.com/vantaboard/bigquery-emulator/gateway/snapshots"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -164,6 +167,172 @@ func TestJobInsertCopyFromSnapshotUndelete(t *testing.T) {
 		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
 	}
 	if got.Statistics.Copy == nil || got.Statistics.Copy.CopiedRows != "1" {
+		t.Fatalf("statistics.copy = %#v", got.Statistics.Copy)
+	}
+}
+
+func TestJobInsertCopySnapshotWithExpiration(t *testing.T) {
+	t.Parallel()
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{Name: "id", Type: sqlTypeINTEGER},
+	}}
+	srcRows := []*enginepb.DataRow{
+		{Cells: []*enginepb.Cell{
+			{Value: &enginepb.Cell_StringValue{StringValue: "42"}},
+		}},
+	}
+	cat := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, in *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			if in.GetTable().GetTableId() == "snap_dst" {
+				return nil, status.Error(codes.NotFound, "table not found")
+			}
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+		listRowsFn: func(_ context.Context, in *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			if in.GetTable().GetTableId() == "src" {
+				return &enginepb.ListRowsResponse{TotalRows: 1, Rows: srcRows}, nil
+			}
+			return &enginepb.ListRowsResponse{TotalRows: 0}, nil
+		},
+	}
+	meta := NewMetadataStore()
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg, Snapshots: snapshots.NewStore(), Metadata: meta}
+	body := `{"configuration":{"copy":{"sourceTable":{"projectId":"dev","datasetId":"ds","tableId":"src"},` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"snap_dst"},` +
+		`"operationType":"SNAPSHOT","destinationExpirationTime":"1990000000000"}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult != nil {
+		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
+	}
+	overlay, ok := meta.GetTable("dev", "ds", "snap_dst")
+	if !ok {
+		t.Fatal("metadata overlay missing for snapshot destination")
+	}
+	if overlay.Type != snapshotTableType {
+		t.Errorf("type = %q, want %q", overlay.Type, snapshotTableType)
+	}
+	if overlay.ExpirationTime.String() != "1990000000000" {
+		t.Errorf("expirationTime = %q, want %q", overlay.ExpirationTime, "1990000000000")
+	}
+}
+
+func TestJobInsertCopyRestoreFromSnapshot(t *testing.T) {
+	t.Parallel()
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{Name: "word", Type: sqlTypeSTRING},
+	}}
+	rows := []*enginepb.DataRow{
+		{Cells: []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "snap_data"}}}},
+	}
+	meta := NewMetadataStore()
+	meta.MergeTable("dev", "ds", "snap_src", bqtypes.Table{Type: snapshotTableType})
+	cat := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, in *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			if in.GetTable().GetTableId() == "restored" {
+				return nil, status.Error(codes.NotFound, "table not found")
+			}
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+		listRowsFn: func(_ context.Context, in *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			if in.GetTable().GetTableId() == "snap_src" {
+				return &enginepb.ListRowsResponse{TotalRows: 1, Rows: rows}, nil
+			}
+			return &enginepb.ListRowsResponse{TotalRows: 0}, nil
+		},
+	}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg, Snapshots: snapshots.NewStore(), Metadata: meta}
+	body := `{"configuration":{"copy":{"sourceTable":{"projectId":"dev","datasetId":"ds","tableId":"snap_src"},` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"restored"},` +
+		`"operationType":"RESTORE","writeDisposition":"WRITE_EMPTY"}}}`
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult != nil {
+		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
+	}
+	if got.Statistics.Copy == nil || got.Statistics.Copy.CopiedRows != "1" {
+		t.Fatalf("statistics.copy = %#v", got.Statistics.Copy)
+	}
+	overlay, ok := meta.GetTable("dev", "ds", "restored")
+	if !ok {
+		t.Fatal("metadata overlay missing for restore destination")
+	}
+	if overlay.Type != defaultTableType {
+		t.Errorf("type = %q, want %q", overlay.Type, defaultTableType)
+	}
+}
+
+func TestJobInsertCopyLiveTableTimeTravelUsesSQL(t *testing.T) {
+	t.Parallel()
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{Name: "id", Type: sqlTypeINTEGER},
+	}}
+	epoch := int64(1_700_000_000_000)
+	cat := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, in *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			if in.GetTable().GetTableId() == "time_dst" {
+				return nil, status.Error(codes.NotFound, "table not found")
+			}
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+		listRowsFn: func(_ context.Context, in *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			if in.GetTable().GetTableId() == "time_dst" {
+				return &enginepb.ListRowsResponse{TotalRows: 3}, nil
+			}
+			return &enginepb.ListRowsResponse{TotalRows: 0}, nil
+		},
+	}
+	fakeQuery := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, in *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			want := fmt.Sprintf("FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(%d)", epoch)
+			if !strings.Contains(in.GetSql(), want) {
+				return nil, fmt.Errorf("sql missing time travel: %q", in.GetSql())
+			}
+			return &fakeQueryResultStream{}, nil
+		},
+	}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{
+		Catalog:   cat,
+		Query:     fakeQuery,
+		Jobs:      reg,
+		Snapshots: snapshots.NewStore(),
+	}
+	body := fmt.Sprintf(
+		`{"configuration":{"copy":{"sourceTable":{"projectId":"dev","datasetId":"ds","tableId":"live@%d"},`+
+			`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"time_dst"},`+
+			`"operationType":"SNAPSHOT","writeDisposition":"WRITE_EMPTY"}}}`,
+		epoch,
+	)
+
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult != nil {
+		t.Fatalf("errorResult = %#v", got.Status.ErrorResult)
+	}
+	if got.Statistics.Copy == nil || got.Statistics.Copy.CopiedRows != "3" {
 		t.Fatalf("statistics.copy = %#v", got.Statistics.Copy)
 	}
 }
