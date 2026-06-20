@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 
 import { explorerQueries } from '@/features/explorer/api';
-import { EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
+import { EXPLORER_DATASETS_CHANGED, EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
 import { tabRoutePath, useWorkspace } from '@/features/workspace/store';
 import { resourceTabId } from '@/features/workspace/types';
 
@@ -97,8 +97,21 @@ export function ResourceSidebar() {
                 setExpandedDatasets((s) => (s.includes(key) ? s : [...s, key]));
             })();
         };
+        const onDatasetsChanged = (event: Event) => {
+            const detail = (event as CustomEvent<{ projectId: string }>).detail;
+            if (!detail?.projectId) return;
+            void (async () => {
+                const datasets = await explorerQueries.datasets(detail.projectId);
+                setProjectDatasets((m) => ({ ...m, [detail.projectId]: datasets }));
+                setExpandedProjects((s) => (s.includes(detail.projectId) ? s : [...s, detail.projectId]));
+            })();
+        };
         window.addEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
-        return () => window.removeEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
+        window.addEventListener(EXPLORER_DATASETS_CHANGED, onDatasetsChanged);
+        return () => {
+            window.removeEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
+            window.removeEventListener(EXPLORER_DATASETS_CHANGED, onDatasetsChanged);
+        };
     }, []);
 
     const addProject = async () => {

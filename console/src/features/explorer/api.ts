@@ -178,15 +178,20 @@ export const explorerQueries = {
         datasetId: string,
         tableId: string,
         fields: TableSchemaField[],
+        opts: { defaultValues?: Record<string, string> } = {},
     ): Promise<TableMetadata> => {
         const body = {
             schema: {
-                fields: fields.map((f) => ({
-                    name: f.name,
-                    type: f.type,
-                    mode: f.mode,
-                    ...(f.description ? { description: f.description } : {}),
-                })),
+                fields: fields.map((f) => {
+                    const defaultValueExpression = opts.defaultValues?.[f.name]?.trim();
+                    return {
+                        name: f.name,
+                        type: f.type,
+                        mode: f.mode,
+                        ...(f.description ? { description: f.description } : {}),
+                        ...(defaultValueExpression ? { defaultValueExpression } : {}),
+                    };
+                }),
             },
         };
         const table = await apiClient.patch<BqTable>(tablePath(projectId, datasetId, tableId), body);
@@ -197,8 +202,21 @@ export const explorerQueries = {
         await apiClient.del(tablePath(projectId, datasetId, tableId));
     },
 
-    deleteDataset: async (projectId: string, datasetId: string): Promise<void> => {
-        await apiClient.del(datasetPath(projectId, datasetId));
+    deleteDataset: async (
+        projectId: string,
+        datasetId: string,
+        opts: { deleteContents?: boolean } = {},
+    ): Promise<void> => {
+        const params = opts.deleteContents ? '?deleteContents=true' : '';
+        await apiClient.del(`${datasetPath(projectId, datasetId)}${params}`);
+    },
+
+    insertDataset: async (projectId: string, datasetId: string, location: string): Promise<DatasetMetadata> => {
+        const data = await apiClient.post<BqDataset>(`/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets`, {
+            datasetReference: { projectId, datasetId },
+            location,
+        });
+        return datasetMetadataFromBq(projectId, datasetId, data);
     },
 
     submitJob: async (projectId: string, jobConfig: JobSubmitConfig): Promise<JobRef> => {
