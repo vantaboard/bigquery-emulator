@@ -41,12 +41,12 @@ func (s *WriteServer) CreateWriteStream(
 	if err := s.requireEngine(); err != nil {
 		return nil, err
 	}
-	streamType := storagepb.WriteStream_TYPE_COMMITTED
+	streamType := storagepb.WriteStream_COMMITTED
 	if ws := req.GetWriteStream(); ws != nil &&
 		ws.GetType() != storagepb.WriteStream_TYPE_UNSPECIFIED {
 		streamType = ws.GetType()
 	}
-	if streamType == storagepb.WriteStream_TYPE_COMMITTED ||
+	if streamType == storagepb.WriteStream_COMMITTED ||
 		streamType == storagepb.WriteStream_TYPE_UNSPECIFIED {
 		return s.defaultWriteStream(ctx, req.GetParent())
 	}
@@ -75,7 +75,7 @@ func (s *WriteServer) defaultWriteStream(
 	if err == nil {
 		out := publicWriteStreamFromEngine(existing)
 		out.Name = name
-		out.Type = storagepb.WriteStream_TYPE_COMMITTED
+		out.Type = storagepb.WriteStream_COMMITTED
 		return out, nil
 	}
 	// Mint schema metadata via CreateWriteStream; the engine registers the
@@ -83,7 +83,7 @@ func (s *WriteServer) defaultWriteStream(
 	probe, err := s.engine.StorageWrite.CreateWriteStream(ctx, &enginepb.CreateWriteStreamRequest{
 		Parent: parent,
 		WriteStream: &enginepb.WriteStream{
-			Type: enginepb.WriteStream_TYPE_COMMITTED,
+			Type: enginepb.WriteStream_COMMITTED,
 		},
 	})
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *WriteServer) defaultWriteStream(
 	}
 	out := publicWriteStreamFromEngine(probe)
 	out.Name = name
-	out.Type = storagepb.WriteStream_TYPE_COMMITTED
+	out.Type = storagepb.WriteStream_COMMITTED
 	return out, nil
 }
 

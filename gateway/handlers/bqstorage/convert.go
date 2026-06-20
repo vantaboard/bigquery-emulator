@@ -148,25 +148,25 @@ func engineModeToPublic(m string) storagepb.TableFieldSchema_Mode {
 
 func publicWriteTypeToEngine(t storagepb.WriteStream_Type) enginepb.WriteStream_Type {
 	switch t {
-	case storagepb.WriteStream_TYPE_COMMITTED:
-		return enginepb.WriteStream_TYPE_COMMITTED
-	case storagepb.WriteStream_TYPE_PENDING:
-		return enginepb.WriteStream_TYPE_PENDING
-	case storagepb.WriteStream_TYPE_BUFFERED:
-		return enginepb.WriteStream_TYPE_BUFFERED
+	case storagepb.WriteStream_COMMITTED:
+		return enginepb.WriteStream_COMMITTED
+	case storagepb.WriteStream_PENDING:
+		return enginepb.WriteStream_PENDING
+	case storagepb.WriteStream_BUFFERED:
+		return enginepb.WriteStream_BUFFERED
 	default:
-		return enginepb.WriteStream_TYPE_COMMITTED
+		return enginepb.WriteStream_COMMITTED
 	}
 }
 
 func engineWriteTypeToPublic(t enginepb.WriteStream_Type) storagepb.WriteStream_Type {
 	switch t {
-	case enginepb.WriteStream_TYPE_COMMITTED:
-		return storagepb.WriteStream_TYPE_COMMITTED
-	case enginepb.WriteStream_TYPE_PENDING:
-		return storagepb.WriteStream_TYPE_PENDING
-	case enginepb.WriteStream_TYPE_BUFFERED:
-		return storagepb.WriteStream_TYPE_BUFFERED
+	case enginepb.WriteStream_COMMITTED:
+		return storagepb.WriteStream_COMMITTED
+	case enginepb.WriteStream_PENDING:
+		return storagepb.WriteStream_PENDING
+	case enginepb.WriteStream_BUFFERED:
+		return storagepb.WriteStream_BUFFERED
 	default:
 		return storagepb.WriteStream_TYPE_UNSPECIFIED
 	}

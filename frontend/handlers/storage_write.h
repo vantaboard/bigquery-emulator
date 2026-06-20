@@ -115,7 +115,7 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   struct StreamState {
     backend::storage::TableId table;
     backend::schema::TableSchema schema;
-    v1::WriteStream::Type type = v1::WriteStream::TYPE_COMMITTED;
+    v1::WriteStream::Type type = v1::WriteStream::COMMITTED;
     std::string create_time;
     // Per-stream append offset. Incremented by `rows.size()` on every
     // successful append; rides on `AppendRowsResponse.AppendResult.offset`.
