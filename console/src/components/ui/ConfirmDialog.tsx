@@ -12,6 +12,7 @@ export interface ConfirmDialogProps {
     cancelLabel?: string;
     confirmVariant?: 'danger' | 'primary';
     loading?: boolean;
+    confirmTestId?: string;
 }
 
 export function ConfirmDialog({
@@ -24,6 +25,7 @@ export function ConfirmDialog({
     cancelLabel = 'Cancel',
     confirmVariant = 'danger',
     loading = false,
+    confirmTestId,
 }: ConfirmDialogProps) {
     return (
         <Modal
@@ -50,6 +52,7 @@ export function ConfirmDialog({
                         }
                         disabled={loading}
                         onClick={onConfirm}
+                        data-testid={confirmTestId}
                     >
                         {loading ? 'Working…' : confirmLabel}
                     </button>
