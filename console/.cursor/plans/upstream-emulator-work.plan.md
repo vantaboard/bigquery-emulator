@@ -58,7 +58,7 @@ UI features are **never descoped** because the emulator lacks support. Build to 
 | 2 | Table metadata | Storage byte stats, view/MV query text, materialized-view typing | Table Details tab | m1-01, m2-02 |
 | 3 | Schema update | `PATCH /tables/{id}` | Edit Schema modal | m3-02 |
 | 4 | Table data | `GET /tables/{id}/data` (`tabledata.list`) pagination | Preview tab | m2-02 |
-| 5 | Table create | Table insert + load jobs | Create Table modal | m3-01 |
+| 5 | Table create | Table insert + load jobs | Create Table modal | m3-01 | **Partial:** `POST .../tables` empty-table insert works (v0.5.0). Load jobs (GCS/S3/Azure/Drive/Bigtable/upload multipart), CTAS from existing table, and table metadata fields (partitioning/clustering/tags/KMS on insert) need upstream verification. |
 | 6 | Copy jobs | Copy table / copy dataset | Copy modals | m3-02 |
 | 7 | Snapshot jobs | Table snapshot creation | Snapshot modal | m3-02 |
 | 8 | Delete | `DELETE` datasets and tables | Delete buttons | m3-02 |
@@ -66,7 +66,7 @@ UI features are **never descoped** because the emulator lacks support. Build to 
 | 10 | DDL/DML jobs | Query jobs for CREATE VIEW / CREATE FUNCTION / CTAS | Save view, routines, save-as | m4-01, m5-01 |
 | 11 | Saved queries | Server-backed saved query objects (optional) | Save query (versioned) | m4-01 |
 | 12 | Replicas | Cross-region replica metadata | Dataset Details → Replicas | m2-01 |
-| 13 | External ingestion | GCS, S3, Azure, Drive, Bigtable sources | Create Table sources | m3-01, m5-01 |
+| 13 | External ingestion | GCS, S3, Azure, Drive, Bigtable sources | Create Table sources | m3-01, m5-01 | UI submits real load-job contract; emulator v0.5.0 returns errors for external URIs and multipart upload — tracked here. |
 | 14 | SQL Tools API | Opt-in routes `POST /api/emulator/sql/{format,parse,complete}`; gateway flag `--enable-sql-tools-api` | M4 format/lint/completion | m4-01 |
 | 15 | SQL Tools — completion | Routines in `/complete`; in-scope column completion; `project.dataset.table` names; diagnostic byte spans | M4/M5 autocompletion | m4-01, m5-01 |
 | 16 | SQL Tools — analyze | `POST /api/emulator/sql/analyze` → referenced table paths | M4 reference panel (SQL-inferred) | m4-01 |
