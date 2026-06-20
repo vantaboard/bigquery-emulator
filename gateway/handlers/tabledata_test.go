@@ -344,3 +344,140 @@ func TestTableDataListMalformedParam(t *testing.T) {
 		t.Error("ListRows must not be called for a malformed query parameter")
 	}
 }
+
+func TestTableDataListMalformedPageToken(t *testing.T) {
+	fake := &fakeCatalogClient{}
+	req := newTabledataReq(http.MethodGet, testTableID, "data?pageToken=not-a-number", "")
+	rec := httptest.NewRecorder()
+	TableDataList(Dependencies{Catalog: fake})(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestTableDataListMaxResultsZero(t *testing.T) {
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{Schema: peopleSchema()}, nil
+		},
+		listRowsFn: func(_ context.Context, in *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			if in.GetMaxResults() != 0 {
+				t.Errorf("maxResults = %d, want 0", in.GetMaxResults())
+			}
+			return &enginepb.ListRowsResponse{TotalRows: 42}, nil
+		},
+	}
+	req := newTabledataReq(http.MethodGet, testTableID, "data?maxResults=0", "")
+	rec := httptest.NewRecorder()
+	TableDataList(Dependencies{Catalog: fake})(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var out bqtypes.TableDataList
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.TotalRows != "42" {
+		t.Errorf("totalRows = %q, want 42", out.TotalRows)
+	}
+	if len(out.Rows) != 0 {
+		t.Fatalf("rows = %d, want 0", len(out.Rows))
+	}
+	if out.PageToken != "" {
+		t.Errorf("pageToken = %q, want empty", out.PageToken)
+	}
+}
+
+func TestTableDataListSelectedFields(t *testing.T) {
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{Schema: peopleSchema()}, nil
+		},
+		listRowsFn: func(_ context.Context, _ *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			return &enginepb.ListRowsResponse{
+				Rows: []*enginepb.DataRow{{Cells: []*enginepb.Cell{
+					{Value: &enginepb.Cell_StringValue{StringValue: "1"}},
+					{Value: &enginepb.Cell_StringValue{StringValue: "alice"}},
+					{Value: &enginepb.Cell_NullValue{NullValue: true}},
+				}}},
+				TotalRows: 1,
+			}, nil
+		},
+	}
+	req := newTabledataReq(http.MethodGet, testTableID, "data?selectedFields=id,name", "")
+	rec := httptest.NewRecorder()
+	TableDataList(Dependencies{Catalog: fake})(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var out bqtypes.TableDataList
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Rows) != 1 || len(out.Rows[0].F) != 2 {
+		t.Fatalf("projected row = %#v, want 2 cells", out.Rows[0])
+	}
+}
+
+func TestTableDataListEtagPresent(t *testing.T) {
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{Schema: peopleSchema()}, nil
+		},
+		listRowsFn: func(_ context.Context, _ *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			return &enginepb.ListRowsResponse{TotalRows: 0}, nil
+		},
+	}
+	req := newTabledataReq(http.MethodGet, testTableID, "data", "")
+	rec := httptest.NewRecorder()
+	TableDataList(Dependencies{Catalog: fake})(rec, req)
+	var out bqtypes.TableDataList
+	_ = json.NewDecoder(rec.Body).Decode(&out)
+	if out.Etag == "" {
+		t.Error("etag missing from tabledata.list response")
+	}
+}
+
+func TestTableDataListUseInt64Timestamp(t *testing.T) {
+	schema := &enginepb.TableSchema{Fields: []*enginepb.FieldSchema{
+		{Name: "ts", Type: "TIMESTAMP"},
+	}}
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{Schema: schema}, nil
+		},
+		listRowsFn: func(_ context.Context, _ *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			return &enginepb.ListRowsResponse{
+				Rows: []*enginepb.DataRow{{Cells: []*enginepb.Cell{
+					{Value: &enginepb.Cell_StringValue{StringValue: "2020-01-01 00:00:00+00"}},
+				}}},
+				TotalRows: 1,
+			}, nil
+		},
+	}
+	req := newTabledataReq(http.MethodGet, testTableID, "data?formatOptions.useInt64Timestamp=true", "")
+	rec := httptest.NewRecorder()
+	TableDataList(Dependencies{Catalog: fake})(rec, req)
+	var out bqtypes.TableDataList
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	const wantMicros int64 = 1577836800000000
+	switch v := out.Rows[0].F[0].V.(type) {
+	case int64:
+		if v != wantMicros {
+			t.Fatalf("timestamp micros = %d, want %d", v, wantMicros)
+		}
+	case float64:
+		if int64(v) != wantMicros {
+			t.Fatalf("timestamp micros = %v, want %d", v, wantMicros)
+		}
+	case json.Number:
+		n, _ := v.Int64()
+		if n != wantMicros {
+			t.Fatalf("timestamp micros = %d, want %d", n, wantMicros)
+		}
+	default:
+		t.Fatalf("timestamp v type = %T (%v)", out.Rows[0].F[0].V, out.Rows[0].F[0].V)
+	}
+}

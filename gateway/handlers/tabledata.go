@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +31,9 @@ const tableDataListKind = "bigquery#tableDataList"
 // client libraries pick on their own (the public API itself does not
 // document a server-side default).
 const tableDataListDefaultMaxResults = 10000
+
+// tableDataListMaxResultsCap is the upper bound honored for maxResults.
+const tableDataListMaxResultsCap = 100000
 
 // decodeInsertAllBody parses the JSON body of tabledata.insertAll
 // into the wire-shape struct. An empty body is rejected per the
@@ -283,6 +288,14 @@ func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// tableDataListParams holds parsed tabledata.list query parameters.
+type tableDataListParams struct {
+	startIndex        int64
+	maxResults        int64
+	selectedFields    []string
+	useInt64Timestamp bool
+}
+
 // TableDataList implements `bigquery.tabledata.list`:
 //
 //	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data
@@ -291,8 +304,10 @@ func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 // and `pageToken` query parameters: pageToken (when supplied) is a
 // decimal string encoding the next start row index, mirroring what
 // `next_start_index` we return from the engine's ListRows.
-// `selectedFields` and `formatOptions` are parsed but ignored until
-// the query-execution work hooks them up.
+// `selectedFields` projects top-level columns (dotted paths select the
+// top-level STRUCT field). `formatOptions.useInt64Timestamp` controls
+// TIMESTAMP JSON encoding. Logical views have no Parquet backing;
+// tabledata.list returns empty rows — use jobs.query for view preview.
 //
 // See docs/bigquery/docs/reference/rest/v2/tabledata/list.md.
 func TableDataList(deps Dependencies) http.HandlerFunc {
@@ -311,12 +326,45 @@ func TableDataList(deps Dependencies) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		out, err := buildTableDataList(r.Context(), deps, projectID, datasetID, tableID, startIndex, maxResults)
+		listParams, ok := parseTableDataListParams(r.URL.Query(), startIndex, maxResults)
+		if !ok {
+			return
+		}
+		out, err := buildTableDataList(r.Context(), deps, projectID, datasetID, tableID, listParams)
 		if grpcToHTTPError(w, err) {
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+func parseTableDataListParams(
+	q url.Values,
+	startIndex, maxResults int64,
+) (tableDataListParams, bool) {
+	out := tableDataListParams{
+		startIndex: startIndex,
+		maxResults: maxResults,
+	}
+	if raw := strings.TrimSpace(q.Get("selectedFields")); raw != "" {
+		for part := range strings.SplitSeq(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			// BigQuery paths like "e.d.f" select into nested fields; the
+			// gateway projects at top-level granularity (field before ".").
+			if dot := strings.Index(part, "."); dot >= 0 {
+				part = part[:dot]
+			}
+			out.selectedFields = append(out.selectedFields, part)
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(q.Get("formatOptions.useInt64Timestamp"))) {
+	case "1", "true", "t", "yes":
+		out.useInt64Timestamp = true
+	}
+	return out, true
 }
 
 func tableDataListPaging(w http.ResponseWriter, q url.Values) (startIndex, maxResults int64, ok bool) {
@@ -332,6 +380,12 @@ func tableDataListPaging(w http.ResponseWriter, q url.Values) (startIndex, maxRe
 		startIndex = tokIdx
 	}
 	maxResults, ok = parsePositiveInt64(w, q.Get("maxResults"), "maxResults", tableDataListDefaultMaxResults)
+	if !ok {
+		return 0, 0, false
+	}
+	if maxResults > tableDataListMaxResultsCap {
+		maxResults = tableDataListMaxResultsCap
+	}
 	return startIndex, maxResults, ok
 }
 
@@ -339,7 +393,7 @@ func buildTableDataList(
 	ctx context.Context,
 	deps Dependencies,
 	projectID, datasetID, tableID string,
-	startIndex, maxResults int64,
+	params tableDataListParams,
 ) (bqtypes.TableDataList, error) {
 	table := &enginepb.TableRef{
 		ProjectId: projectID,
@@ -351,26 +405,111 @@ func buildTableDataList(
 		return bqtypes.TableDataList{}, err
 	}
 	schema := desc.GetSchema()
+	formatOpts := bqtypes.WireFormatOptions{UseInt64Timestamp: params.useInt64Timestamp}
+	if params.maxResults == 0 {
+		total, totalErr := tableDataListTotalRows(ctx, deps.Catalog, table)
+		if totalErr != nil {
+			return bqtypes.TableDataList{}, totalErr
+		}
+		return bqtypes.TableDataList{
+			Kind:      tableDataListKind,
+			Etag:      tableDataListEtag(schema, total),
+			TotalRows: strconv.FormatInt(total, 10),
+		}, nil
+	}
 	resp, err := deps.Catalog.ListRows(ctx, &enginepb.ListRowsRequest{
 		Table:      table,
-		StartIndex: startIndex,
-		MaxResults: maxResults,
+		StartIndex: params.startIndex,
+		MaxResults: params.maxResults,
 	})
 	if err != nil {
 		return bqtypes.TableDataList{}, err
 	}
 	out := bqtypes.TableDataList{
 		Kind:      tableDataListKind,
+		Etag:      tableDataListEtag(schema, resp.GetTotalRows()),
 		TotalRows: strconv.FormatInt(resp.GetTotalRows(), 10),
 	}
-	if resp.GetNextStartIndex() < resp.GetTotalRows() {
+	if resp.GetNextStartIndex() < resp.GetTotalRows() && params.maxResults > 0 {
 		out.PageToken = strconv.FormatInt(resp.GetNextStartIndex(), 10)
 	}
+	fieldIdx := selectedFieldIndices(schema, params.selectedFields)
 	out.Rows = make([]bqtypes.Row, 0, len(resp.GetRows()))
 	for _, row := range resp.GetRows() {
-		out.Rows = append(out.Rows, bqtypes.CellsToRowForSchema(row.GetCells(), schema))
+		full := bqtypes.CellsToRowForSchema(row.GetCells(), schema, formatOpts)
+		out.Rows = append(out.Rows, projectRowFields(full, fieldIdx))
 	}
 	return out, nil
+}
+
+func tableDataListTotalRows(
+	ctx context.Context,
+	catalog enginepb.CatalogClient,
+	table *enginepb.TableRef,
+) (int64, error) {
+	resp, err := catalog.ListRows(ctx, &enginepb.ListRowsRequest{
+		Table:      table,
+		StartIndex: 0,
+		MaxResults: 0,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetTotalRows(), nil
+}
+
+func tableDataListEtag(schema *enginepb.TableSchema, totalRows int64) string {
+	h := sha256.New()
+	for _, f := range schema.GetFields() {
+		_, _ = h.Write([]byte(f.GetName()))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(f.GetType()))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(f.GetMode()))
+		_, _ = h.Write([]byte{0})
+	}
+	_, _ = h.Write([]byte(strconv.FormatInt(totalRows, 10)))
+	return hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+func selectedFieldIndices(schema *enginepb.TableSchema, selected []string) []int {
+	if schema == nil || len(selected) == 0 {
+		return nil
+	}
+	byName := map[string]int{}
+	for i, f := range schema.GetFields() {
+		byName[f.GetName()] = i
+	}
+	out := make([]int, 0, len(selected))
+	seen := map[int]struct{}{}
+	for _, name := range selected {
+		idx, ok := byName[name]
+		if !ok {
+			continue
+		}
+		if _, dup := seen[idx]; dup {
+			continue
+		}
+		seen[idx] = struct{}{}
+		out = append(out, idx)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func projectRowFields(row bqtypes.Row, fieldIdx []int) bqtypes.Row {
+	if len(fieldIdx) == 0 {
+		return row
+	}
+	out := bqtypes.Row{F: make([]bqtypes.Cell, 0, len(fieldIdx))}
+	for _, idx := range fieldIdx {
+		if idx >= 0 && idx < len(row.F) {
+			out.F = append(out.F, row.F[idx])
+		}
+	}
+	return out
 }
 
 // parsePositiveInt64 parses an unsigned decimal string from a query

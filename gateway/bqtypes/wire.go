@@ -83,12 +83,26 @@ func CellsToRow(cells []*enginepb.Cell) Row {
 	return out
 }
 
+// WireFormatOptions controls optional REST wire-shape adjustments for
+// tabledata.list and query results.
+type WireFormatOptions struct {
+	UseInt64Timestamp bool
+}
+
 // CellsToRowForSchema is like CellsToRow but re-encodes TIMESTAMP
 // values as decimal microsecond strings. google-cloud-bigquery's
 // query-result parser (`CELL_DATA_PARSER.timestamp_to_py`) expects
 // microseconds since Unix epoch, not the human-readable strings the
 // engine emits.
-func CellsToRowForSchema(cells []*enginepb.Cell, schema *enginepb.TableSchema) Row {
+func CellsToRowForSchema(
+	cells []*enginepb.Cell,
+	schema *enginepb.TableSchema,
+	opts ...WireFormatOptions,
+) Row {
+	var format WireFormatOptions
+	if len(opts) > 0 {
+		format = opts[0]
+	}
 	fields := []*enginepb.FieldSchema(nil)
 	if schema != nil {
 		fields = schema.GetFields()
@@ -99,12 +113,12 @@ func CellsToRowForSchema(cells []*enginepb.Cell, schema *enginepb.TableSchema) R
 		if i < len(fields) {
 			field = fields[i]
 		}
-		out.F = append(out.F, encodeCellForField(ValueToCell(c), field))
+		out.F = append(out.F, encodeCellForField(ValueToCell(c), field, format))
 	}
 	return out
 }
 
-func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
+func encodeCellForField(cell Cell, field *enginepb.FieldSchema, format WireFormatOptions) Cell {
 	if cell.V == nil || field == nil {
 		return cell
 	}
@@ -117,7 +131,7 @@ func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
 		elemField := arrayElementFieldSchema(field)
 		out := make([]Cell, len(elements))
 		for i, el := range elements {
-			out[i] = encodeCellForField(el, elemField)
+			out[i] = encodeCellForField(el, elemField, format)
 		}
 		return Cell{V: out}
 	}
@@ -131,6 +145,11 @@ func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
 			return Cell{V: nil}
 		}
 		if micros, err := TimestampStringToMicros(s); err == nil {
+			if format.UseInt64Timestamp {
+				if n, parseErr := strconv.ParseInt(micros, 10, 64); parseErr == nil {
+					return Cell{V: n}
+				}
+			}
 			return Cell{V: micros}
 		}
 		return cell
@@ -146,7 +165,7 @@ func encodeCellForField(cell Cell, field *enginepb.FieldSchema) Cell {
 			if i < len(subFields) {
 				subField = subFields[i]
 			}
-			out[i] = encodeCellForField(subCell, subField)
+			out[i] = encodeCellForField(subCell, subField, format)
 		}
 		return Cell{V: Row{F: out}}
 	default:

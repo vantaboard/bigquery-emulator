@@ -97,6 +97,15 @@ omits `defaultDataset`, definitions are registered under internal dataset
 | `tabledata.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/data` | done | [`gateway/handlers/tabledata.go::TableDataList`][tabledata] |
 | `tabledata.insertAll` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}/insertAll` | done | [`gateway/handlers/tabledata.go::TableDataInsertAll`][tabledata] |
 
+**`tabledata.list` notes:** `maxResults` defaults to **10000** (cap **100000**).
+`maxResults=0` returns `totalRows`/`etag` with zero rows and no `pageToken`
+(same semantics as `jobs.getQueryResults`). `pageToken` is a decimal row index.
+`selectedFields` projects top-level columns (comma-separated; dotted paths
+select the top-level STRUCT). `formatOptions.useInt64Timestamp=true` emits
+TIMESTAMP cells as JSON int64 microseconds. Logical **views** have no Parquet
+backing — use `jobs.query` for preview; native tables paginate via
+`pageToken`.
+
 ### Jobs (`bigquery.jobs.*`)
 
 | Method | Path | Status | Handler |
