@@ -19,13 +19,13 @@ todos:
     status: completed
   - id: m3-01
     content: Execute m3-01-create-table-modal.plan.md (Create Table modal, all sources/schema/options); verify.
-    status: pending
+    status: completed
   - id: m3-02
     content: Execute m3-02-copy-delete-snapshot-schema.plan.md (Copy, Delete, Snapshot, Edit Schema); verify.
-    status: pending
+    status: completed
   - id: m4-01
     content: Execute m4-01-query-workspace-upgrades.plan.md (SQL Tools client, autocompletion, diagnostics, save, reference panel); verify.
-    status: pending
+    status: completed
   - id: m5-01
     content: Execute m5-01-routines-and-external-sources.plan.md (routines sub-tab, autocompletion, external ingestion); verify.
     status: pending
