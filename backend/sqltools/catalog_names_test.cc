@@ -158,19 +158,24 @@ TEST(CatalogNamesTest, PopulateFromStorageIncludesTablesColumnsAndRoutines) {
   ASSERT_TRUE(
       PopulateCatalogNamesFromStorage("proj", "ds", &storage, &names).ok());
 
-  ASSERT_EQ(names.datasets, (std::vector<std::string>{"ds", "other"}));
+  ASSERT_EQ(names.datasets,
+            (std::vector<std::string>{"ds", "proj.ds", "other", "proj.other"}));
 
-  ASSERT_EQ(names.tables.size(), 2u);
+  ASSERT_EQ(names.tables.size(), 3u);
   EXPECT_EQ(names.tables[0].label, "ds.events");
   EXPECT_EQ(names.tables[0].fqn, "proj.ds.events");
   EXPECT_EQ(names.tables[0].kind, "table");
-  EXPECT_EQ(names.tables[1].label, "events");
+  EXPECT_EQ(names.tables[1].label, "proj.ds.events");
   EXPECT_EQ(names.tables[1].fqn, "proj.ds.events");
+  EXPECT_EQ(names.tables[2].label, "events");
+  EXPECT_EQ(names.tables[2].fqn, "proj.ds.events");
 
-  ASSERT_EQ(names.routines.size(), 2u);
+  ASSERT_EQ(names.routines.size(), 3u);
   EXPECT_EQ(names.routines[0].label, "ds.my_fn");
-  EXPECT_EQ(names.routines[0].detail, "SQL");
-  EXPECT_EQ(names.routines[1].label, "my_fn");
+  EXPECT_EQ(names.routines[0].detail, "SQL scalar function");
+  EXPECT_EQ(names.routines[0].kind, "routine");
+  EXPECT_EQ(names.routines[1].label, "proj.ds.my_fn");
+  EXPECT_EQ(names.routines[2].label, "my_fn");
 
   ASSERT_EQ(names.columns.size(), 2u);
   EXPECT_EQ(names.columns[0].name, "id");
@@ -185,6 +190,37 @@ TEST(CatalogNamesTest, PopulateFromStorageIncludesTablesColumnsAndRoutines) {
   const auto unqualified = names.columns_by_table.find("events");
   ASSERT_NE(unqualified, names.columns_by_table.end());
   EXPECT_EQ(unqualified->second.size(), 2u);
+}
+
+TEST(CatalogNamesTest, PopulateFromStorageIncludesProjectQualifiedNames) {
+  FakeCatalogStorage storage;
+  storage.AddDataset("proj", "ds");
+
+  const storage::TableId table_id{"proj", "ds", "events"};
+  schema::TableSchema schema;
+  schema.columns = {
+      schema::ColumnSchema{.name = "id", .type = schema::ColumnType::kInt64},
+  };
+  storage.AddTable(table_id, schema);
+
+  CatalogNames names;
+  ASSERT_TRUE(
+      PopulateCatalogNamesFromStorage("proj", "", &storage, &names).ok());
+
+  bool found_fqn_table = false;
+  bool found_fqn_dataset = false;
+  for (const CatalogTableEntry& table : names.tables) {
+    if (table.label == "proj.ds.events") {
+      found_fqn_table = true;
+    }
+  }
+  for (const std::string& dataset : names.datasets) {
+    if (dataset == "proj.ds") {
+      found_fqn_dataset = true;
+    }
+  }
+  EXPECT_TRUE(found_fqn_table);
+  EXPECT_TRUE(found_fqn_dataset);
 }
 
 TEST(CatalogNamesTest, RejectsNullStorage) {

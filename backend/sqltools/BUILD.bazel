@@ -60,6 +60,8 @@ cc_library(
         "@googlesql//googlesql/public:analyzer",
         "@googlesql//googlesql/public:analyzer_options",
         "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:parse_helpers",
+        "@googlesql//googlesql/public:parse_resume_location",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/resolved_ast:resolved_ast",
     ],
@@ -70,6 +72,7 @@ cc_test(
     srcs = ["sql_tools_test.cc"],
     deps = [
         ":sql_tools",
+        ":sql_references",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@googlesql//googlesql/public:builtin_function_options",

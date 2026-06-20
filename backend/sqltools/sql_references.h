@@ -43,6 +43,15 @@ absl::StatusOr<AnalyzeResult> AnalyzeSqlText(
 void PopulateInScopeTablesFromAnalyze(const AnalyzeResult& analyze,
                                       CatalogNames* names);
 
+// Token/heuristic fallback when AnalyzeSqlText fails on incomplete SQL.
+// Extracts FROM/JOIN table references (and aliases) and attaches columns
+// from CatalogNames::columns_by_table when available.
+void PopulateInScopeTablesFromHeuristic(
+    absl::string_view sql,
+    const ::googlesql::LanguageOptions& language,
+    absl::string_view default_dataset_id,
+    CatalogNames* names);
+
 }  // namespace sqltools
 }  // namespace backend
 }  // namespace bigquery_emulator

@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
@@ -14,6 +15,8 @@
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
+#include "googlesql/public/parse_resume_location.h"
+#include "googlesql/public/parse_tokens.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_ast_visitor.h"
@@ -129,6 +132,96 @@ bool SameReference(const ReferencedTable& a, const ReferencedTable& b) {
          a.table_id == b.table_id && a.alias == b.alias;
 }
 
+bool IsTableIntroKeyword(absl::string_view keyword) {
+  static const absl::flat_hash_set<std::string>* kKeywords =
+      new absl::flat_hash_set<std::string>{
+          "FROM", "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "USING"};
+  return kKeywords->contains(std::string(keyword));
+}
+
+bool IsJoinModifierKeyword(absl::string_view keyword) {
+  static const absl::flat_hash_set<std::string>* kKeywords =
+      new absl::flat_hash_set<std::string>{
+          "INNER", "LEFT", "RIGHT", "FULL", "CROSS", "OUTER"};
+  return kKeywords->contains(std::string(keyword));
+}
+
+bool IsPostTableKeyword(absl::string_view keyword) {
+  static const absl::flat_hash_set<std::string>* kKeywords =
+      new absl::flat_hash_set<std::string>{
+          "ON",     "WHERE", "GROUP",     "ORDER",  "HAVING",  "LIMIT",
+          "JOIN",   "LEFT",  "RIGHT",     "INNER",  "OUTER",   "CROSS",
+          "FULL",   "UNION", "INTERSECT", "EXCEPT", "QUALIFY", "WINDOW",
+          "SET",    "MERGE", "USING",     "WHEN",   "THEN",    "END",
+          "SELECT", "FROM"};
+  return kKeywords->contains(std::string(keyword));
+}
+
+bool ReadDottedName(const std::vector<::googlesql::ParseToken>& tokens,
+                    size_t* index,
+                    std::string* out) {
+  if (*index >= tokens.size()) return false;
+  if (!tokens[*index].IsIdentifier()) return false;
+  *out = tokens[*index].GetIdentifier();
+  ++(*index);
+  while (*index + 1 < tokens.size() && tokens[*index].GetKeyword() == ".") {
+    ++(*index);
+    if (*index >= tokens.size() || !tokens[*index].IsIdentifier()) {
+      return false;
+    }
+    absl::StrAppend(out, ".", tokens[*index].GetIdentifier());
+    ++(*index);
+  }
+  return true;
+}
+
+std::vector<CatalogColumnEntry> LookupColumnsForTableRef(
+    absl::string_view table_ref,
+    absl::string_view default_dataset_id,
+    const CatalogNames& names) {
+  std::vector<std::string> keys;
+  keys.push_back(std::string(table_ref));
+  const std::vector<std::string> parts =
+      absl::StrSplit(table_ref, '.', absl::SkipEmpty());
+  if (parts.size() == 1 && !default_dataset_id.empty()) {
+    keys.push_back(absl::StrCat(default_dataset_id, ".", table_ref));
+  }
+  for (const std::string& key : keys) {
+    const auto it = names.columns_by_table.find(key);
+    if (it != names.columns_by_table.end()) {
+      return it->second;
+    }
+  }
+  for (const CatalogTableEntry& table : names.tables) {
+    if (!absl::EqualsIgnoreCase(table.label, table_ref) &&
+        !absl::EqualsIgnoreCase(table.fqn, table_ref)) {
+      continue;
+    }
+    const auto by_label = names.columns_by_table.find(table.label);
+    if (by_label != names.columns_by_table.end()) {
+      return by_label->second;
+    }
+    const auto by_fqn = names.columns_by_table.find(table.fqn);
+    if (by_fqn != names.columns_by_table.end()) {
+      return by_fqn->second;
+    }
+  }
+  return {};
+}
+
+bool SameInScopeTable(const InScopeTableRef& a, const InScopeTableRef& b) {
+  return a.table_key == b.table_key && a.alias == b.alias;
+}
+
+void AppendInScopeTable(CatalogNames* names, InScopeTableRef scope) {
+  for (const InScopeTableRef& existing : names->in_scope_tables) {
+    if (SameInScopeTable(existing, scope)) {
+      return;
+    }
+  }
+  names->in_scope_tables.push_back(std::move(scope));
+}
+
 }  // namespace
 
 absl::StatusOr<AnalyzeResult> AnalyzeSqlText(
@@ -206,7 +299,63 @@ void PopulateInScopeTablesFromAnalyze(const AnalyzeResult& analyze,
       scope.table_key = ref.table_id;
     }
     scope.columns = ref.columns;
-    names->in_scope_tables.push_back(std::move(scope));
+    AppendInScopeTable(names, std::move(scope));
+  }
+}
+
+void PopulateInScopeTablesFromHeuristic(
+    absl::string_view sql,
+    const ::googlesql::LanguageOptions& language,
+    absl::string_view default_dataset_id,
+    CatalogNames* names) {
+  if (names == nullptr || sql.empty()) return;
+
+  ::googlesql::ParseTokenOptions token_options;
+  token_options.language_options = language;
+  ::googlesql::ParseResumeLocation resume =
+      ::googlesql::ParseResumeLocation::FromStringView(sql);
+  std::vector<::googlesql::ParseToken> tokens;
+  if (!::googlesql::GetParseTokens(token_options, &resume, &tokens).ok()) {
+    return;
+  }
+
+  for (size_t i = 0; i < tokens.size(); ++i) {
+    if (!tokens[i].IsKeyword()) continue;
+    if (!IsTableIntroKeyword(tokens[i].GetKeyword())) continue;
+
+    size_t j = i + 1;
+    while (j < tokens.size() && tokens[j].IsKeyword() &&
+           IsJoinModifierKeyword(tokens[j].GetKeyword())) {
+      ++j;
+    }
+    if (j >= tokens.size()) continue;
+
+    std::string table_ref;
+    if (!ReadDottedName(tokens, &j, &table_ref)) continue;
+
+    std::string alias;
+    if (j < tokens.size() && tokens[j].IsKeyword() &&
+        tokens[j].GetKeyword() == "AS") {
+      ++j;
+      if (j < tokens.size() && tokens[j].IsIdentifier()) {
+        alias = tokens[j].GetIdentifier();
+        ++j;
+      }
+    } else if (j < tokens.size() && tokens[j].IsIdentifier()) {
+      alias = tokens[j].GetIdentifier();
+      ++j;
+    } else if (j < tokens.size() && tokens[j].IsKeyword() &&
+               !IsPostTableKeyword(tokens[j].GetKeyword())) {
+      alias = tokens[j].GetKeyword();
+      ++j;
+    }
+
+    InScopeTableRef scope;
+    scope.table_key = table_ref;
+    scope.alias = alias;
+    scope.columns =
+        LookupColumnsForTableRef(table_ref, default_dataset_id, *names);
+    AppendInScopeTable(names, std::move(scope));
   }
 }
 

@@ -1,5 +1,6 @@
 #include "backend/sqltools/sql_tools.h"
 
+#include "backend/sqltools/sql_references.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
@@ -116,6 +117,50 @@ TEST_F(SqlToolsTest, CompleteAfterFromUsesCatalogTables) {
     }
   }
   EXPECT_TRUE(found_events);
+}
+
+TEST_F(SqlToolsTest, CompleteProjectQualifiedTableCandidate) {
+  CatalogNames names;
+  names.tables.push_back(
+      CatalogTableEntry{"proj.ds.events", "proj.ds.events", "table", "table"});
+  const std::string sql = "SELECT * FROM proj.d";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "ds");
+  ASSERT_TRUE(result.ok()) << result.status();
+  bool found_fqn = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "proj.ds.events") {
+      found_fqn = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_fqn);
+}
+
+TEST_F(SqlToolsTest, CompleteIncompleteSqlUsesHeuristicColumns) {
+  CatalogNames names;
+  names.columns_by_table["analytics.events"] = {
+      CatalogColumnEntry{"id", "INT64"},
+      CatalogColumnEntry{"name", "STRING"},
+  };
+  PopulateInScopeTablesFromHeuristic(
+      "SELECT na FROM analytics.events WHERE ", language_, "analytics", &names);
+  ASSERT_EQ(names.in_scope_tables.size(), 1u);
+  ASSERT_EQ(names.in_scope_tables[0].columns.size(), 2u);
+
+  const std::string sql = "SELECT na FROM analytics.events WHERE ";
+  const absl::StatusOr<CompleteResult> result = CompleteSqlText(
+      sql, sql.size(), language_, catalog_.get(), names, "analytics");
+  ASSERT_TRUE(result.ok()) << result.status();
+  bool found_name = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "name") {
+      found_name = true;
+      EXPECT_EQ(candidate.kind, "column");
+      break;
+    }
+  }
+  EXPECT_TRUE(found_name);
 }
 
 }  // namespace

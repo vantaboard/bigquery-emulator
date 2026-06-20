@@ -36,6 +36,40 @@ std::string ColumnTypeLabel(const schema::ColumnSchema& column) {
   return std::string(schema::ColumnTypeName(column.type));
 }
 
+std::string RoutineKindLabel(storage::RoutineKind kind) {
+  switch (kind) {
+    case storage::RoutineKind::kScalarFunction:
+      return "scalar function";
+    case storage::RoutineKind::kAggregateFunction:
+      return "aggregate function";
+    case storage::RoutineKind::kTableValuedFunction:
+      return "table function";
+    case storage::RoutineKind::kProcedure:
+      return "procedure";
+  }
+  return "routine";
+}
+
+std::string RoutineKindWire(storage::RoutineKind kind) {
+  switch (kind) {
+    case storage::RoutineKind::kProcedure:
+      return "procedure";
+    default:
+      return "routine";
+  }
+}
+
+std::string RoutineDetail(const storage::RoutineRecord& routine) {
+  return absl::StrCat(routine.language, " ", RoutineKindLabel(routine.kind));
+}
+
+void AppendUniqueDataset(CatalogNames* names, absl::string_view dataset_id) {
+  for (const std::string& existing : names->datasets) {
+    if (existing == dataset_id) return;
+  }
+  names->datasets.push_back(std::string(dataset_id));
+}
+
 }  // namespace
 
 absl::Status PopulateCatalogNamesFromStorage(
@@ -70,7 +104,9 @@ absl::Status PopulateCatalogNamesFromStorage(
     return datasets.status();
   }
   for (const storage::DatasetId& dataset : *datasets) {
-    names->datasets.push_back(dataset.dataset_id);
+    AppendUniqueDataset(names, dataset.dataset_id);
+    AppendUniqueDataset(names,
+                        absl::StrCat(project_id, ".", dataset.dataset_id));
     absl::StatusOr<std::vector<storage::TableId>> tables =
         storage->ListTables(dataset);
     if (!tables.ok()) {
@@ -88,6 +124,9 @@ absl::Status PopulateCatalogNamesFromStorage(
       entry.kind = is_view ? "view" : "table";
       entry.detail = is_view ? "view" : "table";
       AppendUniqueTable(names, entry);
+      CatalogTableEntry fqn_entry = entry;
+      fqn_entry.label = fqn;
+      AppendUniqueTable(names, std::move(fqn_entry));
       if (!default_dataset_id.empty() &&
           dataset.dataset_id == default_dataset_id) {
         CatalogTableEntry unqualified;
@@ -131,14 +170,19 @@ absl::Status PopulateCatalogNamesFromStorage(
       CatalogRoutineEntry entry;
       entry.label = qualified;
       entry.fqn = fqn;
-      entry.detail = routine.language;
+      entry.kind = RoutineKindWire(routine.kind);
+      entry.detail = RoutineDetail(routine);
       AppendUniqueRoutine(names, entry);
+      CatalogRoutineEntry fqn_entry = entry;
+      fqn_entry.label = fqn;
+      AppendUniqueRoutine(names, std::move(fqn_entry));
       if (!default_dataset_id.empty() &&
           dataset.dataset_id == default_dataset_id) {
         CatalogRoutineEntry unqualified;
         unqualified.label = routine.id.routine_id;
         unqualified.fqn = fqn;
-        unqualified.detail = routine.language;
+        unqualified.kind = entry.kind;
+        unqualified.detail = entry.detail;
         AppendUniqueRoutine(names, unqualified);
       }
     }
@@ -156,6 +200,9 @@ absl::Status PopulateCatalogNamesFromStorage(
     entry.kind = "view";
     entry.detail = "view";
     AppendUniqueTable(names, entry);
+    CatalogTableEntry fqn_entry = entry;
+    fqn_entry.label = fqn;
+    AppendUniqueTable(names, std::move(fqn_entry));
     if (!default_dataset_id.empty() && view.dataset_id == default_dataset_id) {
       CatalogTableEntry unqualified;
       unqualified.label = view.view_name;

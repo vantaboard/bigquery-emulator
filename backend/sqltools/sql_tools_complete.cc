@@ -292,8 +292,24 @@ CompletionContext InferCompletionContext(
   if (idx < 0) return ctx;
 
   if (idx > 0 && tokens[idx - 1].GetKeyword() == ".") {
-    ctx.kind = CompletionContextKind::kMember;
-    ctx.qualifier = TokenText(tokens[idx - 2]);
+    bool after_table_intro = false;
+    for (int i = idx - 2; i >= 0; --i) {
+      if (!tokens[i].IsKeyword()) continue;
+      const std::string kw = tokens[i].GetKeyword();
+      if (IsTableContextKeyword(kw)) {
+        after_table_intro = true;
+        break;
+      }
+      if (IsColumnContextKeyword(kw)) {
+        break;
+      }
+    }
+    if (!after_table_intro) {
+      ctx.kind = CompletionContextKind::kMember;
+      ctx.qualifier = TokenText(tokens[idx - 2]);
+      return ctx;
+    }
+    ctx.kind = CompletionContextKind::kTable;
     return ctx;
   }
 
@@ -324,6 +340,7 @@ CompletionContext InferCompletionContext(
 
 void FindReplacementSpan(absl::string_view sql,
                          size_t cursor,
+                         CompletionContextKind context_kind,
                          int* replacement_start,
                          int* replacement_end,
                          std::string* prefix) {
@@ -336,6 +353,18 @@ void FindReplacementSpan(absl::string_view sql,
     const char c = sql[start - 1];
     if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') break;
     --start;
+  }
+  if (context_kind == CompletionContextKind::kTable) {
+    size_t qual_start = start;
+    while (qual_start > 0 && sql[qual_start - 1] == '.') {
+      --qual_start;
+      while (qual_start > 0) {
+        const char c = sql[qual_start - 1];
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') break;
+        --qual_start;
+      }
+    }
+    start = qual_start;
   }
   *replacement_start = static_cast<int>(start);
   *replacement_end = static_cast<int>(cursor);
@@ -360,9 +389,25 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
   }
   const absl::string_view prefix_sql = sql.substr(0, cursor_byte_offset);
 
+  CompletionContext ctx;
+  if (!prefix_sql.empty()) {
+    ::googlesql::ParseTokenOptions token_options;
+    token_options.language_options = language;
+    ::googlesql::ParseResumeLocation resume =
+        ::googlesql::ParseResumeLocation::FromStringView(prefix_sql);
+    std::vector<::googlesql::ParseToken> tokens;
+    const absl::Status token_status =
+        ::googlesql::GetParseTokens(token_options, &resume, &tokens);
+    if (!token_status.ok()) {
+      return token_status;
+    }
+    ctx = InferCompletionContext(tokens);
+  }
+
   std::string prefix;
   FindReplacementSpan(sql,
                       cursor_byte_offset,
+                      ctx.kind,
                       &result.replacement_start,
                       &result.replacement_end,
                       &prefix);
@@ -381,19 +426,6 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
               });
     return result;
   }
-
-  ::googlesql::ParseTokenOptions token_options;
-  token_options.language_options = language;
-  ::googlesql::ParseResumeLocation resume =
-      ::googlesql::ParseResumeLocation::FromStringView(prefix_sql);
-  std::vector<::googlesql::ParseToken> tokens;
-  const absl::Status token_status =
-      ::googlesql::GetParseTokens(token_options, &resume, &tokens);
-  if (!token_status.ok()) {
-    return token_status;
-  }
-
-  const CompletionContext ctx = InferCompletionContext(tokens);
 
   switch (ctx.kind) {
     case CompletionContextKind::kTable:

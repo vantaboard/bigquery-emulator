@@ -197,8 +197,11 @@ SqlToolsService::SqlToolsService(backend::storage::Storage* storage)
                                           request->default_dataset_id(),
                                           &catalog,
                                           language);
-    if (analyze.ok()) {
+    if (analyze.ok() && !analyze->referenced_tables.empty()) {
       backend::sqltools::PopulateInScopeTablesFromAnalyze(*analyze, &names);
+    } else {
+      backend::sqltools::PopulateInScopeTablesFromHeuristic(
+          request->sql(), language, request->default_dataset_id(), &names);
     }
   }
 
