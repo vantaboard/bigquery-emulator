@@ -100,7 +100,7 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsCommittedStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest req;
   req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  req.mutable_write_stream()->set_type(v1::WriteStream::COMMITTED);
+  req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_COMMITTED);
   v1::WriteStream resp;
   ::grpc::Status status = service_->CreateWriteStream(nullptr, &req, &resp);
   ASSERT_TRUE(status.ok()) << status.error_message();
@@ -108,7 +108,7 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsCommittedStream) {
   // Stream id nests under the table path with a server-assigned
   // suffix; the helper mints `s1` for the first call.
   EXPECT_EQ(resp.name(), "projects/proj-test/datasets/ds/tables/t/streams/s1");
-  EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);
+  EXPECT_EQ(resp.type(), v1::WriteStream::TYPE_COMMITTED);
   ASSERT_EQ(resp.schema().fields_size(), 2);
   EXPECT_EQ(resp.schema().fields(0).name(), "id");
   EXPECT_EQ(resp.schema().fields(1).name(), "name");
@@ -125,18 +125,18 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamDefaultsToCommitted) {
   v1::WriteStream resp;
   ::grpc::Status status = service_->CreateWriteStream(nullptr, &req, &resp);
   ASSERT_TRUE(status.ok()) << status.error_message();
-  EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);
+  EXPECT_EQ(resp.type(), v1::WriteStream::TYPE_COMMITTED);
 }
 
 TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsPendingStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest req;
   req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  req.mutable_write_stream()->set_type(v1::WriteStream::PENDING);
+  req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_PENDING);
   v1::WriteStream resp;
   ::grpc::Status status = service_->CreateWriteStream(nullptr, &req, &resp);
   ASSERT_TRUE(status.ok()) << status.error_message();
-  EXPECT_EQ(resp.type(), v1::WriteStream::PENDING);
+  EXPECT_EQ(resp.type(), v1::WriteStream::TYPE_PENDING);
   EXPECT_EQ(service_->StreamsForTesting(), 1u);
 }
 
@@ -144,11 +144,11 @@ TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsBufferedStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest req;
   req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  req.mutable_write_stream()->set_type(v1::WriteStream::BUFFERED);
+  req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_BUFFERED);
   v1::WriteStream resp;
   ::grpc::Status status = service_->CreateWriteStream(nullptr, &req, &resp);
   ASSERT_TRUE(status.ok()) << status.error_message();
-  EXPECT_EQ(resp.type(), v1::WriteStream::BUFFERED);
+  EXPECT_EQ(resp.type(), v1::WriteStream::TYPE_BUFFERED);
   EXPECT_FALSE(resp.name().empty());
 }
 
@@ -179,7 +179,7 @@ TEST_F(StorageWriteServiceTest, BatchCommitRequiresFinalizedPendingStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest create_req;
   create_req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  create_req.mutable_write_stream()->set_type(v1::WriteStream::PENDING);
+  create_req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_PENDING);
   v1::WriteStream stream;
   ASSERT_TRUE(service_->CreateWriteStream(nullptr, &create_req, &stream).ok());
 

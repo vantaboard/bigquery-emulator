@@ -51,31 +51,31 @@ const (
 	// `_default` and explicit COMMITTED both commit on every
 	// AppendRows batch (rows immediately visible to readers).
 	// The emulator supports both.
-	WriteStream_COMMITTED WriteStream_Type = 1
+	WriteStream_TYPE_COMMITTED WriteStream_Type = 1
 	// PENDING streams buffer rows server-side until
 	// `BatchCommitWriteStreams` makes them visible. Reserved for
 	// the deferred follow-up; CreateWriteStream returns
 	// UNIMPLEMENTED today.
-	WriteStream_PENDING WriteStream_Type = 2
+	WriteStream_TYPE_PENDING WriteStream_Type = 2
 	// BUFFERED streams buffer rows server-side until `FlushRows`
 	// advances the visibility offset. Reserved for the deferred
 	// follow-up; CreateWriteStream returns UNIMPLEMENTED today.
-	WriteStream_BUFFERED WriteStream_Type = 3
+	WriteStream_TYPE_BUFFERED WriteStream_Type = 3
 )
 
 // Enum value maps for WriteStream_Type.
 var (
 	WriteStream_Type_name = map[int32]string{
 		0: "TYPE_UNSPECIFIED",
-		1: "COMMITTED",
-		2: "PENDING",
-		3: "BUFFERED",
+		1: "TYPE_COMMITTED",
+		2: "TYPE_PENDING",
+		3: "TYPE_BUFFERED",
 	}
 	WriteStream_Type_value = map[string]int32{
 		"TYPE_UNSPECIFIED": 0,
-		"COMMITTED":        1,
-		"PENDING":          2,
-		"BUFFERED":         3,
+		"TYPE_COMMITTED":   1,
+		"TYPE_PENDING":     2,
+		"TYPE_BUFFERED":    3,
 	}
 )
 
@@ -877,18 +877,18 @@ var File_storage_write_proto protoreflect.FileDescriptor
 
 const file_storage_write_proto_rawDesc = "" +
 	"\n" +
-	"\x13storage_write.proto\x12\x14bigquery_emulator.v1\x1a\x0eemulator.proto\"\x81\x02\n" +
+	"\x13storage_write.proto\x12\x14bigquery_emulator.v1\x1a\x0eemulator.proto\"\x90\x02\n" +
 	"\vWriteStream\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04type\x18\x02 \x01(\x0e2&.bigquery_emulator.v1.WriteStream.TypeR\x04type\x129\n" +
 	"\x06schema\x18\x03 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x12\x1f\n" +
 	"\vcreate_time\x18\x04 \x01(\tR\n" +
-	"createTime\"F\n" +
+	"createTime\"U\n" +
 	"\x04Type\x12\x14\n" +
-	"\x10TYPE_UNSPECIFIED\x10\x00\x12\r\n" +
-	"\tCOMMITTED\x10\x01\x12\v\n" +
-	"\aPENDING\x10\x02\x12\f\n" +
-	"\bBUFFERED\x10\x03\"x\n" +
+	"\x10TYPE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eTYPE_COMMITTED\x10\x01\x12\x10\n" +
+	"\fTYPE_PENDING\x10\x02\x12\x11\n" +
+	"\rTYPE_BUFFERED\x10\x03\"x\n" +
 	"\x18CreateWriteStreamRequest\x12\x16\n" +
 	"\x06parent\x18\x01 \x01(\tR\x06parent\x12D\n" +
 	"\fwrite_stream\x18\x02 \x01(\v2!.bigquery_emulator.v1.WriteStreamR\vwriteStream\"\xc4\x02\n" +

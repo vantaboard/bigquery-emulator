@@ -124,7 +124,7 @@ TEST_F(StorageWriteGrpcTest, AppendRowsCommitsToCommittedStream) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest create_req;
   create_req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  create_req.mutable_write_stream()->set_type(v1::WriteStream::COMMITTED);
+  create_req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_COMMITTED);
   v1::WriteStream stream;
   ::grpc::ClientContext create_ctx;
   ASSERT_TRUE(stub_->CreateWriteStream(&create_ctx, create_req, &stream).ok());
@@ -245,7 +245,7 @@ TEST_F(StorageWriteGrpcTest, GetWriteStreamReturnsRecordedMetadata) {
   v1::WriteStream got;
   ASSERT_TRUE(stub_->GetWriteStream(&get_ctx, get_req, &got).ok());
   EXPECT_EQ(got.name(), stream.name());
-  EXPECT_EQ(got.type(), v1::WriteStream::COMMITTED);
+  EXPECT_EQ(got.type(), v1::WriteStream::TYPE_COMMITTED);
 }
 
 TEST_F(StorageWriteGrpcTest, GetWriteStreamUnknownIsNotFound) {
@@ -261,7 +261,7 @@ TEST_F(StorageWriteGrpcTest, BufferedStreamFlushCommitsRows) {
   CreatePeopleTable();
   v1::CreateWriteStreamRequest create_req;
   create_req.set_parent("projects/proj-test/datasets/ds/tables/t");
-  create_req.mutable_write_stream()->set_type(v1::WriteStream::BUFFERED);
+  create_req.mutable_write_stream()->set_type(v1::WriteStream::TYPE_BUFFERED);
   v1::WriteStream stream;
   ::grpc::ClientContext create_ctx;
   ASSERT_TRUE(stub_->CreateWriteStream(&create_ctx, create_req, &stream).ok());

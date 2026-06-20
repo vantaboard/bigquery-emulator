@@ -21,7 +21,7 @@ using internal::AbslToGrpcStatus;
     return ::grpc::Status(::grpc::StatusCode::INTERNAL,
                           "StorageWrite.FlushRows: stream state is null");
   }
-  if (state->type != v1::WriteStream::BUFFERED) {
+  if (state->type != v1::WriteStream::TYPE_BUFFERED) {
     return ::grpc::Status(
         ::grpc::StatusCode::FAILED_PRECONDITION,
         "StorageWrite.FlushRows: FlushRows is only valid for BUFFERED streams");
@@ -100,9 +100,9 @@ using internal::AbslToGrpcStatus;
                                        request->name()));
   }
   it->second.finalized = true;
-  if (it->second.type == v1::WriteStream::BUFFERED) {
+  if (it->second.type == v1::WriteStream::TYPE_BUFFERED) {
     response->set_row_count(it->second.flushed_rows);
-  } else if (it->second.type == v1::WriteStream::PENDING) {
+  } else if (it->second.type == v1::WriteStream::TYPE_PENDING) {
     response->set_row_count(
         static_cast<std::int64_t>(it->second.buffered_rows.size()));
   } else {

@@ -159,8 +159,8 @@ using internal::CellToValue;
     }
 
     std::int64_t prior_offset = 0;
-    if (stream_type == v1::WriteStream::BUFFERED ||
-        stream_type == v1::WriteStream::PENDING) {
+    if (stream_type == v1::WriteStream::TYPE_BUFFERED ||
+        stream_type == v1::WriteStream::TYPE_PENDING) {
       // BUFFERED / PENDING streams hold rows server-side until
       // FlushRows / BatchCommitWriteStreams makes them visible.
       absl::MutexLock lock(&mu_);

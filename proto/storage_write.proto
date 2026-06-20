@@ -100,18 +100,18 @@ message WriteStream {
     // `_default` and explicit COMMITTED both commit on every
     // AppendRows batch (rows immediately visible to readers).
     // The emulator supports both.
-    COMMITTED = 1;
+    TYPE_COMMITTED = 1;
 
     // PENDING streams buffer rows server-side until
     // `BatchCommitWriteStreams` makes them visible. Reserved for
     // the deferred follow-up; CreateWriteStream returns
     // UNIMPLEMENTED today.
-    PENDING = 2;
+    TYPE_PENDING = 2;
 
     // BUFFERED streams buffer rows server-side until `FlushRows`
     // advances the visibility offset. Reserved for the deferred
     // follow-up; CreateWriteStream returns UNIMPLEMENTED today.
-    BUFFERED = 3;
+    TYPE_BUFFERED = 3;
   }
   Type type = 2;
 

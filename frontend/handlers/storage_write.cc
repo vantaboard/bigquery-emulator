@@ -141,16 +141,16 @@ std::string StorageWriteService::Rfc3339Now() const {
   // here. PENDING returns UNIMPLEMENTED with a clear
   // message so a producer pinning that type fails fast rather
   // than silently routing through the COMMITTED path.
-  v1::WriteStream::Type requested = v1::WriteStream::COMMITTED;
+  v1::WriteStream::Type requested = v1::WriteStream::TYPE_COMMITTED;
   if (request->has_write_stream()) {
     requested = request->write_stream().type();
     if (requested == v1::WriteStream::TYPE_UNSPECIFIED) {
-      requested = v1::WriteStream::COMMITTED;
+      requested = v1::WriteStream::TYPE_COMMITTED;
     }
   }
-  if (requested != v1::WriteStream::COMMITTED &&
-      requested != v1::WriteStream::BUFFERED &&
-      requested != v1::WriteStream::PENDING) {
+  if (requested != v1::WriteStream::TYPE_COMMITTED &&
+      requested != v1::WriteStream::TYPE_BUFFERED &&
+      requested != v1::WriteStream::TYPE_PENDING) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageWrite.CreateWriteStream: unknown stream type ",
@@ -198,7 +198,7 @@ std::string StorageWriteService::Rfc3339Now() const {
     StreamState state;
     state.table = table;
     state.schema = *schema_or;
-    state.type = v1::WriteStream::COMMITTED;
+    state.type = v1::WriteStream::TYPE_COMMITTED;
     state.create_time = Rfc3339Now();
     streams_.emplace(stream_name, std::move(state));
   }
@@ -279,7 +279,7 @@ std::string StorageWriteService::Rfc3339Now() const {
                          "stream: ",
                          stream_name));
       }
-      if (it->second.type != v1::WriteStream::PENDING) {
+      if (it->second.type != v1::WriteStream::TYPE_PENDING) {
         return ::grpc::Status(
             ::grpc::StatusCode::INVALID_ARGUMENT,
             absl::StrCat("StorageWrite.BatchCommitWriteStreams: stream is not "
