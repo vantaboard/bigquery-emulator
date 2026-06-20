@@ -329,6 +329,23 @@ func inferTableSchemaFromQuery(deps Dependencies, r *http.Request,
 	return schemaFromProto(resp.GetSchema()), nil
 }
 
+// tableFromDescribeResponse maps a Catalog.DescribeTable RPC payload
+// into the REST Table shape, including logical-view metadata when the
+// engine resolved the target from the view registry.
+func tableFromDescribeResponse(resp *enginepb.DescribeTableResponse) bqtypes.Table {
+	t := bqtypes.Table{Schema: normalizeRESTTableSchema(schemaFromProto(resp.GetSchema()))}
+	if tableType := resp.GetTableType(); tableType != "" {
+		t.Type = tableType
+	}
+	if viewQuery := resp.GetViewQuery(); viewQuery != "" {
+		t.View = &bqtypes.ViewDefinition{
+			Query:        viewQuery,
+			UseLegacySQL: resp.GetViewUseLegacySql(),
+		}
+	}
+	return t
+}
+
 // TableGet implements `bigquery.tables.get`:
 //
 //	GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}
@@ -367,7 +384,7 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 			grpcToHTTPError(w, err)
 			return
 		}
-		t := bqtypes.Table{Schema: normalizeRESTTableSchema(schemaFromProto(resp.GetSchema()))}
+		t := tableFromDescribeResponse(resp)
 		if overlay, ok := deps.Metadata.GetDataset(projectID, datasetID); ok && overlay.Location != "" {
 			t.Location = overlay.Location
 		}

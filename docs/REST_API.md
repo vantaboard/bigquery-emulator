@@ -70,6 +70,18 @@ the gateway [`MetadataStore`][metadata-store] on GET/PATCH/UPDATE.
 `type` defaults to `EXTERNAL`. Google Sheets (`GOOGLE_SHEETS` /
 `googleSheetsOptions`) returns **501** with a clear message.
 
+**Logical views:** `CREATE [OR REPLACE] VIEW` via `jobs.query` registers
+the view in the engine's in-memory catalog and persists the DDL in
+`DuckDBStorage` (`__bqemu_views`). `tables.list` / `tables.get`
+return `type=VIEW` and `view.query` (with `view.useLegacySql=false` for
+GoogleSQL views). After an engine restart the gateway rehydrates views
+from storage so `tables.get` still resolves through
+`Catalog.DescribeTable` even though the gateway's in-memory metadata
+overlay is empty. `CREATE MATERIALIZED VIEW` DDL is also surfaced on
+`tables.list` / `tables.get` as `type=MATERIALIZED_VIEW` with
+`materializedView.query` (the engine materializes rows into a physical
+table).
+
 Query-time ephemeral external tables use `tableDefinitions` on
 `jobs.query` and `configuration.query` (jobs.insert). When the query
 omits `defaultDataset`, definitions are registered under internal dataset

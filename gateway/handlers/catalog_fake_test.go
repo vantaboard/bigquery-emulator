@@ -46,6 +46,8 @@ type fakeCatalogClient struct {
 	lastDescribeTable   *enginepb.DescribeTableRequest
 	lastInsertRows      *enginepb.InsertRowsRequest
 	lastListRows        *enginepb.ListRowsRequest
+
+	registeredRoutines []*enginepb.RoutineDescriptor
 }
 
 func (f *fakeCatalogClient) RegisterDataset(
@@ -183,25 +185,73 @@ func (f *fakeCatalogClient) ListTables(
 
 func (f *fakeCatalogClient) ListRoutines(
 	_ context.Context,
-	_ *enginepb.ListRoutinesRequest,
+	in *enginepb.ListRoutinesRequest,
 	_ ...grpc.CallOption,
 ) (*enginepb.ListRoutinesResponse, error) {
-	return &enginepb.ListRoutinesResponse{}, nil
+	ds := in.GetDataset()
+	if ds == nil {
+		return &enginepb.ListRoutinesResponse{}, nil
+	}
+	var out []*enginepb.RoutineDescriptor
+	for _, desc := range f.registeredRoutines {
+		ref := desc.GetRoutine()
+		if ref == nil {
+			continue
+		}
+		if ref.GetProjectId() == ds.GetProjectId() &&
+			ref.GetDatasetId() == ds.GetDatasetId() {
+			out = append(out, desc)
+		}
+	}
+	return &enginepb.ListRoutinesResponse{Routines: out}, nil
 }
 
 func (f *fakeCatalogClient) GetRoutine(
 	_ context.Context,
-	_ *enginepb.GetRoutineRequest,
+	in *enginepb.GetRoutineRequest,
 	_ ...grpc.CallOption,
 ) (*enginepb.GetRoutineResponse, error) {
+	ref := in.GetRoutine()
+	if ref == nil {
+		return nil, status.Error(codes.NotFound, "routine not found")
+	}
+	for _, desc := range f.registeredRoutines {
+		got := desc.GetRoutine()
+		if got == nil {
+			continue
+		}
+		if got.GetProjectId() == ref.GetProjectId() &&
+			got.GetDatasetId() == ref.GetDatasetId() &&
+			got.GetRoutineId() == ref.GetRoutineId() {
+			return &enginepb.GetRoutineResponse{Routine: desc}, nil
+		}
+	}
 	return nil, status.Error(codes.NotFound, "routine not found")
 }
 
 func (f *fakeCatalogClient) UpsertRoutine(
 	_ context.Context,
-	_ *enginepb.UpsertRoutineRequest,
+	in *enginepb.UpsertRoutineRequest,
 	_ ...grpc.CallOption,
 ) (*enginepb.UpsertRoutineResponse, error) {
+	desc := in.GetRoutine()
+	if desc == nil || desc.GetRoutine() == nil {
+		return &enginepb.UpsertRoutineResponse{}, nil
+	}
+	ref := desc.GetRoutine()
+	for i, existing := range f.registeredRoutines {
+		got := existing.GetRoutine()
+		if got == nil {
+			continue
+		}
+		if got.GetProjectId() == ref.GetProjectId() &&
+			got.GetDatasetId() == ref.GetDatasetId() &&
+			got.GetRoutineId() == ref.GetRoutineId() {
+			f.registeredRoutines[i] = desc
+			return &enginepb.UpsertRoutineResponse{}, nil
+		}
+	}
+	f.registeredRoutines = append(f.registeredRoutines, desc)
 	return &enginepb.UpsertRoutineResponse{}, nil
 }
 

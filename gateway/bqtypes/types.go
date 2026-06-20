@@ -437,7 +437,8 @@ func (o *GoogleSheetsOptions) UnmarshalJSON(data []byte) error {
 // ViewDefinition is the BigQuery REST view sub-object. See
 // docs/bigquery/docs/reference/rest/v2/tables#ViewDefinition.
 type ViewDefinition struct {
-	Query string `json:"query,omitempty"`
+	Query        string `json:"query,omitempty"`
+	UseLegacySQL bool   `json:"useLegacySql,omitempty"`
 }
 
 // MaterializedViewDefinition is the BigQuery REST materializedView

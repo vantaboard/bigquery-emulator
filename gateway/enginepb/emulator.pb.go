@@ -838,10 +838,18 @@ func (x *DescribeTableRequest) GetTable() *TableRef {
 }
 
 type DescribeTableResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Schema        *TableSchema           `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Schema *TableSchema           `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	// BigQuery REST `type` when the table is a logical view (empty for
+	// physical tables). Populated by Catalog.DescribeTable when the
+	// target is registered in the view registry rather than storage.
+	TableType string `protobuf:"bytes,2,opt,name=table_type,json=tableType,proto3" json:"table_type,omitempty"`
+	// View SQL (`view.query` on the REST Table resource).
+	ViewQuery string `protobuf:"bytes,3,opt,name=view_query,json=viewQuery,proto3" json:"view_query,omitempty"`
+	// Always false for GoogleSQL views; carried for REST parity.
+	ViewUseLegacySql bool `protobuf:"varint,4,opt,name=view_use_legacy_sql,json=viewUseLegacySql,proto3" json:"view_use_legacy_sql,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DescribeTableResponse) Reset() {
@@ -879,6 +887,27 @@ func (x *DescribeTableResponse) GetSchema() *TableSchema {
 		return x.Schema
 	}
 	return nil
+}
+
+func (x *DescribeTableResponse) GetTableType() string {
+	if x != nil {
+		return x.TableType
+	}
+	return ""
+}
+
+func (x *DescribeTableResponse) GetViewQuery() string {
+	if x != nil {
+		return x.ViewQuery
+	}
+	return ""
+}
+
+func (x *DescribeTableResponse) GetViewUseLegacySql() bool {
+	if x != nil {
+		return x.ViewUseLegacySql
+	}
+	return false
 }
 
 // DataRow is a single row of stored data. Cells are positional and
@@ -3769,9 +3798,14 @@ const file_emulator_proto_rawDesc = "" +
 	"\x12ListTablesResponse\x126\n" +
 	"\x06tables\x18\x01 \x03(\v2\x1e.bigquery_emulator.v1.TableRefR\x06tables\"L\n" +
 	"\x14DescribeTableRequest\x124\n" +
-	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\"R\n" +
+	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\"\xbf\x01\n" +
 	"\x15DescribeTableResponse\x129\n" +
-	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\";\n" +
+	"\x06schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\x06schema\x12\x1d\n" +
+	"\n" +
+	"table_type\x18\x02 \x01(\tR\ttableType\x12\x1d\n" +
+	"\n" +
+	"view_query\x18\x03 \x01(\tR\tviewQuery\x12-\n" +
+	"\x13view_use_legacy_sql\x18\x04 \x01(\bR\x10viewUseLegacySql\";\n" +
 	"\aDataRow\x120\n" +
 	"\x05cells\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\"|\n" +
 	"\x11InsertRowsRequest\x124\n" +

@@ -210,3 +210,14 @@ func TestRoutineGetFallsBackToInMemoryAfterDDL(t *testing.T) {
 		t.Errorf("body = %q", got.DefinitionBody)
 	}
 }
+
+func TestRoutineListAfterDDL(t *testing.T) {
+	deps := Dependencies{Routines: NewRoutineStore(), Catalog: &fakeCatalogClient{}}
+	const ddl = `CREATE FUNCTION listfn(x INT64) RETURNS INT64 AS (x * 3);`
+	ref := persistRoutineFromDDL(
+		context.Background(), &deps, routineTestProjectID, routineTestDatasetID, ddl)
+	if ref == nil || ref.RoutineID != "listfn" {
+		t.Fatalf("ref = %+v", ref)
+	}
+	assertRoutineListed(t, deps, 1)
+}
