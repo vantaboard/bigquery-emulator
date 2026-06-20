@@ -183,7 +183,8 @@ TEST_F(ControlOpExecutorCtasTest, CreateTableAsSelectMaterializesSourceRows) {
   EXPECT_EQ(seen, want);
 }
 
-TEST_F(ControlOpExecutorCtasTest, CreateTableAsSelectUnnestNarrowsToOutputSchema) {
+TEST_F(ControlOpExecutorCtasTest,
+       CreateTableAsSelectUnnestNarrowsToOutputSchema) {
   // Regression for TestCopiesAndExtracts / generateTableCTAS: UNNEST
   // ordinality adds `__bq_input_rn` to the inner scan emit; without the
   // outer projection narrow the drained DuckDB table has one extra
