@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
@@ -18,6 +20,45 @@ func routineRefProto(projectID, datasetID, routineID string) *enginepb.RoutineRe
 		ProjectId: projectID,
 		DatasetId: datasetID,
 		RoutineId: routineID,
+	}
+}
+
+func routineListKey(ref bqtypes.RoutineReference) string {
+	return ref.ProjectID + ":" + ref.DatasetID + "." + ref.RoutineID
+}
+
+func routineTypeFromFilter(filter string) string {
+	const prefix = "routineType:"
+	if filter == "" || !strings.HasPrefix(filter, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(filter[len(prefix):])
+}
+
+// overlayRoutineFromStore merges gateway-store timestamps and etag onto a
+// catalog-backed routine. The engine catalog does not persist those fields.
+func overlayRoutineFromStore(catalog bqtypes.Routine, stored bqtypes.Routine, ok bool) bqtypes.Routine {
+	if !ok {
+		return catalog
+	}
+	if stored.CreationTime != "" {
+		catalog.CreationTime = stored.CreationTime
+	}
+	if stored.LastModifiedTime != "" {
+		catalog.LastModifiedTime = stored.LastModifiedTime
+	}
+	if stored.Etag != "" {
+		catalog.Etag = stored.Etag
+	}
+	return catalog
+}
+
+func ensureRoutineTimestamps(rt *bqtypes.Routine) {
+	if rt.CreationTime == "" {
+		rt.CreationTime = nowMillis()
+	}
+	if rt.LastModifiedTime == "" {
+		rt.LastModifiedTime = rt.CreationTime
 	}
 }
 
@@ -95,6 +136,76 @@ func catalogListRoutines(ctx context.Context, deps *Dependencies, projectID, dat
 		out = append(out, routineFromDescriptor(desc))
 	}
 	return out
+}
+
+// mergeRoutineSources unions catalog and in-memory store entries when the
+// catalog is enabled so DDL-registered routines appear in list even if the
+// engine list lags, and store-only routines remain visible.
+func mergeRoutineSources(
+	ctx context.Context,
+	deps *Dependencies,
+	projectID, datasetID, filter string,
+) []bqtypes.Routine {
+	store := routineStore(deps)
+	fromStore := store.List(projectID, datasetID, filter)
+	if !routineCatalogEnabled(deps) {
+		return fromStore
+	}
+	wantType := routineTypeFromFilter(filter)
+	fromCatalog := catalogListRoutines(ctx, deps, projectID, datasetID)
+	byKey := make(map[string]bqtypes.Routine, len(fromCatalog)+len(fromStore))
+	order := make([]string, 0, len(fromCatalog)+len(fromStore))
+	add := func(rt bqtypes.Routine) {
+		if wantType != "" && string(rt.RoutineType) != wantType {
+			return
+		}
+		key := routineListKey(rt.RoutineReference)
+		if _, exists := byKey[key]; exists {
+			return
+		}
+		ensureRoutineTimestamps(&rt)
+		byKey[key] = rt
+		order = append(order, key)
+	}
+	for _, rt := range fromCatalog {
+		ref := rt.RoutineReference
+		stored, ok := store.Get(ref.ProjectID, ref.DatasetID, ref.RoutineID)
+		add(overlayRoutineFromStore(rt, stored, ok))
+	}
+	for _, rt := range fromStore {
+		key := routineListKey(rt.RoutineReference)
+		if _, exists := byKey[key]; exists {
+			continue
+		}
+		add(rt)
+	}
+	slices.Sort(order)
+	out := make([]bqtypes.Routine, 0, len(order))
+	for _, key := range order {
+		out = append(out, byKey[key])
+	}
+	return out
+}
+
+func routineLookupExisting(
+	ctx context.Context,
+	deps *Dependencies,
+	projectID, datasetID, routineID string,
+) (bqtypes.Routine, bool) {
+	store := routineStore(deps)
+	if routineCatalogEnabled(deps) {
+		if rt, ok := catalogGetRoutine(ctx, deps, projectID, datasetID, routineID); ok {
+			stored, found := store.Get(projectID, datasetID, routineID)
+			rt = overlayRoutineFromStore(rt, stored, found)
+			ensureRoutineTimestamps(&rt)
+			return rt, true
+		}
+	}
+	rt, ok := store.Get(projectID, datasetID, routineID)
+	if ok {
+		ensureRoutineTimestamps(&rt)
+	}
+	return rt, ok
 }
 
 // catalogInsertRoutine persists a new routine via the catalog. Returns true when

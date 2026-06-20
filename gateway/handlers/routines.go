@@ -93,7 +93,7 @@ func RoutineList(deps Dependencies) http.HandlerFunc {
 		datasetID := r.PathValue("datasetId")
 		var all []bqtypes.Routine
 		if routineCatalogEnabled(&deps) {
-			all = catalogListRoutines(r.Context(), &deps, projectID, datasetID)
+			all = mergeRoutineSources(r.Context(), &deps, projectID, datasetID, r.URL.Query().Get("filter"))
 		} else {
 			all = routineStore(&deps).List(projectID, datasetID, r.URL.Query().Get("filter"))
 		}
@@ -121,16 +121,7 @@ func RoutineList(deps Dependencies) http.HandlerFunc {
 func RoutineGet(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, routineID := routineIDFromPath(r)
-		var rt bqtypes.Routine
-		var ok bool
-		if routineCatalogEnabled(&deps) {
-			rt, ok = catalogGetRoutine(r.Context(), &deps, projectID, datasetID, routineID)
-			if !ok {
-				rt, ok = routineStore(&deps).Get(projectID, datasetID, routineID)
-			}
-		} else {
-			rt, ok = routineStore(&deps).Get(projectID, datasetID, routineID)
-		}
+		rt, ok := routineLookupExisting(r.Context(), &deps, projectID, datasetID, routineID)
 		if !ok {
 			writeError(w, http.StatusNotFound, reasonNotFound,
 				"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
@@ -189,7 +180,7 @@ func RoutineInsert(deps Dependencies) http.HandlerFunc {
 func RoutineUpdate(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		projectID, datasetID, routineID := routineIDFromPath(r)
-		existing, ok := routineStore(&deps).Get(projectID, datasetID, routineID)
+		existing, ok := routineLookupExisting(r.Context(), &deps, projectID, datasetID, routineID)
 		if !ok {
 			writeError(w, http.StatusNotFound, reasonNotFound,
 				"Not found: Routine "+projectID+":"+datasetID+"."+routineID)
