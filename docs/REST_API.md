@@ -136,8 +136,16 @@ materialized from the job registry before the engine executes the SQL
 **COPY / EXTRACT / undelete:** `configuration.copy` copies rows
 from `sourceTable` / `sourceTables` into `destinationTable`, honoring
 `writeDisposition` (`WRITE_EMPTY`, `WRITE_TRUNCATE`, `WRITE_APPEND`).
-Live sources prefer engine SQL (`CREATE TABLE AS SELECT` / `UNION ALL`);
-snapshot sources (`tableId@epoch`) and SQL fallbacks use catalog row copy.
+`operationType` accepts `COPY` (default), `SNAPSHOT`, `RESTORE`, and
+`CLONE` (clone billing is not modeled; treated like `COPY`). `SNAPSHOT`
+jobs stamp the destination with `type: SNAPSHOT` and optional
+`destinationExpirationTime` on `tables.get`; `RESTORE` recreates a
+`TABLE` from a snapshot source. Live sources prefer engine SQL
+(`CREATE TABLE AS SELECT` / `UNION ALL`); snapshot decorators on live
+tables use `FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(epoch)` in SQL.
+Deleted-table snapshot decorators (`tableId@epoch`) and SQL fallbacks
+use catalog row copy via `snapshots.Store`. Copy-dataset in the UI is
+orchestrated as one copy job per table (no single dataset-copy job type).
 `configuration.extract` serializes a source table to `destinationUris`
 (`CSV`, `NEWLINE_DELIMITED_JSON`, optional `GZIP`) via fake-gcs HTTP upload.
 Table undelete (python `test_undelete_table`, node `undeleteTable`) is a
