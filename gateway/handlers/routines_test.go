@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
 const (
@@ -220,4 +221,59 @@ func TestRoutineListAfterDDL(t *testing.T) {
 		t.Fatalf("ref = %+v", ref)
 	}
 	assertRoutineListed(t, deps, 1)
+}
+
+func TestRoutineGetCatalogTimestampsFromStore(t *testing.T) {
+	catalog := &fakeCatalogClient{}
+	deps := Dependencies{Routines: NewRoutineStore(), Catalog: catalog}
+	const routineID = "tsfn"
+	ddl := `CREATE FUNCTION tsfn(x INT64) RETURNS INT64 AS (x * 3);`
+	persistRoutineFromDDL(context.Background(), &deps, routineTestProjectID, routineTestDatasetID, ddl)
+
+	rec := httptest.NewRecorder()
+	RoutineGet(deps)(rec, newRoutineReq(http.MethodGet, routineID, ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Routine
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get: %v", err)
+	}
+	if got.CreationTime == "" || got.CreationTime == "0" {
+		t.Errorf("creationTime = %q, want non-zero", got.CreationTime)
+	}
+	if got.LastModifiedTime == "" || got.LastModifiedTime == "0" {
+		t.Errorf("lastModifiedTime = %q, want non-zero", got.LastModifiedTime)
+	}
+}
+
+func TestRoutineUpdateCatalogOnly(t *testing.T) {
+	catalog := &fakeCatalogClient{}
+	deps := Dependencies{Routines: NewRoutineStore(), Catalog: catalog}
+	const routineID = "catonly"
+	ddlSQL := "CREATE FUNCTION " + routineTestDatasetID + "." + routineID +
+		"(x INT64) RETURNS INT64 AS (x * 3);"
+	_, _ = catalog.UpsertRoutine(context.Background(), &enginepb.UpsertRoutineRequest{
+		Routine: &enginepb.RoutineDescriptor{
+			Routine: &enginepb.RoutineRef{
+				ProjectId: routineTestProjectID,
+				DatasetId: routineTestDatasetID,
+				RoutineId: routineID,
+			},
+			RoutineType:    defaultRoutineType,
+			Language:       defaultRoutineLanguage,
+			DefinitionBody: "x * 3",
+			DdlSql:         ddlSQL,
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	RoutineUpdate(deps)(rec, newRoutineReq(http.MethodPut, routineID, sampleRoutineBody(routineID, "x * 4")))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	got := decodeRoutineResponse(t, deps, routineID, "x * 4")
+	if got.DefinitionBody != "x * 4" {
+		t.Errorf("definitionBody = %q, want %q", got.DefinitionBody, "x * 4")
+	}
 }
