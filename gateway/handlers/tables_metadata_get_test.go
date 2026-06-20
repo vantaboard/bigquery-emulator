@@ -105,3 +105,132 @@ func TestTableInsertViewRoundTrips(t *testing.T) {
 		t.Errorf("view = %+v, want query %q", got.View, viewSQL)
 	}
 }
+
+func TestTableMetadataDefaultRoundingModeRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(
+		t,
+		`{"defaultRoundingMode":"ROUND_HALF_AWAY_FROM_ZERO"}`,
+		func(t *testing.T, got bqtypes.Table) {
+			if got.DefaultRoundingMode != "ROUND_HALF_AWAY_FROM_ZERO" {
+				t.Errorf("defaultRoundingMode = %q, want ROUND_HALF_AWAY_FROM_ZERO", got.DefaultRoundingMode)
+			}
+		},
+	)
+}
+
+func TestTableMetadataCaseInsensitiveRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t, `{"caseInsensitive":true}`, func(t *testing.T, got bqtypes.Table) {
+		if got.CaseInsensitive == nil || !*got.CaseInsensitive {
+			t.Errorf("caseInsensitive = %v, want true", got.CaseInsensitive)
+		}
+	})
+}
+
+func TestTableMetadataResourceTagsRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t,
+		`{"resourceTags":{"123456789012/team":"analytics"}}`,
+		func(t *testing.T, got bqtypes.Table) {
+			if got.ResourceTags["123456789012/team"] != "analytics" {
+				t.Errorf("resourceTags = %v", got.ResourceTags)
+			}
+		},
+	)
+}
+
+func TestTableMetadataTableConstraintsRoundTrip(t *testing.T) {
+	runTableMetadataRoundTrip(t,
+		`{"tableConstraints":{"primaryKey":{"columns":["id"]}}}`,
+		func(t *testing.T, got bqtypes.Table) {
+			if got.TableConstraints == nil || got.TableConstraints.PrimaryKey == nil {
+				t.Fatalf("tableConstraints = %+v", got.TableConstraints)
+			}
+			if len(got.TableConstraints.PrimaryKey.Columns) != 1 || got.TableConstraints.PrimaryKey.Columns[0] != "id" {
+				t.Errorf("primaryKey.columns = %v, want [id]", got.TableConstraints.PrimaryKey.Columns)
+			}
+		},
+	)
+}
+
+func TestTableGetIncludesStorageStatsStubZeros(t *testing.T) {
+	fake := &fakeCatalogClient{
+		describeTableFn: func(_ context.Context, _ *enginepb.DescribeTableRequest) (*enginepb.DescribeTableResponse, error) {
+			return &enginepb.DescribeTableResponse{}, nil
+		},
+	}
+	deps := Dependencies{Catalog: fake, Metadata: NewMetadataStore()}
+	get := newTableReq(http.MethodGet, testTableID, "")
+	rec := httptest.NewRecorder()
+	TableGet(deps)(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, field := range []struct {
+		name string
+		val  string
+	}{
+		{"numBytes", got.NumBytes},
+		{"numLongTermBytes", got.NumLongTermBytes},
+		{"numActiveLogicalBytes", got.NumActiveLogicalBytes},
+		{"numTotalLogicalBytes", got.NumTotalLogicalBytes},
+		{"numCurrentPhysicalBytes", got.NumCurrentPhysicalBytes},
+		{"numPhysicalBytes", got.NumPhysicalBytes},
+		{"numActivePhysicalBytes", got.NumActivePhysicalBytes},
+		{"numLongTermPhysicalBytes", got.NumLongTermPhysicalBytes},
+		{"numTimeTravelPhysicalBytes", got.NumTimeTravelPhysicalBytes},
+	} {
+		if field.val != "0" {
+			t.Errorf("%s = %q, want %q", field.name, field.val, "0")
+		}
+	}
+}
+
+func TestTableInsertViewUseLegacySqlRoundTrip(t *testing.T) {
+	const viewSQL = "SELECT 1 AS x"
+	fakeCatalog := &fakeCatalogClient{}
+	fakeQuery := &fakeQueryClient{
+		dryRunFn: func(_ context.Context, _ *enginepb.QueryRequest) (*enginepb.DryRunResponse, error) {
+			return &enginepb.DryRunResponse{
+				Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{{Name: "x", Type: sqlTypeINT64}},
+				},
+			}, nil
+		},
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return &fakeQueryResultStream{}, nil
+		},
+	}
+	store := NewMetadataStore()
+	deps := Dependencies{Catalog: fakeCatalog, Query: fakeQuery, Metadata: store}
+
+	body := `{
+		"tableReference":{"tableId":"` + testTableID + `"},
+		"view":{"query":` + strconv.Quote(viewSQL) + `,"useLegacySql":true}
+	}`
+	insert := newTableReq(http.MethodPost, "", body)
+	rec := httptest.NewRecorder()
+	TableInsert(deps)(rec, insert)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("insert: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	get := newTableReq(http.MethodGet, testTableID, "")
+	rec = httptest.NewRecorder()
+	TableGet(deps)(rec, get)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.View == nil {
+		t.Fatal("view missing")
+	}
+	if !got.View.UseLegacySQL {
+		t.Errorf("view.useLegacySql = false, want true")
+	}
+}
