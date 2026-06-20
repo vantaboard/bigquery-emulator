@@ -449,6 +449,7 @@ func runSyncQueryInsert(deps Dependencies, w http.ResponseWriter, r *http.Reques
 	if isCreateModelSQL(cfg.Query.Query) {
 		persistModelFromDDL(r.Context(), &deps, projectID, defaultDataset, cfg.Query.Query)
 	}
+	handleViewDDLAfterQuery(&deps, projectID, defaultDataset, cfg.Query.Query, statementType)
 	if cfg.Query.DestinationTable == nil && deps.Catalog != nil && len(rows) > 0 &&
 		(statementType == "" || statementType == statementTypeSelect) {
 		if dest, err := query.MaterializeImplicitDestination(

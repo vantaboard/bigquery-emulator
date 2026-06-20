@@ -358,7 +358,8 @@ func TableGet(deps Dependencies) http.HandlerFunc {
 			// instead of 404 so a `create_table(view)` + `get_table`
 			// round-trip keeps working (the view rows still come from
 			// the query path, which inlines the registered definition).
-			if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok && overlay.View != nil {
+			if overlay, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok &&
+				(overlay.View != nil || overlay.MaterializedView != nil) {
 				writeJSON(w, http.StatusOK,
 					tableResource(projectID, datasetID, tableID, overlay))
 				return

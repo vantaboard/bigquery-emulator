@@ -259,6 +259,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	if isCreateModelSQL(req.Query) {
 		persistModelFromDDL(r.Context(), &deps, projectID, defaultDataset, req.Query)
 	}
+	handleViewDDLAfterQuery(&deps, projectID, defaultDataset, req.Query, statementType)
 	result := &jobs.QueryResult{
 		Schema:           restSchema,
 		Rows:             rows,
