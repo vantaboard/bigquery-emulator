@@ -152,6 +152,23 @@ Table undelete (python `test_undelete_table`, node `undeleteTable`) is a
 COPY job from a snapshot decorator after `tables.delete`; there is no
 separate `tables.undelete` RPC.
 
+**LOAD jobs:** `configuration.load` ingests object data into
+`destinationTable` synchronously (job returns `state: DONE`). Supported
+`sourceFormat` values: `CSV`, `NEWLINE_DELIMITED_JSON`, `AVRO`, `PARQUET`,
+`ORC`, and `DATASTORE_BACKUP`. Supported URI schemes:
+
+| Scheme | Notes |
+|--------|-------|
+| `file://` | Local dev paths (preferred for offline ingest) |
+| absolute path | Same as `file://` without the prefix |
+| `gs://` | Requires the fake-gcs storage emulator (`FAKE_GCS_PORT` / `STORAGE_EMULATOR_HOST`) |
+
+Unsupported in the load path: `s3://`, `https://` direct fetch, and
+`GOOGLE_SHEETS` (use external tables instead). Upload variants:
+`POST /upload/.../jobs?uploadType=multipart` (job JSON part + file part) and
+resumable upload (`uploadType=resumable` init + `PUT` chunks). See
+[`docs/guides/load-jobs.md`](guides/load-jobs.md) for UI-oriented examples.
+
 [delete-md]: https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs/delete
 
 ### Queries (synchronous query API)
