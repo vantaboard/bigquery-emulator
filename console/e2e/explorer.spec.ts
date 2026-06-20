@@ -118,6 +118,40 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByRole('tab', { name: 'table_a' })).toHaveCount(2);
     });
 
+    test('creates an empty table with schema and shows it in Overview and sidebar', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('create-table-button').click();
+        await expect(page.getByTestId('create-table-modal')).toBeVisible();
+
+        await page.getByTestId('create-table-name').fill('e2e_created_table');
+
+        const fieldInputs = page.getByTestId('schema-builder').locator('input[placeholder="Field name"]');
+        await fieldInputs.nth(0).fill('event_id');
+        await fieldInputs.nth(1).fill('event_name');
+
+        const typeSelects = page.getByTestId('schema-builder').locator('select').filter({ hasText: 'STRING' });
+        await typeSelects.first().selectOption('INT64');
+        await typeSelects.nth(1).selectOption('STRING');
+
+        const modeSelects = page.getByTestId('schema-builder').locator('select').filter({ hasText: 'NULLABLE' });
+        await modeSelects.first().selectOption('REQUIRED');
+
+        await Promise.all([
+            page.waitForResponse(
+                (r) =>
+                    r.url().includes('/datasets/test-dataset/tables') &&
+                    r.request().method() === 'POST' &&
+                    r.ok(),
+            ),
+            page.getByTestId('create-table-submit').click(),
+        ]);
+
+        await expect(page.getByTestId('create-table-modal')).not.toBeVisible();
+        await expect(page.getByTestId('dataset-overview-tables')).toContainText('e2e_created_table');
+
+        await expect(page.getByTestId('table-e2e_created_table')).toBeVisible({ timeout: 10_000 });
+    });
+
     test('opens a dataset from the sidebar and shows Overview', async ({ page }) => {
         await openDataset(page);
         await expect(page.getByTestId('breadcrumbs')).toContainText('test-dataset');
