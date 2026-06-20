@@ -45,6 +45,12 @@ const ::googlesql::Table* FindProjectView(absl::string_view project_id,
                                           absl::string_view dataset_id,
                                           absl::string_view view_name);
 
+// Returns metadata for a registered view when present.
+bool FindRegisteredViewInfo(absl::string_view project_id,
+                            absl::string_view dataset_id,
+                            absl::string_view view_name,
+                            RegisteredViewInfo* out);
+
 absl::Status DropProjectView(absl::string_view project_id,
                              absl::string_view view_name);
 

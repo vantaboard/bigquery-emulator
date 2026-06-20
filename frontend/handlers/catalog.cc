@@ -16,8 +16,10 @@
 #include "absl/types/span.h"
 #include "backend/catalog/measure_catalog.h"
 #include "backend/catalog/view_registry.h"
+#include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "googlesql/public/catalog.h"
 
 namespace bigquery_emulator {
 namespace frontend {
@@ -336,10 +338,38 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   }
   const auto id = TableIdFromProto(request->table());
   auto schema_or = storage_->GetSchema(id);
-  if (!schema_or.ok()) {
+  if (schema_or.ok()) {
+    backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+    return ::grpc::Status::OK;
+  }
+  if (!absl::IsNotFound(schema_or.status())) {
     return AbslToGrpcStatus(schema_or.status());
   }
-  backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+  const ::googlesql::Table* view = backend::catalog::FindProjectView(
+      id.project_id, id.dataset_id, id.table_id);
+  if (view == nullptr) {
+    return AbslToGrpcStatus(schema_or.status());
+  }
+  backend::catalog::RegisteredViewInfo info;
+  if (!backend::catalog::FindRegisteredViewInfo(
+          id.project_id, id.dataset_id, id.table_id, &info)) {
+    return AbslToGrpcStatus(schema_or.status());
+  }
+  v1::TableSchema* schema = response->mutable_schema();
+  for (int i = 0; i < view->NumColumns(); ++i) {
+    const ::googlesql::Column* col = view->GetColumn(i);
+    if (col == nullptr || col->GetType() == nullptr) {
+      continue;
+    }
+    absl::Status field_status = backend::schema::TypeToFieldSchema(
+        col->GetType(), col->Name(), schema->add_fields());
+    if (!field_status.ok()) {
+      return AbslToGrpcStatus(field_status);
+    }
+  }
+  response->set_table_type("VIEW");
+  response->set_view_query(info.view_definition);
+  response->set_view_use_legacy_sql(false);
   return ::grpc::Status::OK;
 }
 

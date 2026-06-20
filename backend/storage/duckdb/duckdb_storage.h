@@ -121,6 +121,10 @@ class DuckDBStorage : public Storage {
       const DatasetId& dataset_id) const override;
   absl::StatusOr<std::vector<RoutineRecord>> ListAllRoutines() const override;
 
+  absl::Status UpsertView(const ViewRecord& record) override;
+  absl::Status DeleteView(const ViewId& id) override;
+  absl::StatusOr<std::vector<ViewRecord>> ListAllViews() const override;
+
   absl::StatusOr<TableGovernance> GetTableGovernance(
       const TableId& id) const override;
   absl::Status UpsertRowAccessPolicy(

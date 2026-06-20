@@ -19,6 +19,7 @@
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
 #include "backend/catalog/udf_registry.h"
+#include "backend/catalog/view_persistence.h"
 #include "backend/catalog/view_registry.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/control/stubs/create_model.h"
@@ -300,8 +301,11 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
             "LocalCoordinatorEngine::ExecuteDdl: CREATE VIEW has null "
             "resolved stmt");
       }
-      return catalog::RegisterProjectView(
+      absl::Status registered = catalog::RegisterProjectView(
           request.project_id, *create_view, std::move(*reg_output), reg_tf);
+      if (!registered.ok()) return registered;
+      return catalog::PersistViewDdl(
+          bq_catalog->storage(), request, *create_view);
     }
     if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT) {
       const auto* create_tvf =

@@ -149,6 +149,14 @@ message DescribeTableRequest {
 }
 message DescribeTableResponse {
   TableSchema schema = 1;
+  // BigQuery REST `type` when the table is a logical view (empty for
+  // physical tables). Populated by Catalog.DescribeTable when the
+  // target is registered in the view registry rather than storage.
+  string table_type = 2;
+  // View SQL (`view.query` on the REST Table resource).
+  string view_query = 3;
+  // Always false for GoogleSQL views; carried for REST parity.
+  bool view_use_legacy_sql = 4;
 }
 
 // DataRow is a single row of stored data. Cells are positional and

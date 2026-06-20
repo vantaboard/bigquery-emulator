@@ -74,6 +74,7 @@ cc_binary(
         "//backend/engine",
         "//backend/engine/coordinator:local_coordinator_engine",
         "//backend/engine/coordinator:routine_rehydrate",
+        "//backend/engine/coordinator:view_rehydrate",
         "//backend/storage",
         "//backend/storage/duckdb:duckdb_storage",
         "//frontend/server:server",

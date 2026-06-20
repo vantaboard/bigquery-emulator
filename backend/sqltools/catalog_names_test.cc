@@ -114,6 +114,16 @@ class FakeCatalogStorage : public storage::Storage {
       const override {
     return absl::UnimplementedError("FakeCatalogStorage::ListAllRoutines");
   }
+  absl::Status UpsertView(const storage::ViewRecord&) override {
+    return absl::UnimplementedError("FakeCatalogStorage::UpsertView");
+  }
+  absl::Status DeleteView(const storage::ViewId&) override {
+    return absl::UnimplementedError("FakeCatalogStorage::DeleteView");
+  }
+  absl::StatusOr<std::vector<storage::ViewRecord>> ListAllViews()
+      const override {
+    return absl::UnimplementedError("FakeCatalogStorage::ListAllViews");
+  }
 
  private:
   static std::string TableKey(const storage::TableId& id) {

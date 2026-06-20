@@ -175,6 +175,16 @@ class FakeStorage : public storage::Storage {
       const override {
     return absl::UnimplementedError("FakeStorage::ListAllRoutines");
   }
+  absl::Status UpsertView(const storage::ViewRecord&) override {
+    return absl::UnimplementedError("FakeStorage::UpsertView");
+  }
+  absl::Status DeleteView(const storage::ViewId&) override {
+    return absl::UnimplementedError("FakeStorage::DeleteView");
+  }
+  absl::StatusOr<std::vector<storage::ViewRecord>> ListAllViews()
+      const override {
+    return absl::UnimplementedError("FakeStorage::ListAllViews");
+  }
 
  private:
   static std::string Key(const storage::TableId& id) {

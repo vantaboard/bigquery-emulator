@@ -108,6 +108,32 @@ const ::googlesql::Table* FindProjectView(absl::string_view project_id,
   return nullptr;
 }
 
+bool FindRegisteredViewInfo(absl::string_view project_id,
+                            absl::string_view dataset_id,
+                            absl::string_view view_name,
+                            RegisteredViewInfo* out) {
+  if (project_id.empty() || view_name.empty() || out == nullptr) {
+    return false;
+  }
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) return false;
+  for (const RegisteredViewEntry& entry : it->second.views) {
+    if (entry.view == nullptr) continue;
+    if (!absl::EqualsIgnoreCase(entry.view->Name(), view_name)) continue;
+    if (!dataset_id.empty() && !entry.dataset_id.empty() &&
+        !absl::EqualsIgnoreCase(entry.dataset_id, dataset_id)) {
+      continue;
+    }
+    *out = RegisteredViewInfo{entry.dataset_id,
+                              std::string(entry.view->Name()),
+                              entry.view_definition,
+                              /*use_standard_sql=*/true};
+    return true;
+  }
+  return false;
+}
+
 std::vector<RegisteredViewInfo> ListProjectViews(absl::string_view project_id,
                                                  absl::string_view dataset_id) {
   std::vector<RegisteredViewInfo> out;

@@ -16,6 +16,7 @@ cc_library(
         "duckdb_storage_read_stream.cc",
         "duckdb_storage_rows.cc",
         "duckdb_storage_routines.cc",
+        "duckdb_storage_views.cc",
         "duckdb_storage_governance.cc",
         "duckdb_storage_version_log.cc",
         "duckdb_storage_version_log_tombstone.cc",

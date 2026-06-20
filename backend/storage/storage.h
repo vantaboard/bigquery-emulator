@@ -91,6 +91,19 @@ struct RoutineRecord {
   std::string signature_json;
 };
 
+// Durable logical-view metadata. `ddl_sql` is the original CREATE VIEW
+// statement (re-analyzed at rehydrate time into the view registry).
+struct ViewId {
+  std::string project_id;
+  std::string dataset_id;
+  std::string view_id;
+};
+
+struct ViewRecord {
+  ViewId id;
+  std::string ddl_sql;
+};
+
 // Engine-agnostic cell value. The variant covers the BigQuery scalar
 // types plus ARRAY and STRUCT containers.
 //
@@ -415,6 +428,15 @@ class Storage {
       const DatasetId& dataset_id) const = 0;
   [[nodiscard]] virtual absl::StatusOr<std::vector<RoutineRecord>>
   ListAllRoutines() const = 0;
+
+  // ------------------------------------------------------------------
+  // Logical view DDL persistence (CREATE VIEW only; materialized views
+  // are storage-backed and do not use this table).
+  // ------------------------------------------------------------------
+  [[nodiscard]] virtual absl::Status UpsertView(const ViewRecord& record) = 0;
+  [[nodiscard]] virtual absl::Status DeleteView(const ViewId& id) = 0;
+  [[nodiscard]] virtual absl::StatusOr<std::vector<ViewRecord>> ListAllViews()
+      const = 0;
 
   // Row-access policies and column-level security metadata.
   [[nodiscard]] virtual absl::StatusOr<TableGovernance> GetTableGovernance(

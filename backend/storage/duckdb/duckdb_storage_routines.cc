@@ -132,6 +132,15 @@ absl::Status DuckDBStorage::InitCatalogTables() {
   absl::MutexLock lock(&mu_);
   absl::Status routines = EnsureRoutinesTable(impl_.get());
   if (!routines.ok()) return routines;
+  absl::Status views =
+      internal::RunSql(impl_.get(),
+                       "CREATE TABLE IF NOT EXISTS main.__bqemu_views ("
+                       "project_id VARCHAR NOT NULL, "
+                       "dataset_id VARCHAR NOT NULL, "
+                       "view_id VARCHAR NOT NULL, "
+                       "ddl_sql VARCHAR NOT NULL, "
+                       "PRIMARY KEY (project_id, dataset_id, view_id))");
+  if (!views.ok()) return views;
   return EnsureGovernanceTables(impl_.get());
 }
 

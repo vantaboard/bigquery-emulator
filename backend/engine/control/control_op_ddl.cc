@@ -19,6 +19,7 @@
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/catalog/udf_registry.h"
+#include "backend/catalog/view_persistence.h"
 #include "backend/catalog/view_registry.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
@@ -410,13 +411,16 @@ absl::Status RunDropTable(storage::Storage& storage,
       return absl::InvalidArgumentError(
           "control op executor: DROP VIEW has empty name_path");
     }
+    const storage::ViewId vid = catalog::ViewIdFromNamePath(
+        stmt->name_path(), project_id, default_dataset_id);
     absl::Status dropped =
         catalog::DropProjectView(project_id, stmt->name_path().back());
     if (!dropped.ok() && stmt->is_if_exists() &&
         dropped.code() == absl::StatusCode::kNotFound) {
       return absl::OkStatus();
     }
-    return dropped;
+    if (!dropped.ok()) return dropped;
+    return catalog::DeletePersistedView(storage, vid);
   }
   if (stmt->object_type() != "TABLE") {
     return absl::UnimplementedError(

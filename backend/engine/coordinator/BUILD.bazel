@@ -201,6 +201,26 @@ cc_library(
 )
 
 cc_library(
+    name = "view_rehydrate",
+    srcs = ["view_rehydrate.cc"],
+    hdrs = ["view_rehydrate.h"],
+    deps = [
+        ":local_coordinator_analyze",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/catalog:udf_registration_catalog",
+        "//backend/catalog:udf_registry",
+        "//backend/catalog:view_registry",
+        "//backend/engine",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/resolved_ast",
+        "@googlesql//googlesql/resolved_ast:resolved_node_kind_cc_proto",
+    ],
+)
+
+cc_library(
     name = "local_coordinator_engine",
     srcs = [
         "local_coordinator_engine.cc",
@@ -230,6 +250,7 @@ cc_library(
         "//backend/catalog:python_udf_registry",
         "//backend/catalog:procedure_registry",
         "//backend/catalog:routine_persistence",
+        "//backend/catalog:view_persistence",
         "//backend/catalog:tvf_registry",
         "//backend/catalog:udf_registry",
         "//backend/catalog:udf_registration_catalog",

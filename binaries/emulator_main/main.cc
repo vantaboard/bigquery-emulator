@@ -25,6 +25,7 @@
 #include "absl/status/statusor.h"
 #include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/coordinator/routine_rehydrate.h"
+#include "backend/engine/coordinator/view_rehydrate.h"
 #include "backend/engine/engine.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
@@ -217,6 +218,15 @@ int main(int argc, char** argv) {
   if (!rehydrate.ok()) {
     std::fprintf(stderr,
                  "[emulator_main] failed to rehydrate routines: %s\n",
+                 std::string(rehydrate.message()).c_str());
+    return EXIT_FAILURE;
+  }
+
+  rehydrate = bigquery_emulator::backend::engine::coordinator::
+      RehydrateViewsFromStorage(storage.get());
+  if (!rehydrate.ok()) {
+    std::fprintf(stderr,
+                 "[emulator_main] failed to rehydrate views: %s\n",
                  std::string(rehydrate.message()).c_str());
     return EXIT_FAILURE;
   }
