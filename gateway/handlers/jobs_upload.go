@@ -57,8 +57,39 @@ func runSyncCopyInsert(deps Dependencies, w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	persistCopyTableMetadata(deps, cfg.Copy, projectID)
 	finalizeSuccessfulCopyJob(job, start, result)
 	writeJSON(w, http.StatusOK, job)
+}
+
+// persistCopyTableMetadata stashes REST-only destination metadata from copy
+// jobs (snapshot typing, expiration) so tables.get round-trips what the job
+// supplied.
+func persistCopyTableMetadata(deps Dependencies, cfg *jobs.JobConfigurationCopy, projectID string) {
+	if deps.Metadata == nil || cfg == nil || cfg.DestinationTable == nil {
+		return
+	}
+	op := copy.NormalizeOperationType(cfg.OperationType)
+	exp := strings.TrimSpace(cfg.DestinationExpirationTime)
+	if op == copy.OperationCopy && exp == "" {
+		return
+	}
+	destProject := cfg.DestinationTable.ProjectID
+	if destProject == "" {
+		destProject = projectID
+	}
+	patch := bqtypes.Table{}
+	if exp != "" {
+		patch.ExpirationTime = bqtypes.MillisTimestamp(exp)
+	}
+	switch op {
+	case copy.OperationSnapshot:
+		patch.Type = snapshotTableType
+	case copy.OperationRestore:
+		patch.Type = defaultTableType
+	}
+	deps.Metadata.MergeTable(destProject, cfg.DestinationTable.DatasetID,
+		cfg.DestinationTable.TableID, patch)
 }
 
 // runSyncExtractInsert reads table rows and uploads CSV/JSON to GCS.

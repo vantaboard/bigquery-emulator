@@ -35,6 +35,10 @@ const materializedViewTableType = "MATERIALIZED_VIEW"
 // external tables (tables.insert with externalDataConfiguration).
 const externalTableType = "EXTERNAL"
 
+// snapshotTableType is the BigQuery REST type string for table snapshots
+// created via configuration.copy jobs with operationType=SNAPSHOT.
+const snapshotTableType = "SNAPSHOT"
+
 // tableIDFromPath returns the {projectId}/{datasetId}/{tableId}
 // triple captured by the route pattern. It strips any AIP-136 custom-
 // method suffix (e.g. ":getIamPolicy") from the tableId so the same

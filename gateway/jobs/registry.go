@@ -237,6 +237,12 @@ type JobConfigurationCopy struct {
 	WriteDisposition                   string                           `json:"writeDisposition,omitempty"`
 	CreateDisposition                  string                           `json:"createDisposition,omitempty"`
 	DestinationEncryptionConfiguration *bqtypes.EncryptionConfiguration `json:"destinationEncryptionConfiguration,omitempty"`
+	// OperationType is COPY (default), SNAPSHOT, RESTORE, or CLONE per
+	// BigQuery JobConfigurationTableCopy.operationType.
+	OperationType string `json:"operationType,omitempty"`
+	// DestinationExpirationTime is epoch milliseconds when the destination
+	// table expires (decimal string on the wire).
+	DestinationExpirationTime string `json:"destinationExpirationTime,omitempty"`
 }
 
 // JobConfigurationExtract is the per-extract slice of a JobConfiguration.

@@ -23,7 +23,35 @@ const (
 	writeEmpty    = "WRITE_EMPTY"
 	writeAppend   = "WRITE_APPEND"
 	createNever   = "CREATE_NEVER"
+
+	// OperationCopy is the default copy job operation (table-to-table copy).
+	OperationCopy = "COPY"
+	// OperationSnapshot creates a SNAPSHOT destination from a TABLE source.
+	OperationSnapshot = "SNAPSHOT"
+	// OperationRestore creates a TABLE destination from a SNAPSHOT source.
+	OperationRestore = "RESTORE"
+	// OperationClone is accepted but treated like COPY (clone billing is N/A).
+	OperationClone = "CLONE"
 )
+
+// NormalizeOperationType maps empty/unspecified operationType to COPY.
+func NormalizeOperationType(op string) string {
+	switch strings.ToUpper(strings.TrimSpace(op)) {
+	case "", "OPERATION_TYPE_UNSPECIFIED":
+		return OperationCopy
+	default:
+		return strings.ToUpper(strings.TrimSpace(op))
+	}
+}
+
+func validateOperationType(op string) error {
+	switch op {
+	case OperationCopy, OperationSnapshot, OperationRestore, OperationClone:
+		return nil
+	default:
+		return fmt.Errorf("unsupported operationType %q", op)
+	}
+}
 
 // Result captures copy-job statistics.
 type Result struct {
@@ -37,6 +65,10 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 ) (Result, error) {
 	if cfg == nil {
 		return Result{}, errors.New("copy configuration is required")
+	}
+	op := NormalizeOperationType(cfg.OperationType)
+	if err := validateOperationType(op); err != nil {
+		return Result{}, err
 	}
 	if cfg.DestinationTable == nil || cfg.DestinationTable.TableID == "" {
 		return Result{}, errors.New("destinationTable.tableId is required")
@@ -67,6 +99,9 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 		return Result{}, err
 	}
 
+	if shouldUseSQLCopy(ctx, catalog, snapStore, query, sources) {
+		return executeSQLCopy(ctx, catalog, query, sources, destProject, destDataset, destTable, wd, cd)
+	}
 	if hasSnapshotSource(sources) {
 		return executeCatalogCopy(ctx, catalog, snapStore, sources, destProject, destDataset, destTable, wd)
 	}
@@ -86,6 +121,38 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 		}
 	}
 	return executeCatalogCopy(ctx, catalog, snapStore, sources, destProject, destDataset, destTable, wd)
+}
+
+// shouldUseSQLCopy returns true when a decorated source references a live
+// table and the engine SQL path (FOR SYSTEM_TIME AS OF) should be used.
+// Deleted-table decorators resolve via snapshots.Store in catalog copy.
+func shouldUseSQLCopy(ctx context.Context, catalog enginepb.CatalogClient,
+	snapStore *snapshots.Store, query enginepb.QueryClient,
+	sources []bqtypes.TableReference,
+) bool {
+	if query == nil {
+		return false
+	}
+	for _, src := range sources {
+		base, epoch, decorated := snapshots.ParseDecorator(src.TableID)
+		if !decorated {
+			continue
+		}
+		if snapStore != nil {
+			if _, err := snapStore.ResolveAtEpoch(src.ProjectID, src.DatasetID, base, epoch); err == nil {
+				continue
+			}
+		}
+		ref := &enginepb.TableRef{
+			ProjectId: src.ProjectID,
+			DatasetId: src.DatasetID,
+			TableId:   base,
+		}
+		if tableExists(ctx, catalog, ref) {
+			return true
+		}
+	}
+	return false
 }
 
 func checkCreateDisposition(ctx context.Context, catalog enginepb.CatalogClient,
