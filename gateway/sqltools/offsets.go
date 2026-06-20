@@ -57,6 +57,14 @@ func int32FromInt(v int) int32 {
 	return int32(v)
 }
 
+func int32Ptr(v int32) *int32 {
+	if v < 0 {
+		return nil
+	}
+	out := v
+	return &out
+}
+
 func convertCursorToUTF8(sql string, unit string, cursor int32) int32 {
 	if normalizeOffsetUnit(unit) != offsetUnitUTF16 {
 		return cursor
@@ -79,10 +87,10 @@ type diagnosticWire struct {
 	Severity   string `json:"severity"`
 	EndLine    int32  `json:"endLine,omitempty"`
 	EndColumn  int32  `json:"endColumn,omitempty"`
-	StartByte  int32  `json:"startByte,omitempty"`
-	EndByte    int32  `json:"endByte,omitempty"`
-	StartUTF16 int32  `json:"startUtf16,omitempty"`
-	EndUTF16   int32  `json:"endUtf16,omitempty"`
+	StartByte  *int32 `json:"startByte,omitempty"`
+	EndByte    *int32 `json:"endByte,omitempty"`
+	StartUTF16 *int32 `json:"startUtf16,omitempty"`
+	EndUTF16   *int32 `json:"endUtf16,omitempty"`
 }
 
 func diagnosticFromProto(sql string, unit string, diag *enginepb.SqlDiagnostic) diagnosticWire {
@@ -93,15 +101,17 @@ func diagnosticFromProto(sql string, unit string, diag *enginepb.SqlDiagnostic) 
 		Severity:  diag.GetSeverity(),
 		EndLine:   diag.GetEndLine(),
 		EndColumn: diag.GetEndColumn(),
-		StartByte: diag.GetStartByte(),
-		EndByte:   diag.GetEndByte(),
+		StartByte: int32Ptr(diag.GetStartByte()),
+		EndByte:   int32Ptr(diag.GetEndByte()),
 	}
 	if normalizeOffsetUnit(unit) == offsetUnitUTF16 && sql != "" {
-		if out.StartByte >= 0 {
-			out.StartUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
+		if out.StartByte != nil {
+			out.StartUTF16 = int32Ptr(
+				int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(*out.StartByte))))
 		}
-		if out.EndByte >= 0 {
-			out.EndUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
+		if out.EndByte != nil {
+			out.EndUTF16 = int32Ptr(
+				int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(*out.EndByte))))
 		}
 	}
 	return out
@@ -112,8 +122,8 @@ type tokenWire struct {
 	Image      string `json:"image"`
 	StartByte  int32  `json:"startByte"`
 	EndByte    int32  `json:"endByte"`
-	StartUTF16 int32  `json:"startUtf16,omitempty"`
-	EndUTF16   int32  `json:"endUtf16,omitempty"`
+	StartUTF16 *int32 `json:"startUtf16,omitempty"`
+	EndUTF16   *int32 `json:"endUtf16,omitempty"`
 }
 
 func tokenFromProto(sql string, unit string, tok *enginepb.SqlToken) tokenWire {
@@ -124,8 +134,10 @@ func tokenFromProto(sql string, unit string, tok *enginepb.SqlToken) tokenWire {
 		EndByte:   tok.GetEndByte(),
 	}
 	if normalizeOffsetUnit(unit) == offsetUnitUTF16 && sql != "" {
-		out.StartUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte)))
-		out.EndUTF16 = int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte)))
+		out.StartUTF16 = int32Ptr(
+			int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.StartByte))))
+		out.EndUTF16 = int32Ptr(
+			int32FromInt(utf8ByteOffsetToCodeUnit(sql, int(out.EndByte))))
 	}
 	return out
 }

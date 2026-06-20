@@ -11,7 +11,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const statusInvalid = "invalid"
+const (
+	statusInvalid  = "invalid"
+	errSQLRequired = "sql is required"
+)
 
 // HandlerDeps bundles dependencies for SQL tools HTTP handlers.
 type HandlerDeps struct {
@@ -146,7 +149,7 @@ func (d HandlerDeps) handleFormat(w http.ResponseWriter, r *http.Request) {
 	if req.SQL == "" {
 		writeJSON(w, http.StatusBadRequest, errEnvelope{
 			Code: http.StatusBadRequest, Status: statusInvalid,
-			Message: "sql is required",
+			Message: errSQLRequired,
 		})
 		return
 	}
@@ -195,6 +198,13 @@ func (d HandlerDeps) handleParse(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errEnvelope{
 			Code: http.StatusBadRequest, Status: statusInvalid,
 			Message: "invalid JSON: " + err.Error(),
+		})
+		return
+	}
+	if req.SQL == "" {
+		writeJSON(w, http.StatusBadRequest, errEnvelope{
+			Code: http.StatusBadRequest, Status: statusInvalid,
+			Message: errSQLRequired,
 		})
 		return
 	}
@@ -407,7 +417,7 @@ func (d HandlerDeps) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	if req.SQL == "" {
 		writeJSON(w, http.StatusBadRequest, errEnvelope{
 			Code: http.StatusBadRequest, Status: statusInvalid,
-			Message: "sql is required",
+			Message: errSQLRequired,
 		})
 		return
 	}
