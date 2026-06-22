@@ -99,6 +99,10 @@ func iterateSessionMatrix(ctx context.Context, sessions []*Session, enabled []Pr
 	return report
 }
 
+func sessionProjectBase(env *EmulatorEnv, projectID string) string {
+	return env.BaseURL + "/bigquery/v2/projects/" + projectID
+}
+
 func runSession(ctx context.Context, sess *Session, p Profile, opts SessionOptions) Result {
 	started := time.Now()
 	result := Result{
@@ -115,10 +119,12 @@ func runSession(ctx context.Context, sess *Session, p Profile, opts SessionOptio
 	}
 	defer func() { _ = env.Close() }()
 
-	base := env.BaseURL + "/bigquery/v2/projects/" + sess.ProjectID
 	defaultDataset := sess.DefaultDataset
 
 	for i, step := range sess.Steps {
+		// Re-read BaseURL each step: RestartEngine replaces the in-process
+		// gateway httptest server and updates env.BaseURL.
+		base := sessionProjectBase(env, sess.ProjectID)
 		if err := executeSessionStep(ctx, env, base, defaultDataset, step, fmt.Sprintf("[%d]", i)); err != nil {
 			result.Message = err.Error()
 			return finishSessionMaybeKnown(result, started, sess.KnownFailing)

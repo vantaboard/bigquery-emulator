@@ -133,6 +133,21 @@ func TestSessionKnownFailingFlip(t *testing.T) {
 	}
 }
 
+func TestSessionProjectBaseUsesEnvURL(t *testing.T) {
+	env := &EmulatorEnv{BaseURL: "http://127.0.0.1:9999"}
+	got := sessionProjectBase(env, "proj-x")
+	want := "http://127.0.0.1:9999/bigquery/v2/projects/proj-x"
+	if got != want {
+		t.Fatalf("got=%q want=%q", got, want)
+	}
+	env.BaseURL = "http://127.0.0.1:8888"
+	got = sessionProjectBase(env, "proj-x")
+	want = "http://127.0.0.1:8888/bigquery/v2/projects/proj-x"
+	if got != want {
+		t.Fatalf("after restart got=%q want=%q", got, want)
+	}
+}
+
 func testStart() time.Time {
 	return time.Now().Add(-time.Millisecond)
 }

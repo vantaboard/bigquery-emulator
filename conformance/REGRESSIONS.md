@@ -16,7 +16,7 @@ See [`.cursor/rules/pin-reported-bugs.mdc`](../.cursor/rules/pin-reported-bugs.m
 | R2 | View created via client returns 0 rows (worked in UI) | core_usage + session | `3964e2bd`, `4b7abe5d`, `7a279ac1` view persistence |
 | R3 | After view fix, `tables.list` on source dataset returns empty | session | `0c8f3408` session harness + dataset list assertion |
 | R4 | Engine abort on duplicate catalog name during view replay | session + catalog unit test | `c568e6d6`, `93717eda` crash-safety guards |
-| R5 | Views not persisted across container restart (client path) | session (`restart:`) | **known_failing** — plan 08 |
+| R5 | Views not persisted across container restart (client path) | session (`restart:`) + e2e | plan 08: harness base URL + view rehydrate |
 | R6 | Naive TIMESTAMP param `'2026-06-22T10:00:00'` rejected | differential + e2e matrix | `3daff670`, `462a9578` param wire forms |
 | R7 | `UNION DISTINCT` → "SetOperationScan op is not UNION ALL" | setops fixture + differential | `6bf52da6` semantic UNION DISTINCT |
 | R8 | CTE in subquery → "WithRefScan without active WithScan bindings" | cte_subquery + differential | `a7e968ff` materialized WITH bindings |
@@ -45,7 +45,8 @@ See [`.cursor/rules/pin-reported-bugs.mdc`](../.cursor/rules/pin-reported-bugs.m
 
 ### R5 — client view survives restart
 
-- `conformance/sessions/restart_view_durability.yaml` (**known_failing** until plan 08)
+- `conformance/sessions/restart_view_durability.yaml`
+- `gateway/e2e/restart_durability_test.go`
 
 ### R6 — naive ISO TIMESTAMP parameter
 
@@ -88,6 +89,7 @@ R4:
   - backend/catalog/catalog_crash_safety_test.cc
 R5:
   - conformance/sessions/restart_view_durability.yaml
+  - gateway/e2e/restart_durability_test.go
 R6:
   - conformance/differential/corpus/timestamp_param_naive.yaml
   - gateway/e2e/query_params_matrix_test.go
