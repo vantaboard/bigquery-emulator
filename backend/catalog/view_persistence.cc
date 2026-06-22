@@ -22,10 +22,9 @@ bool ViewIdIsComplete(const storage::ViewId& id) {
 
 }  // namespace
 
-storage::ViewId ViewIdFromNamePath(
-    const std::vector<std::string>& name_path,
-    absl::string_view project_id,
-    absl::string_view default_dataset_id) {
+storage::ViewId ViewIdFromNamePath(const std::vector<std::string>& name_path,
+                                   absl::string_view project_id,
+                                   absl::string_view default_dataset_id) {
   storage::ViewId id;
   switch (name_path.size()) {
     case 1:
@@ -49,15 +48,14 @@ storage::ViewId ViewIdFromNamePath(
   return id;
 }
 
-absl::Status PersistViewDdl(
-    storage::Storage* storage,
-    const engine::QueryRequest& request,
-    const ::googlesql::ResolvedCreateViewStmt& stmt) {
+absl::Status PersistViewDdl(storage::Storage* storage,
+                            const engine::QueryRequest& request,
+                            const ::googlesql::ResolvedCreateViewStmt& stmt) {
   if (storage == nullptr) return absl::OkStatus();
   storage::ViewRecord rec;
   rec.ddl_sql = request.sql;
-  rec.id = ViewIdFromNamePath(stmt.name_path(), request.project_id,
-                              request.default_dataset_id);
+  rec.id = ViewIdFromNamePath(
+      stmt.name_path(), request.project_id, request.default_dataset_id);
   if (!ViewIdIsComplete(rec.id)) return absl::OkStatus();
   return storage->UpsertView(rec);
 }

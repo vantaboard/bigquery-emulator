@@ -43,7 +43,8 @@ absl::Status AnalyzeAndRegisterViewDdl(storage::Storage* storage,
   }
 
   absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-      reg_output = AnalyzeStatementImpl(request, reg_catalog,
+      reg_output = AnalyzeStatementImpl(request,
+                                        reg_catalog,
                                         /*all_statements=*/true);
   if (!reg_output.ok()) return reg_output.status();
   const ::googlesql::ResolvedStatement* reg_stmt =
@@ -62,8 +63,8 @@ absl::Status AnalyzeAndRegisterViewDdl(storage::Storage* storage,
     return absl::InternalError(
         "view_rehydrate: CREATE VIEW has null resolved stmt");
   }
-  return catalog::RegisterProjectView(rec.id.project_id, *create_view,
-                                      std::move(*reg_output), reg_tf);
+  return catalog::RegisterProjectView(
+      rec.id.project_id, *create_view, std::move(*reg_output), reg_tf);
 }
 
 }  // namespace

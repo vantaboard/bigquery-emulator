@@ -51,8 +51,8 @@ absl::StatusOr<ViewRecord> ReadViewRow(::duckdb_result* result, idx_t row) {
   return out;
 }
 
-absl::StatusOr<std::vector<ViewRecord>> QueryViews(DuckDBStorage::Impl* impl,
-                                                   absl::string_view where_clause) {
+absl::StatusOr<std::vector<ViewRecord>> QueryViews(
+    DuckDBStorage::Impl* impl, absl::string_view where_clause) {
   std::string sql = absl::StrCat(
       "SELECT project_id, dataset_id, view_id, ddl_sql FROM ", kViewsTable);
   if (!where_clause.empty()) {
@@ -118,16 +118,16 @@ absl::Status DuckDBStorage::DeleteView(const ViewId& id) {
   absl::MutexLock lock(&mu_);
   absl::Status init = EnsureViewsTable(impl_.get());
   if (!init.ok()) return init;
-  const std::string sql = absl::StrCat(
-      "DELETE FROM ",
-      kViewsTable,
-      " WHERE project_id = '",
-      internal::EscapeStringLiteralInner(id.project_id),
-      "' AND dataset_id = '",
-      internal::EscapeStringLiteralInner(id.dataset_id),
-      "' AND view_id = '",
-      internal::EscapeStringLiteralInner(id.view_id),
-      "'");
+  const std::string sql =
+      absl::StrCat("DELETE FROM ",
+                   kViewsTable,
+                   " WHERE project_id = '",
+                   internal::EscapeStringLiteralInner(id.project_id),
+                   "' AND dataset_id = '",
+                   internal::EscapeStringLiteralInner(id.dataset_id),
+                   "' AND view_id = '",
+                   internal::EscapeStringLiteralInner(id.view_id),
+                   "'");
   return internal::RunSql(impl_.get(), sql);
 }
 

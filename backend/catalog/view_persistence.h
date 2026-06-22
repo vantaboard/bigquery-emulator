@@ -11,10 +11,9 @@ namespace bigquery_emulator {
 namespace backend {
 namespace catalog {
 
-storage::ViewId ViewIdFromNamePath(
-    const std::vector<std::string>& name_path,
-    absl::string_view project_id,
-    absl::string_view default_dataset_id);
+storage::ViewId ViewIdFromNamePath(const std::vector<std::string>& name_path,
+                                   absl::string_view project_id,
+                                   absl::string_view default_dataset_id);
 
 absl::Status PersistViewDdl(storage::Storage* storage,
                             const engine::QueryRequest& request,
