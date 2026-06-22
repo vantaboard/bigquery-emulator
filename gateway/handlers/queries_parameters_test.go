@@ -103,6 +103,69 @@ func TestParametersToEngineMapNamedAndPositional(t *testing.T) {
 	}
 }
 
+func TestParametersToEngineMapTimestampNaiveIso(t *testing.T) {
+	t.Parallel()
+	params, err := bqtypes.ParseQueryParameters([]byte(`[{
+		"name":"reference_dt",
+		"parameterType":{"type":"` + sqlTypeTIMESTAMP + `"},
+		"parameterValue":{"value":"2026-06-22T10:00:00"}
+	}]`))
+	if err != nil {
+		t.Fatalf("ParseQueryParameters: %v", err)
+	}
+	got := parametersToEngineMap(params)
+	p := got["reference_dt"]
+	if p == nil || p.GetTypeKind() != sqlTypeTIMESTAMP ||
+		p.GetValueJson() != "2026-06-22T10:00:00" {
+		t.Fatalf("reference_dt = %+v", p)
+	}
+}
+
+func TestParametersToEngineMapWireMatrix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		paramType    string
+		paramValue   string
+		wantTypeKind string
+		wantTypeJSON string
+		wantValue    string
+	}{
+		{"date", "DATE", "2020-06-15", "DATE", "", "2020-06-15"},
+		{"datetime", "DATETIME", "2020-06-15T12:30:45", "DATETIME", "", "2020-06-15T12:30:45"},
+		{"time", "TIME", "12:30:45.123456", "TIME", "", "12:30:45.123456"},
+		{"numeric", "NUMERIC", "3.14159", "NUMERIC", "", "3.14159"},
+		{"bytes", "BYTES", "SGVsbG8=", "BYTES", "", "SGVsbG8="},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := `[{"name":"p","parameterType":{"type":"` + tc.paramType +
+				`"},"parameterValue":{"value":"` + tc.paramValue + `"}}]`
+			params, err := bqtypes.ParseQueryParameters([]byte(payload))
+			if err != nil {
+				t.Fatalf("ParseQueryParameters: %v", err)
+			}
+			got := parametersToEngineMap(params)
+			p := got["p"]
+			if p == nil {
+				t.Fatal("missing param p")
+			}
+			if p.GetTypeKind() != tc.wantTypeKind {
+				t.Errorf("TypeKind = %q, want %q", p.GetTypeKind(), tc.wantTypeKind)
+			}
+			if p.GetTypeJson() != tc.wantTypeJSON {
+				t.Errorf("TypeJson = %q, want %q", p.GetTypeJson(), tc.wantTypeJSON)
+			}
+			if p.GetValueJson() != tc.wantValue {
+				t.Errorf("ValueJson = %q, want %q", p.GetValueJson(), tc.wantValue)
+			}
+		})
+	}
+}
+
 func TestParametersToEngineMapTimestamp(t *testing.T) {
 	t.Parallel()
 	params, err := bqtypes.ParseQueryParameters([]byte(`[{

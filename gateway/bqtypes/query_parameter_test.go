@@ -85,3 +85,63 @@ func TestParameterTypeWireArray(t *testing.T) {
 			kind, typeJSON, typeKindARRAY, wantStructTypeJSON)
 	}
 }
+
+func TestQueryParameterWireMatrixPreservesRawStrings(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		payload   string
+		wantValue string
+	}{
+		{
+			name: "timestamp_naive_iso",
+			payload: `{"name":"p","parameterType":{"type":"TIMESTAMP"},
+				"parameterValue":{"value":"2026-06-22T10:00:00"}}`,
+			wantValue: "2026-06-22T10:00:00",
+		},
+		{
+			name: "timestamp_space",
+			payload: `{"name":"p","parameterType":{"type":"TIMESTAMP"},
+				"parameterValue":{"value":"2026-06-22 10:00:00"}}`,
+			wantValue: "2026-06-22 10:00:00",
+		},
+		{
+			name: "date_iso",
+			payload: `{"name":"p","parameterType":{"type":"DATE"},
+				"parameterValue":{"value":"2020-06-15"}}`,
+			wantValue: "2020-06-15",
+		},
+		{
+			name: "datetime_iso_t",
+			payload: `{"name":"p","parameterType":{"type":"DATETIME"},
+				"parameterValue":{"value":"2020-06-15T12:30:45"}}`,
+			wantValue: "2020-06-15T12:30:45",
+		},
+		{
+			name: "time_fractional",
+			payload: `{"name":"p","parameterType":{"type":"TIME"},
+				"parameterValue":{"value":"12:30:45.123456"}}`,
+			wantValue: "12:30:45.123456",
+		},
+		{
+			name: "bytes_base64",
+			payload: `{"name":"p","parameterType":{"type":"BYTES"},
+				"parameterValue":{"value":"SGVsbG8="}}`,
+			wantValue: "SGVsbG8=",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			params, err := bqtypes.ParseQueryParameters([]byte("[" + tc.payload + "]"))
+			if err != nil {
+				t.Fatalf("ParseQueryParameters: %v", err)
+			}
+			if got := params[0].ParameterValue.Value; got != tc.wantValue {
+				t.Errorf("Value = %q, want %q", got, tc.wantValue)
+			}
+		})
+	}
+}
