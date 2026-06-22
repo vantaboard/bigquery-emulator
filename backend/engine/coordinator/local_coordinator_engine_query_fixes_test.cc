@@ -28,7 +28,8 @@ TEST_F(LocalCoordinatorEngineTest,
   EXPECT_EQ(row.cells[0].string_value(), "2026-06-22 10:00:00+00");
 }
 
-TEST_F(LocalCoordinatorEngineTest, ExecuteQueryUnionDistinctInCteRoutesSemantic) {
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryUnionDistinctInCteRoutesSemantic) {
   CatalogBundle bundle = MakeCatalog();
   const char* sql = R"(
 WITH active AS (
