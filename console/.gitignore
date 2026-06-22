@@ -19,6 +19,7 @@ vendor/
 # Environment variables
 .env
 .env.local
+.envrc.local
 
 # IDE specific files
 .idea/

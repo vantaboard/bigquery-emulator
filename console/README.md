@@ -16,6 +16,7 @@ See [docs/api-contract.md](./docs/api-contract.md) and [docs/rollout-checklist.m
 ## Prerequisites
 
 - **Node.js 22+** and npm
+- **[direnv](https://direnv.net/)** (recommended) — loads [`.envrc`](.envrc) dev defaults when you enter the repo
 - A running **bigquery-emulator** (or real BigQuery with credentials) exposing **`/bigquery/v2`** on the HTTP port you configure
 
 ## Run the emulator
@@ -32,12 +33,12 @@ For active emulator development, use a **local build** from a sibling checkout i
 
 ```bash
 cd bigquery-emulator-ui
+direnv allow          # once per checkout — loads .envrc
 npm install
-cp .env.example .env   # optional: tune VITE_PROXY_TARGET, VITE_DEFAULT_PROJECT
 npm run dev
 ```
 
-[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/bigquery`** and **`/api/emulator`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:9050`).
+[Vite](https://vitejs.dev/) serves the app (default **5173**) and proxies **`/bigquery`** and **`/api/emulator`** to **`VITE_PROXY_TARGET`** (default `http://127.0.0.1:9050`, set in [`.envrc`](.envrc)).
 
 ## Develop against a local emulator build
 
@@ -61,7 +62,7 @@ task emulator:build-all
 ### Daily loop (in `bigquery-emulator-ui`)
 
 ```bash
-cp .env.example .env    # VITE_PROXY_TARGET=http://127.0.0.1:9050, optional VITE_DEFAULT_PROJECT=local-project
+direnv allow            # loads VITE_PROXY_TARGET, VITE_DEFAULT_PROJECT, EMULATOR_ROOT
 npm install
 task dev:all            # local emulator + Vite on 5173
 ```
@@ -125,13 +126,15 @@ CI is unchanged — it still uses the released GHCR image for reproducibility.
 
 ## Environment
 
+Dev defaults live in **[`.envrc`](.envrc)** (loaded by direnv). Override locally in **`.envrc.local`** (gitignored) or export before `direnv reload`.
+
 | Variable | Purpose |
 |----------|---------|
 | `VITE_PROXY_TARGET` | Dev: Vite proxy target for `/bigquery` and `/api/emulator` (default `http://127.0.0.1:9050`) |
 | `VITE_API_URL` | Optional absolute API base for production builds (empty = same origin) |
-| `VITE_DEFAULT_PROJECT` | Include this project in the sidebar when it has datasets but is missing from `GET /bigquery/v2/projects` (recommended: `local-project` for local emulator dev) |
+| `VITE_DEFAULT_PROJECT` | Include this project in the sidebar when it has datasets but is missing from `GET /bigquery/v2/projects` (default `local-project`) |
 | `VITE_SQL_TOOLS_TOKEN` | Optional: `X-BigQuery-Emulator-SqlTools-Token` for remote SQL Tools access when the emulator requires a token |
-| `EMULATOR_ROOT` | Taskfile only: path to local `bigquery-emulator` checkout (default `../bigquery-emulator`) |
+| `EMULATOR_ROOT` | Taskfile: path to local `bigquery-emulator` checkout (default `../bigquery-emulator`) |
 
 ## Development scripts
 
