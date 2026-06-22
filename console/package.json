@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local-emulator": "task dev:all",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:local": "task e2e:local",
     "test:e2e:ui": "playwright test --ui",
     "e2e:up": "docker compose -f docker-compose.e2e.yaml up -d --wait --build",
     "e2e:down": "docker compose -f docker-compose.e2e.yaml down -v"
