@@ -1,0 +1,10 @@
+name: params_datetime_space
+description: DATETIME query parameter with space separator.
+oracle_ref: params_datetime_space.json
+oracle_source: bq-cli
+project_id: proj-diff-params-datetime-space
+query: SELECT FORMAT_DATETIME('%Y-%m-%d %H:%M:%E*S', @p) AS v
+query_parameters:
+  - name: p
+    type: DATETIME
+    value: "2020-06-15 12:30:45"

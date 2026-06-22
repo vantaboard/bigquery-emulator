@@ -1,0 +1,10 @@
+name: params_date
+description: DATE query parameter ISO form.
+oracle_ref: params_date.json
+oracle_source: bq-cli
+project_id: proj-diff-params-date
+query: SELECT FORMAT_DATE('%Y-%m-%d', @p) AS v
+query_parameters:
+  - name: p
+    type: DATE
+    value: "2020-06-15"

@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-06-22T19:00:00Z",
+  "project": "proj-diff-params-struct-mixed",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "x",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "y",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "42"
+        },
+        {
+          "v": "hello"
+        }
+      ]
+    }
+  ]
+}

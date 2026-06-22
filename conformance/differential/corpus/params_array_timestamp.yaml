@@ -1,0 +1,17 @@
+name: params_array_timestamp
+description: ARRAY<TIMESTAMP> query parameter with naive ISO elements.
+oracle_ref: params_array_timestamp.json
+oracle_source: bq-cli
+project_id: proj-diff-params-array-timestamp
+query: |
+  SELECT COUNT(*) AS v
+  FROM UNNEST(@arr) AS ts
+  WHERE FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E*S', ts) IN (
+    '2026-06-22 10:00:00', '2026-06-22 11:00:00')
+query_parameters:
+  - name: arr
+    type: ARRAY
+    array_element_type: TIMESTAMP
+    array_values:
+      - "2026-06-22T10:00:00"
+      - "2026-06-22 11:00:00"

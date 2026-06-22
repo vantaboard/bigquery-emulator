@@ -1,0 +1,10 @@
+name: params_timestamp_offset
+description: TIMESTAMP parameter with numeric timezone offset.
+oracle_ref: params_timestamp_offset.json
+oracle_source: bq-cli
+project_id: proj-diff-params-timestamp-offset
+query: SELECT FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E*S', @p) AS v
+query_parameters:
+  - name: p
+    type: TIMESTAMP
+    value: "2026-06-22T10:00:00+05:30"

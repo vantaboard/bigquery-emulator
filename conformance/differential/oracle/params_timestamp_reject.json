@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-22T19:00:00Z",
+  "project": "proj-diff-params-timestamp-reject",
+  "oracle_source": "bq-cli",
+  "success": false,
+  "error": {
+    "code": 400,
+    "message": "Invalid timestamp string"
+  }
+}

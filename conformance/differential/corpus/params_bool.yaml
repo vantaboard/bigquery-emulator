@@ -1,0 +1,10 @@
+name: params_bool
+description: BOOL query parameter true/false strings.
+oracle_ref: params_bool.json
+oracle_source: bq-cli
+project_id: proj-diff-params-bool
+query: SELECT CAST(@p AS STRING) AS v
+query_parameters:
+  - name: p
+    type: BOOL
+    value: "true"

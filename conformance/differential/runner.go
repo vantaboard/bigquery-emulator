@@ -259,14 +259,43 @@ func toWireParams(params []QueryParameterYAML) []bqtypes.QueryParameter {
 	}
 	out := make([]bqtypes.QueryParameter, 0, len(params))
 	for _, p := range params {
+		paramType := &bqtypes.QueryParameterType{Type: strings.ToUpper(p.Type)}
+		paramValue := &bqtypes.QueryParameterValue{Value: p.Value}
+
+		if elem := strings.TrimSpace(p.ArrayElementType); elem != "" {
+			paramType.ArrayType = &bqtypes.QueryParameterType{
+				Type: strings.ToUpper(elem),
+			}
+		}
+		if len(p.StructFields) > 0 {
+			for _, f := range p.StructFields {
+				paramType.StructTypes = append(paramType.StructTypes, bqtypes.QueryParameterStructType{
+					Name: f.Name,
+					Type: bqtypes.QueryParameterType{Type: strings.ToUpper(f.Type)},
+				})
+			}
+		}
+		if len(p.ArrayValues) > 0 {
+			paramValue.ArrayValues = make([]bqtypes.QueryParameterValue, 0, len(p.ArrayValues))
+			for _, v := range p.ArrayValues {
+				paramValue.ArrayValues = append(paramValue.ArrayValues, bqtypes.QueryParameterValue{
+					Value: v,
+				})
+			}
+			paramValue.Value = ""
+		}
+		if len(p.StructValues) > 0 {
+			paramValue.StructValues = make(map[string]bqtypes.QueryParameterValue, len(p.StructValues))
+			for name, v := range p.StructValues {
+				paramValue.StructValues[name] = bqtypes.QueryParameterValue{Value: v}
+			}
+			paramValue.Value = ""
+		}
+
 		out = append(out, bqtypes.QueryParameter{
-			Name: p.Name,
-			ParameterType: &bqtypes.QueryParameterType{
-				Type: strings.ToUpper(p.Type),
-			},
-			ParameterValue: &bqtypes.QueryParameterValue{
-				Value: p.Value,
-			},
+			Name:           p.Name,
+			ParameterType:  paramType,
+			ParameterValue: paramValue,
 		})
 	}
 	return out

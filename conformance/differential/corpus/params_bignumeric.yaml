@@ -1,0 +1,10 @@
+name: params_bignumeric
+description: BIGNUMERIC query parameter high-precision decimal.
+oracle_ref: params_bignumeric.json
+oracle_source: bq-cli
+project_id: proj-diff-params-bignumeric
+query: SELECT CAST(@p AS STRING) AS v
+query_parameters:
+  - name: p
+    type: BIGNUMERIC
+    value: "99999999999999999999999999999.999999999"

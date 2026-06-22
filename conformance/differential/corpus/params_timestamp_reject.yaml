@@ -1,0 +1,10 @@
+name: params_timestamp_reject
+description: BigQuery rejects garbage TIMESTAMP parameter strings.
+oracle_ref: params_timestamp_reject.json
+oracle_source: bq-cli
+project_id: proj-diff-params-timestamp-reject
+query: SELECT @p AS v
+query_parameters:
+  - name: p
+    type: TIMESTAMP
+    value: "not-a-timestamp"

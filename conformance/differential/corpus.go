@@ -38,9 +38,19 @@ type CorpusCase struct {
 
 // QueryParameterYAML is the corpus-side spelling of a named query parameter.
 type QueryParameterYAML struct {
-	Name  string `yaml:"name"`
-	Type  string `yaml:"type"`
-	Value string `yaml:"value"`
+	Name             string                          `yaml:"name"`
+	Type             string                          `yaml:"type"`
+	Value            string                          `yaml:"value,omitempty"`
+	ArrayElementType string                          `yaml:"array_element_type,omitempty"`
+	ArrayValues      []string                        `yaml:"array_values,omitempty"`
+	StructFields     []QueryParameterStructFieldYAML `yaml:"struct_fields,omitempty"`
+	StructValues     map[string]string               `yaml:"struct_values,omitempty"`
+}
+
+// QueryParameterStructFieldYAML names one STRUCT parameter field.
+type QueryParameterStructFieldYAML struct {
+	Name string `yaml:"name"`
+	Type string `yaml:"type"`
 }
 
 // DefaultCorpusDir is the committed corpus root.

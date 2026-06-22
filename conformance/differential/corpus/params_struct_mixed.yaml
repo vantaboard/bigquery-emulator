@@ -1,0 +1,17 @@
+name: params_struct_mixed
+description: STRUCT query parameter with INT64 and STRING fields.
+oracle_ref: params_struct_mixed.json
+oracle_source: bq-cli
+project_id: proj-diff-params-struct-mixed
+query: SELECT @s.x AS x, @s.y AS y
+query_parameters:
+  - name: s
+    type: STRUCT
+    struct_fields:
+      - name: x
+        type: INT64
+      - name: y
+        type: STRING
+    struct_values:
+      x: "42"
+      y: hello

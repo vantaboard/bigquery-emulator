@@ -1,0 +1,10 @@
+name: params_bytes
+description: BYTES query parameter base64 wire form.
+oracle_ref: params_bytes.json
+oracle_source: bq-cli
+project_id: proj-diff-params-bytes
+query: SELECT TO_BASE64(@p) AS v
+query_parameters:
+  - name: p
+    type: BYTES
+    value: "SGVsbG8="

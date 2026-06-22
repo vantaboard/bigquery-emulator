@@ -1,0 +1,10 @@
+name: params_numeric
+description: NUMERIC query parameter decimal string.
+oracle_ref: params_numeric.json
+oracle_source: bq-cli
+project_id: proj-diff-params-numeric
+query: SELECT CAST(@p AS STRING) AS v
+query_parameters:
+  - name: p
+    type: NUMERIC
+    value: "3.14159"

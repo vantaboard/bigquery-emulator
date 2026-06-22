@@ -1,10 +1,29 @@
 {
-  "captured_at": "2026-06-22T17:59:21Z",
+  "captured_at": "2026-06-22T19:00:00Z",
   "project": "proj-diff-timestamp-param",
+  "job_id": "job_params_timestamp_naive_iso",
   "oracle_source": "bq-cli",
-  "success": false,
-  "error": {
-    "code": 400,
-    "message": "semantic: invalid TIMESTAMP parameter value '2026-06-22T10:00:00'"
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "reference_dt",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1782122400000000"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-timestamp-param",
+    "jobId": "job_params_timestamp_naive_iso"
   }
 }
