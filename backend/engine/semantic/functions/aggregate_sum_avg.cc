@@ -385,6 +385,12 @@ absl::StatusOr<Value> MinMaxAggregateImpl(
         if (take) best = v;
         break;
       }
+      case ::googlesql::TYPE_TIMESTAMP: {
+        const bool take = pick_max ? v.ToUnixMicros() > cur.ToUnixMicros()
+                                   : v.ToUnixMicros() < cur.ToUnixMicros();
+        if (take) best = v;
+        break;
+      }
       default:
         return MakeSemanticError(
             SemanticErrorReason::kNotImplemented,

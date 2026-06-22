@@ -7,7 +7,6 @@ Mirrors the reported transpiler binding-loss flow
 from __future__ import annotations
 
 from google.cloud import bigquery
-import pytest
 
 from conftest import make_dataset_id
 
@@ -59,20 +58,21 @@ def test_orphan_orders(
         [{"id": 10, "name": "alice"}],
     ) == []
 
-    client.query(
-        f"""
-        CREATE VIEW `{dataset_ref}.v_orders` AS
+    # tables.insert registers views in the engine view registry (same path as
+    # authorize_view); CREATE VIEW via jobs.query only updates gateway metadata.
+    v_orders = bigquery.Table(f"{dataset_ref}.v_orders")
+    v_orders.view_query = f"""
         SELECT * FROM `{orders_ref}`
         QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY order_id) = 1
-        """
-    ).result()
-    client.query(
-        f"""
-        CREATE VIEW `{dataset_ref}.v_profiles` AS
+    """
+    client.create_table(v_orders)
+
+    v_profiles = bigquery.Table(f"{dataset_ref}.v_profiles")
+    v_profiles.view_query = f"""
         SELECT * FROM `{profiles_ref}`
         QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) = 1
-        """
-    ).result()
+    """
+    client.create_table(v_profiles)
 
     rows = list(
         client.query(
