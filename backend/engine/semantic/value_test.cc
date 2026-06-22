@@ -217,10 +217,10 @@ TEST(SemanticValueTest, ParseParameterValueArrayString) {
   EXPECT_EQ(v->element(3).string_value(), "WY");
 }
 
-TEST(SemanticValueTest, ParseParameterValueDeferTemporalTypes) {
+TEST(SemanticValueTest, ParseParameterValueDateAccepted) {
   auto v = ParseParameterValue("\"2020-01-01\"", "DATE");
-  EXPECT_FALSE(v.ok());
-  EXPECT_EQ(v.status().code(), absl::StatusCode::kUnimplemented);
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_DATE);
 }
 
 TEST(SemanticValueTest, BigQueryTypeNameCoversPrimitiveSet) {

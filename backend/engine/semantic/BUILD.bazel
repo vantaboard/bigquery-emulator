@@ -85,12 +85,25 @@ cc_library(
         "@com_google_absl//absl/time",
         "@googlesql//googlesql/public:analyzer",
         "@googlesql//googlesql/public:civil_time",
+        "@googlesql//googlesql/public:evaluator",
         "@googlesql//googlesql/public:interval_value",
         "@googlesql//googlesql/public:numeric_value",
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:type_cc_proto",
         "@googlesql//googlesql/public:uuid_value",
+        "@googlesql//googlesql/public:value",
+    ],
+)
+
+cc_test(
+    name = "value_parameters_test",
+    srcs = ["value_parameters_test.cc"],
+    deps = [
+        ":value",
+        "@com_google_absl//absl/time",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/public:value",
     ],
 )

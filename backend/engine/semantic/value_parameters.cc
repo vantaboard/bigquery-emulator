@@ -17,6 +17,8 @@
 #include "absl/types/span.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -190,21 +192,98 @@ absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
   return out;
 }
 
-absl::StatusOr<Value> ParseTimestampParameter(absl::string_view body) {
+using ::googlesql::functions::TimestampScale;
+
+constexpr TimestampScale kTimestampMicros = TimestampScale::kMicroseconds;
+
+absl::StatusOr<Value> ParseDateParameter(absl::string_view body) {
   const std::string text(body);
-  absl::Time t;
-  std::string err;
+  int32_t date = 0;
+  static constexpr const char* kFormats[] = {"%Y-%m-%d", "%F"};
+  for (const char* fmt : kFormats) {
+    if (auto s = ::googlesql::functions::ParseStringToDate(
+            fmt, text, /*parse_version2=*/true, &date);
+        s.ok()) {
+      return Value::Date(date);
+    }
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: invalid DATE parameter value '", body, "'"));
+}
+
+absl::StatusOr<Value> ParseDatetimeParameter(absl::string_view body) {
+  const std::string text(body);
+  ::googlesql::DatetimeValue datetime;
   static constexpr const char* kFormats[] = {
-      absl::RFC3339_full,
-      "%Y-%m-%d %H:%M:%E*S%Ez",
-      "%Y-%m-%d %H:%M:%E*S",
-      "%Y-%m-%dT%H:%M:%E*S%Ez",
+      "%F %T",
+      "%F %H:%M:%E*S",
       "%Y-%m-%dT%H:%M:%E*S",
-      "%Y-%m-%d",
+      "%Y-%m-%dT%H:%M:%S",
+      "%Y-%m-%d %H:%M:%E*S",
   };
   for (const char* fmt : kFormats) {
-    if (absl::ParseTime(fmt, text, &t, &err)) {
-      return Value::Timestamp(t);
+    if (auto s = ::googlesql::functions::ParseStringToDatetime(
+            fmt, text, kTimestampMicros, /*parse_version2=*/true, &datetime);
+        s.ok()) {
+      return Value::Datetime(datetime);
+    }
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: invalid DATETIME parameter value '", body, "'"));
+}
+
+absl::StatusOr<Value> ParseTimeParameter(absl::string_view body) {
+  const std::string text(body);
+  ::googlesql::TimeValue time;
+  static constexpr const char* kFormats[] = {"%T", "%H:%M:%E*S", "%H:%M:%S"};
+  for (const char* fmt : kFormats) {
+    if (auto s = ::googlesql::functions::ParseStringToTime(
+            fmt, text, kTimestampMicros, &time);
+        s.ok()) {
+      return Value::Time(time);
+    }
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: invalid TIME parameter value '", body, "'"));
+}
+
+absl::StatusOr<Value> ParseTimestampParameter(absl::string_view body) {
+  std::string text(body);
+  if (absl::EndsWith(text, " UTC")) {
+    text.resize(text.size() - 4);
+  }
+  int64_t micros = 0;
+  absl::Time t;
+  std::string err;
+  const absl::TimeZone utc = absl::UTCTimeZone();
+  if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S", text, &t, &err)) {
+    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
+  }
+  if (auto s = ::googlesql::functions::ParseStringToTimestamp(
+          "%F %T", text, utc, /*parse_version2=*/true, &micros);
+      s.ok()) {
+    return Value::TimestampFromUnixMicros(micros);
+  }
+  if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
+          text, utc, kTimestampMicros, /*allow_tz_in_str=*/true, &micros);
+      s.ok()) {
+    return Value::TimestampFromUnixMicros(micros);
+  }
+  if (absl::ParseTime("%Y-%m-%d", text, &t, &err)) {
+    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
+  }
+  int32_t date = 0;
+  if (auto date_status = ::googlesql::functions::ParseStringToDate(
+          "%Y-%m-%d", text, /*parse_version2=*/true, &date);
+      date_status.ok()) {
+    if (auto convert_status = ::googlesql::functions::ConvertDateToTimestamp(
+            date, kTimestampMicros, utc, &micros);
+        convert_status.ok()) {
+      return Value::TimestampFromUnixMicros(micros);
     }
   }
   return absl::InvalidArgumentError(
@@ -324,8 +403,11 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
       return Value::BigNumeric(*n);
     }
     case ::googlesql::TYPE_DATE:
+      return ParseDateParameter(body);
     case ::googlesql::TYPE_TIME:
+      return ParseTimeParameter(body);
     case ::googlesql::TYPE_DATETIME:
+      return ParseDatetimeParameter(body);
     case ::googlesql::TYPE_JSON:
     case ::googlesql::TYPE_INTERVAL:
     case ::googlesql::TYPE_UUID:
