@@ -80,21 +80,21 @@ absl::StatusOr<storage::Row> ProjectOneRow(
     }
     const int col_id = oc->column().column_id();
     Value v;
-    auto eit = expr_by_column_id.find(col_id);
-    if (eit != expr_by_column_id.end()) {
-      auto eval_v = EvalExpr(*eit->second, ctx);
-      if (!eval_v.ok()) return eval_v.status();
-      v = *std::move(eval_v);
+    auto cit = row_bindings.find(col_id);
+    if (cit != row_bindings.end()) {
+      v = cit->second;
     } else {
-      auto cit = row_bindings.find(col_id);
-      if (cit == row_bindings.end()) {
+      auto eit = expr_by_column_id.find(col_id);
+      if (eit == expr_by_column_id.end()) {
         return absl::InternalError(absl::StrCat(
             "semantic: output column '",
             oc->name(),
-            "' has no expression and no row binding for column_id=",
+            "' has no row binding and no expression for column_id=",
             col_id));
       }
-      v = cit->second;
+      auto eval_v = EvalExpr(*eit->second, ctx);
+      if (!eval_v.ok()) return eval_v.status();
+      v = *std::move(eval_v);
     }
     auto cell = ToStorageValue(v, &ctx);
     if (!cell.ok()) return cell.status();

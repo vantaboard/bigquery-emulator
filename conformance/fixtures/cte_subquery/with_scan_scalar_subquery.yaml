@@ -1,0 +1,23 @@
+# with_scan_scalar_subquery: CTE referenced from a SELECT-list scalar subquery.
+#
+# Pins the semantic executor path where output projection must reuse
+# materialized WITH bindings instead of re-evaluating subqueries without
+# active CTE scope.
+name: with_scan_scalar_subquery
+description: |
+  Non-recursive CTE referenced by a scalar subquery in the SELECT list.
+  JSON_EXTRACT_SCALAR promotes the query to the semantic executor.
+project_id: proj-cte-subquery-with-scan-scalar
+query: |
+  WITH p AS (
+    SELECT 1 AS id
+    UNION ALL
+    SELECT 2 AS id
+  )
+  SELECT
+    (SELECT COUNT(*) FROM p) AS cnt,
+    JSON_EXTRACT_SCALAR('{"ok": true}', '$.ok') AS ok
+expected:
+  route: semantic_executor
+  rows:
+    - {cnt: "2", ok: "true"}

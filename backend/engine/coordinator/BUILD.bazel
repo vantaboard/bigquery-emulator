@@ -328,6 +328,23 @@ cc_test(
 )
 
 cc_test(
+    name = "local_coordinator_engine_query_fixes_test",
+    srcs = [
+        "local_coordinator_engine_query_fixes_test.cc",
+        "local_coordinator_engine_test_fixture.h",
+    ],
+    deps = [
+        ":local_coordinator_engine",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "sql_preprocess_test",
     srcs = ["sql_preprocess_test.cc"],
     deps = [
