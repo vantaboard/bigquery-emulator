@@ -191,3 +191,35 @@ func TestQueryScalarSelectNamedParameter(t *testing.T) {
 		t.Errorf("rows[0].f[0].v = %v, want %q", v, "42")
 	}
 }
+
+// TestQueryScalarSelectTimestampParameterIsoWithoutTimezone exercises
+// TIMESTAMP query parameters that omit an explicit timezone suffix.
+func TestQueryScalarSelectTimestampParameterIsoWithoutTimezone(t *testing.T) {
+	env := startEmulator(t)
+
+	const projectID = "proj-scalar-timestamp-param"
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	const body = `{
+	  "query": "SELECT @reference_dt",
+	  "useLegacySql": false,
+	  "queryParameters": [{
+	    "name": "reference_dt",
+	    "parameterType": {"type": "TIMESTAMP"},
+	    "parameterValue": {"value": "2026-06-22T10:00:00"}
+	  }]
+	}`
+	status, respBody := doJSON(t, http.MethodPost, base+"/queries", []byte(body))
+	if status != http.StatusOK {
+		t.Fatalf("jobs.query @reference_dt -> %d; body=%s", status, string(respBody))
+	}
+	var resp bqtypes.QueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		t.Fatalf("decode QueryResponse: %v (body=%s)", err, string(respBody))
+	}
+	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
+		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
+	}
+	if v := resp.Rows[0].F[0].V; v != "2026-06-22 10:00:00 UTC" && v != "2026-06-22 10:00:00+00" {
+		t.Errorf("rows[0].f[0].v = %v, want UTC timestamp for 2026-06-22T10:00:00", v)
+	}
+}

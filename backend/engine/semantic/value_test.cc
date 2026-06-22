@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "absl/status/status.h"
+#include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -178,6 +179,21 @@ TEST(SemanticValueTest, ParseParameterValueRejectsUnknownTypeKind) {
 
 TEST(SemanticValueTest, ParseParameterValueTimestampRFC3339) {
   auto v = ParseParameterValue("\"2016-12-07T08:00:00+00:00\"", "TIMESTAMP");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+  EXPECT_FALSE(v->is_null());
+}
+
+TEST(SemanticValueTest, ParseParameterValueTimestampIsoWithoutTimezone) {
+  auto v = ParseParameterValue("2026-06-22T10:00:00", "TIMESTAMP");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+  EXPECT_FALSE(v->is_null());
+  EXPECT_EQ(absl::ToUnixSeconds(v->ToTime()), 1782122400);
+}
+
+TEST(SemanticValueTest, ParseParameterValueTimestampDateOnly) {
+  auto v = ParseParameterValue("2026-06-22", "TIMESTAMP");
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
   EXPECT_FALSE(v->is_null());

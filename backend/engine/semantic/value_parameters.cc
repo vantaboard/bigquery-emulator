@@ -194,14 +194,18 @@ absl::StatusOr<Value> ParseTimestampParameter(absl::string_view body) {
   const std::string text(body);
   absl::Time t;
   std::string err;
-  if (absl::ParseTime(absl::RFC3339_full, text, &t, &err)) {
-    return Value::Timestamp(t);
-  }
-  if (absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err)) {
-    return Value::Timestamp(t);
-  }
-  if (absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err)) {
-    return Value::Timestamp(t);
+  static constexpr const char* kFormats[] = {
+      absl::RFC3339_full,
+      "%Y-%m-%d %H:%M:%E*S%Ez",
+      "%Y-%m-%d %H:%M:%E*S",
+      "%Y-%m-%dT%H:%M:%E*S%Ez",
+      "%Y-%m-%dT%H:%M:%E*S",
+      "%Y-%m-%d",
+  };
+  for (const char* fmt : kFormats) {
+    if (absl::ParseTime(fmt, text, &t, &err)) {
+      return Value::Timestamp(t);
+    }
   }
   return absl::InvalidArgumentError(
       absl::StrCat("semantic: invalid TIMESTAMP parameter value '", body, "'"));
