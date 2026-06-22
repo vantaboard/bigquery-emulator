@@ -823,6 +823,30 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#persistence-and-data-dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      Persistence and --data-dir
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Persistence and --data-dir">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migrating-from-recidiviz-goccy-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      Migrating from recidiviz / goccy --database
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#authentication-posture" class="md-nav__link">
     <span class="md-ellipsis">
       Authentication posture
@@ -1197,6 +1221,30 @@
   <a href="#supported-readoptions" class="md-nav__link">
     <span class="md-ellipsis">
       Supported ReadOptions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistence-and-data-dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      Persistence and --data-dir
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Persistence and --data-dir">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#migrating-from-recidiviz-goccy-database" class="md-nav__link">
+    <span class="md-ellipsis">
+      Migrating from recidiviz / goccy --database
     </span>
   </a>
   
@@ -2114,6 +2162,62 @@ plumbing.</p>
   but <strong>not enforced</strong> — every column is returned regardless. Pushing
   projection into the storage layer is deferred to a future plan.</li>
 </ul>
+<h2 id="persistence-and-data-dir">Persistence and <code>--data-dir</code><a class="headerlink" href="#persistence-and-data-dir" title="Permanent link">&para;</a></h2>
+<p>The C++ engine persists catalog state under a <strong>directory</strong> passed as
+<code>--data-dir</code> on <code>gateway_main</code> (forwarded to <code>emulator_main</code> as
+<code>--data_dir</code>). A healthy initialized tree contains:</p>
+<ul>
+<li><code>catalog.duckdb</code> — DuckDB catalog (views, routines, metadata tables)</li>
+<li><code>&lt;project&gt;/&lt;dataset&gt;/*.meta.json</code> — table sidecars</li>
+<li><code>&lt;project&gt;/&lt;dataset&gt;/*.parquet</code> — row data for materialized tables</li>
+</ul>
+<p>View definitions created through <strong>any</strong> path (<code>CREATE VIEW</code> DDL,
+<code>tables.insert</code> with a <code>view.query</code> body) are registered in the engine
+catalog and persisted to <code>catalog.duckdb</code>; they <strong>rehydrate on restart</strong>
+when the same <code>--data-dir</code> is mounted.</p>
+<h3 id="migrating-from-recidiviz-goccy-database">Migrating from recidiviz / goccy <code>--database</code><a class="headerlink" href="#migrating-from-recidiviz-goccy-database" title="Permanent link">&para;</a></h3>
+<p>The widely-deployed recidiviz fork (and goccy/bigquery-emulator) used a
+<strong>single SQLite file</strong>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span class="c1"># old compose (recidiviz fork)</span>
+<span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;--database=/opt/x.db&quot;</span><span class="p p-Indicator">]</span>
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bq-data:/opt</span>
+</code></pre></div>
+<p>This emulator expects a <strong>directory</strong>:</p>
+<div class="language-yaml highlight"><pre><span></span><code><span class="c1"># this emulator</span>
+<span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;--data-dir=/opt&quot;</span><span class="p p-Indicator">]</span>
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bq-data:/opt</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Old flag</th>
+<th>New flag</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--database=/opt/x.db</code></td>
+<td><code>--data-dir=/opt</code></td>
+<td>Parent directory of the old file</td>
+</tr>
+<tr>
+<td>(same volume mount)</td>
+<td>(same volume mount)</td>
+<td>Re-use the volume; do <strong>not</strong> point <code>--data-dir</code> at the <code>.db</code> file itself</td>
+</tr>
+</tbody>
+</table>
+<p><code>gateway_main</code> still accepts <code>--database</code> for compatibility: it maps to
+<code>--data-dir=&lt;parent&gt;</code> and logs a deprecation warning. <strong>Data in the old
+single-file SQLite format is not automatically loaded.</strong> If
+<code>--data-dir</code> contains orphaned <code>*.db</code> files but no <code>catalog.duckdb</code>, the
+gateway warns at startup rather than silently starting empty.</p>
+<p>Operators migrating a live volume should either re-seed from YAML
+(<code>--seed-data-file</code>) or confirm <code>catalog.duckdb</code> exists after the first
+successful run under <code>--data-dir</code>.</p>
 <h2 id="authentication-posture">Authentication posture<a class="headerlink" href="#authentication-posture" title="Permanent link">&para;</a></h2>
 <p>The emulator follows <code>cloud-spanner-emulator</code>'s posture: it parses but
 ignores bearer tokens, and the <code>BIGQUERY_EMULATOR_HOST</code> environment
