@@ -27,7 +27,7 @@ syntax = "proto3";
 
 package bigquery_emulator.v1;
 
-import "emulator.proto";
+import "proto/emulator.proto";
 
 option go_package = "github.com/vantaboard/bigquery-emulator/gateway/enginepb;enginepb";
 

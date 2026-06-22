@@ -21,12 +21,14 @@ plugins:
   - local: protoc-gen-go
     out: gateway/enginepb
     opt:
-      - paths=source_relative
+      - paths=import
   - local: protoc-gen-go-grpc
     out: gateway/enginepb
     opt:
-      - paths=source_relative
+      - paths=import
       - require_unimplemented_servers=false
 
 inputs:
-  - directory: proto
+  - directory: .
+    paths:
+      - proto

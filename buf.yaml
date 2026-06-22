@@ -2,12 +2,14 @@
 # internal gRPC contract (proto/emulator.proto). See buf.gen.yaml for
 # the matching codegen pipeline.
 #
-# Why v2: aligns with the buf 1.50+ "single workspace per repo" model
-# and avoids the buf.work.yaml indirection.
+# Module root is the repo (imports use proto/emulator.proto, matching
+# Bazel protoc -I.). includes scopes lint/breaking to proto/ only.
 version: v2
 
 modules:
-  - path: proto
+  - path: .
+    includes:
+      - proto
 
 lint:
   use:
