@@ -81,6 +81,15 @@ type Config struct {
 	// `BIGQUERY_EMULATOR_DATA_DIR`.
 	DataDir string
 
+	// LegacyDatabase is the removed recidiviz/goccy `--database` flag
+	// (single SQLite file). When set, parseArgs maps it to DataDir =
+	// filepath.Dir(LegacyDatabase) and emits a migration warning.
+	LegacyDatabase string
+
+	// StartupWarnings holds operator-facing migration / layout notices
+	// collected during CLI parsing. main() logs them before binding.
+	StartupWarnings []string
+
 	// InitialDataDir is a template directory the gateway copies into
 	// DataDir on first start (when DataDir does not yet contain an
 	// initialized catalog). Maps to `--initial-data-dir` /
@@ -193,6 +202,10 @@ func parseArgs(argv []string, errOut io.Writer, getenv envLookup) (Config, error
 		return Config{}, err
 	}
 	applyEnvFallbacks(&cfg, getenv)
+	if err := applyLegacyDatabaseFlag(&cfg); err != nil {
+		return Config{}, err
+	}
+	cfg.StartupWarnings = append(cfg.StartupWarnings, collectDataDirLayoutWarnings(cfg.DataDir)...)
 	return cfg, nil
 }
 
@@ -232,6 +245,10 @@ func registerFlags(fs *flag.FlagSet, cfg *Config, versionFlag *bool) {
 		[]string{"data-dir", "data_dir"},
 		"Persistent storage root. Passed to the engine as --data_dir. "+
 			"Falls back to $BIGQUERY_EMULATOR_DATA_DIR when empty.")
+	registerString(fs, &cfg.LegacyDatabase,
+		[]string{"database"},
+		"DEPRECATED (recidiviz/goccy compat): single SQLite catalog file. "+
+			"Mapped to --data-dir=<parent directory>. Prefer --data-dir.")
 	registerString(fs, &cfg.InitialDataDir,
 		[]string{"initial-data-dir"},
 		"Template directory copied into --data-dir on first start when "+

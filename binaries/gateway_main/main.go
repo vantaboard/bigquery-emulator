@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
@@ -35,6 +36,19 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/seedfile"
 	"github.com/vantaboard/bigquery-emulator/gateway/storagetmpl"
 )
+
+// logStartupWarnings prints migration/layout notices from CLI parsing.
+// Messages prefixed with "ERROR:" fail startup so operators do not silently
+// point --data-dir at a legacy single-file catalog path.
+func logStartupWarnings(warnings []string) error {
+	for _, msg := range warnings {
+		if after, ok := strings.CutPrefix(msg, "ERROR: "); ok {
+			return fmt.Errorf("%s", after)
+		}
+		log.Print(msg)
+	}
+	return nil
+}
 
 // Version metadata. The defaults (`dev` / `none` / `unknown`) are what a
 // plain `go build` produces; release builds replace them via
@@ -108,6 +122,9 @@ func main() {
 	if cfg.VersionRequested {
 		printVersion(os.Stdout)
 		return
+	}
+	if err := logStartupWarnings(cfg.StartupWarnings); err != nil {
+		log.Fatal(err)
 	}
 	if err := runGateway(cfg); err != nil {
 		log.Fatal(err)
