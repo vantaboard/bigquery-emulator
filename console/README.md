@@ -70,11 +70,13 @@ task dev:all            # local emulator + Vite on 5173
 Or run the halves separately:
 
 ```bash
-task emulator:run       # terminal 1 — seed from data/data.yaml, SQL Tools enabled
+task emulator:run       # terminal 1 — seed from data/data.yaml (SQL Tools when gateway supports it)
 task dev                # terminal 2
 ```
 
 **Verify:** `curl -fsS http://127.0.0.1:9050/healthz` and open `http://localhost:5173` — sidebar should show **`local-project`** / **`test-dataset`**.
+
+Local dev scripts pass **`--enable-sql-tools-api`** only when your built gateway supports it; older checkouts still start and the query editor falls back to client-side formatting.
 
 ### Rebuild after emulator changes
 

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=emulator-common.sh
+source "$root/scripts/emulator-common.sh"
+
 emulator_root="${EMULATOR_ROOT:-$root/../bigquery-emulator}"
 emulator_root="$(cd "$emulator_root" && pwd)"
 seed_file="${SEED_FILE:-$root/e2e/fixtures/seed.yaml}"
@@ -9,10 +12,15 @@ http_port="${EMULATOR_HTTP_PORT:-9050}"
 grpc_port="${EMULATOR_GRPC_PORT:-9060}"
 project_id="${PROJECT_ID:-local-project}"
 vite_port="${VITE_DEV_PORT:-5173}"
+gateway="$emulator_root/bin/gateway_main"
 
-if [ ! -x "$emulator_root/bin/gateway_main" ]; then
-  echo "missing $emulator_root/bin/gateway_main — run: task emulator:build" >&2
+if [ ! -x "$gateway" ]; then
+  echo "missing $gateway — run: task emulator:build" >&2
   exit 1
+fi
+
+if [ -f "$seed_file" ]; then
+  seed_file="$(cd "$(dirname "$seed_file")" && pwd)/$(basename "$seed_file")"
 fi
 
 emulator_pid=""
@@ -30,15 +38,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$emulator_root"
-./bin/gateway_main \
-  --engine-binary=./bin/emulator_main \
-  --http-port="$http_port" \
-  --grpc-port="$grpc_port" \
-  --project-id="$project_id" \
-  --seed-data-file="$seed_file" \
-  --enable-sql-tools-api \
-  --sql-tools-api-allow-remote \
-  --log-requests &
+mapfile -t args < <(emulator_gateway_args "$gateway" ./bin/emulator_main "$http_port" "$grpc_port" "$project_id" "$seed_file")
+"$gateway" "${args[@]}" &
 emulator_pid=$!
 
 cd "$root"

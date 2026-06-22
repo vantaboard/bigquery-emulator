@@ -59,30 +59,11 @@ tasks:
         task -d "{{.EMULATOR_ROOT}}" emulator:build-all
 
   emulator:run:
-    desc: Run a locally built emulator with UI seed data and SQL Tools enabled
+    desc: Run a locally built emulator with UI seed data (SQL Tools when supported)
     deps: [emulator:check]
+    dir: "{{.UI_ROOT}}"
     cmds:
-      - |
-        set -eo pipefail
-        emu="{{.EMULATOR_ROOT}}"
-        seed="{{.SEED_FILE}}"
-        if [ -f "$seed" ]; then
-          seed="$(cd "$(dirname "$seed")" && pwd)/$(basename "$seed")"
-        fi
-        if [ ! -f "$seed" ]; then
-          echo "seed file not found: $seed" >&2
-          exit 1
-        fi
-        cd "$emu"
-        exec ./bin/gateway_main \
-          --engine-binary=./bin/emulator_main \
-          --http-port={{.EMULATOR_HTTP_PORT}} \
-          --grpc-port={{.EMULATOR_GRPC_PORT}} \
-          --project-id={{.PROJECT_ID}} \
-          --seed-data-file="$seed" \
-          --enable-sql-tools-api \
-          --sql-tools-api-allow-remote \
-          --log-requests
+      - bash scripts/emulator-run.sh
 
   dev:
     desc: Vite dev server (expects emulator on EMULATOR_HTTP_PORT)
