@@ -1,0 +1,48 @@
+---
+description: Request-path C++ must not CHECK/OrDie on client-controlled state
+globs:
+  - backend/**/*.cc
+  - backend/**/*.h
+  - frontend/**/*.cc
+  - frontend/**/*.h
+alwaysApply: false
+---
+
+# No fatal checks on client-controlled state
+
+Request-reachable code must **return `absl::Status`** (mapped to gRPC/HTTP errors
+by the gateway), not abort the engine via `CHECK`, `LOG(FATAL)`,
+`InsertOrDie`, or `InsertIfNotPresent`-as-die.
+
+## Applies to
+
+- Query handlers (`QueryService::DryRun`, `Query`, DDL paths)
+- Catalog construction and registration (`GoogleSqlCatalog`, view/UDF/TVF/
+  procedure registries, replay into `SimpleCatalog`)
+- Any path a client can drive through SQL, REST, or gRPC
+
+## Allowed fatals
+
+- Programmer errors on **internal** invariants (null deps injected by our own
+  code, impossible enum values after our own switches)
+- Startup / one-time init that cannot run without fixed configuration
+
+When leaving a fatal, add a one-line comment explaining why the condition is
+**unreachable from clients**.
+
+## Patterns
+
+| Avoid | Prefer |
+|-------|--------|
+| `InsertOrDie(&map, key, val)` on names from SQL/REST | Check insert; return `AlreadyExists` / `InvalidArgument` |
+| `CHECK(insert_ok)` on catalog replay | Dedup by name; skip or replace; lazy resolve (see `FindProjectView`) |
+| Destroying registry objects while catalogs hold raw pointers | Retire into a side vector; purge from catalog on replay |
+
+## Regression coverage
+
+- `backend/catalog/catalog_crash_safety_test.cc` — unit no-abort guards
+- `conformance/sessions/catalog_soak.yaml` — end-to-end `expect_alive` soak
+- `conformance/sessions/authorize_view_repeat.yaml` — reported duplicate-catalog
+  abort repro
+
+Origin: `.cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md`
