@@ -15,10 +15,6 @@ from conftest import make_dataset_id
 EXPECTED_ORPHAN_ORDER_IDS = [2]
 
 
-@pytest.mark.xfail(
-    reason="transpiler binding loss over QUALIFY views (plan 06-transpiler-binding-property-tests)",
-    strict=False,
-)
 def test_orphan_orders(
     client: bigquery.Client,
     project_id: str,
