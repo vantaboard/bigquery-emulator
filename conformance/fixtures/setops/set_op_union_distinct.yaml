@@ -1,0 +1,17 @@
+# set_op_union_distinct: UNION DISTINCT deduplicates across arms.
+name: set_op_union_distinct
+description: |
+  UNION DISTINCT combines two inline relations and removes duplicate rows
+  while preserving first-seen order.
+project_id: proj-setop-union-distinct
+query: |
+  SELECT id FROM UNNEST([1, 2, 2, 3]) AS id
+  UNION DISTINCT
+  SELECT id FROM UNNEST([2, 3, 4]) AS id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1"}
+    - {id: "2"}
+    - {id: "3"}
+    - {id: "4"}

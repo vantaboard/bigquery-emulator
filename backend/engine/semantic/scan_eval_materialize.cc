@@ -278,43 +278,6 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithRefScan(
   return out;
 }
 
-absl::StatusOr<std::vector<ColumnBindings>> MaterializeSetOperationScan(
-    const ::googlesql::ResolvedSetOperationScan& set_op, EvalContext& ctx) {
-  if (set_op.op_type() != ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
-    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                             "semantic: SetOperationScan op is not UNION ALL");
-  }
-  std::vector<ColumnBindings> out;
-  for (int i = 0; i < set_op.input_item_list_size(); ++i) {
-    const ::googlesql::ResolvedSetOperationItem* item =
-        set_op.input_item_list(i);
-    if (item == nullptr || item->scan() == nullptr) {
-      return absl::InternalError("semantic: SetOperationItem has null scan");
-    }
-    auto part = MaterializeScanImpl(item->scan(), ctx);
-    if (!part.ok()) return part.status();
-    const ::googlesql::ResolvedScan* part_scan = item->scan();
-    for (const ColumnBindings& part_row : *part) {
-      ColumnBindings remapped;
-      for (int j = 0; j < set_op.column_list_size(); ++j) {
-        const int out_id = set_op.column_list(j).column_id();
-        const ::googlesql::Type* out_type = set_op.column_list(j).type();
-        if (part_scan != nullptr && j < part_scan->column_list_size()) {
-          const int src_id = part_scan->column_list(j).column_id();
-          auto it = part_row.find(src_id);
-          if (it != part_row.end()) {
-            remapped.emplace(out_id, it->second);
-            continue;
-          }
-        }
-        remapped.emplace(out_id, Value::Null(out_type));
-      }
-      out.push_back(std::move(remapped));
-    }
-  }
-  return out;
-}
-
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(
     const ::googlesql::ResolvedJoinScan& join, EvalContext& ctx) {
   if (join.is_lateral()) {
