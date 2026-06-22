@@ -1,0 +1,4 @@
+name: _selftest_fail
+description: Deliberately invalid session for loader tests.
+steps:
+  - query: SELECT 1

@@ -1,0 +1,35 @@
+name: dataset_list_after_view_op
+description: |
+  Regression for R3: after creating and authorizing a view, tables.list on the
+  source dataset must still enumerate base tables (not go empty).
+  Reported when a view fix caused ds_main to list zero tables.
+project_id: proj-session-dataset-list
+steps:
+  - dataset: ds_main
+  - table:
+      dataset: ds_main
+      id: profiles
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_main
+      table: profiles
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+  - dataset: ds_tenant
+  - sql: CREATE VIEW ds_tenant.v AS SELECT id, name FROM ds_main.profiles
+  - rest:
+      method: PATCH
+      path: datasets/ds_main
+      body:
+        access:
+          - role: READER
+            view:
+              projectId: proj-session-dataset-list
+              datasetId: ds_tenant
+              tableId: v
+  - expect_table_list:
+      dataset: ds_main
+      contains: [profiles]

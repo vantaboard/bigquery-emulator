@@ -1,0 +1,29 @@
+name: view_select_after_create_via_client_path
+description: |
+  Client-shaped flow: create a view via REST tables.insert (view.query body),
+  then immediately SELECT through it in the same session. Mirrors R2 /
+  view_rest_insert_select_rows but as an ordered multi-step session.
+project_id: proj-session-view-client
+steps:
+  - dataset: ds_main
+  - sql: CREATE TABLE ds_main.profiles_staging (id INT64, inserted_at TIMESTAMP, name STRING)
+  - rows:
+      dataset: ds_main
+      table: profiles_staging
+      rows:
+        - {id: 1, inserted_at: "2026-01-01T00:00:00Z", name: old-ada}
+        - {id: 1, inserted_at: "2026-02-01T00:00:00Z", name: new-ada}
+        - {id: 2, inserted_at: "2026-01-15T00:00:00Z", name: linus}
+  - table:
+      dataset: ds_main
+      id: profiles_dedup
+      view:
+        query: |
+          SELECT * EXCEPT(rn) FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn
+            FROM ds_main.profiles_staging
+          ) WHERE rn = 1
+  - query: SELECT id, name FROM ds_main.profiles_dedup ORDER BY id
+    expect_rows:
+      - {id: "1", name: new-ada}
+      - {id: "2", name: linus}

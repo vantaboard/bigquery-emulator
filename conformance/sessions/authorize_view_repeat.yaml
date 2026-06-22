@@ -1,0 +1,60 @@
+name: authorize_view_repeat
+description: |
+  Reproduces the reported engine abort when CREATE OR REPLACE VIEW plus
+  dataset access authorization repeats across setup/teardown cycles.
+  The engine CHECK-fails on a duplicate catalog entry during view replay
+  and the subprocess dies (signal: aborted).
+
+  known_failing until plan 03 (engine crash-safety) lands Status conversion
+  for duplicate catalog registration — see
+  .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
+known_failing: true
+known_failing_ref: .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
+project_id: proj-session-authorize-view
+steps:
+  - dataset: ds_main
+  - table:
+      dataset: ds_main
+      id: profiles
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_main
+      table: profiles
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+        - {id: 3, name: grace}
+  - dataset: ds_tenant
+  - sql: CREATE VIEW ds_tenant.v AS SELECT * FROM ds_main.profiles
+  - rest:
+      method: PATCH
+      path: datasets/ds_main
+      body:
+        access:
+          - role: READER
+            view:
+              projectId: proj-session-authorize-view
+              datasetId: ds_tenant
+              tableId: v
+  - repeat: 5
+    steps:
+      - sql: CREATE OR REPLACE VIEW ds_tenant.v AS SELECT * FROM ds_main.profiles
+      - rest:
+          method: PATCH
+          path: datasets/ds_main
+          body:
+            access:
+              - role: READER
+                view:
+                  projectId: proj-session-authorize-view
+                  datasetId: ds_tenant
+                  tableId: v
+      - expect_alive: true
+  - query: SELECT COUNT(*) AS n FROM ds_tenant.v
+    expect_rows:
+      - {n: "3"}
+  - expect_table_list:
+      dataset: ds_main
+      contains: [profiles]

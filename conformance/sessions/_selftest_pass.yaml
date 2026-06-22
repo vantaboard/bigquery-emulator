@@ -1,0 +1,4 @@
+name: _selftest_pass
+description: Loader/executor self-test (schema + expect_alive assertion).
+steps:
+  - expect_alive: true
