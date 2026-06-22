@@ -176,6 +176,7 @@ cc_test(
         "transpiler_emit_literals_test.cc",
         "transpiler_emit_scans_test.cc",
         "transpiler_emit_aggregate_test.cc",
+        "transpiler_emit_composition_test.cc",
         "transpiler_functions_table_test.cc",
         "transpiler_emit_analytic_test.cc",
         "transpiler_emit_query_test.cc",
@@ -190,6 +191,8 @@ cc_test(
     deps = [
         ":functions",
         ":transpiler",
+        "//backend/engine/duckdb/udf:registrar",
+        "//third_party/duckdb",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",

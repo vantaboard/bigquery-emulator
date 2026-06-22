@@ -7,10 +7,13 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/udf/registrar.h"
+#include "duckdb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -291,6 +294,68 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitWithExpr;
   using Transpiler::EmitWithRefScan;
   using Transpiler::EmitWithScan;
+};
+
+// DuckDB-backed binding checker for composition / property tests. Opens an
+// in-memory connection, registers polyfill UDFs, and asserts transpiled SQL
+// binds (via duckdb_query, which runs parse + bind + plan).
+class TranspilerBindFixture : public TranspilerTest {
+ protected:
+  void SetUp() override {
+    TranspilerTest::SetUp();
+    ASSERT_EQ(::duckdb_open(nullptr, &db_), ::DuckDBSuccess);
+    ASSERT_EQ(::duckdb_connect(db_, &conn_), ::DuckDBSuccess);
+    absl::Status reg = udf::RegisterAll(conn_);
+    ASSERT_TRUE(reg.ok()) << reg;
+  }
+
+  void TearDown() override {
+    if (conn_ != nullptr) ::duckdb_disconnect(&conn_);
+    if (db_ != nullptr) ::duckdb_close(&db_);
+    conn_ = nullptr;
+    db_ = nullptr;
+    TranspilerTest::TearDown();
+  }
+
+  void ExecDdl(absl::string_view sql) {
+    ::duckdb_result result;
+    ASSERT_EQ(::duckdb_query(conn_, std::string(sql).c_str(), &result),
+              ::DuckDBSuccess)
+        << ::duckdb_result_error(&result);
+    ::duckdb_destroy_result(&result);
+  }
+
+  void AssertTranspileBinds(const ::googlesql::ResolvedStatement* stmt,
+                            absl::string_view source_sql,
+                            TestTranspiler* t) {
+    ASSERT_NE(stmt, nullptr) << "analyze failed for:\n" << source_sql;
+    std::string emitted = t->Transpile(stmt);
+    ASSERT_FALSE(emitted.empty()) << "transpiler returned empty SQL for:\n"
+                                  << source_sql;
+    SCOPED_TRACE(emitted);
+    ::duckdb_result result;
+    const auto rc = ::duckdb_query(conn_, emitted.c_str(), &result);
+    if (rc != ::DuckDBSuccess) {
+      const char* err = ::duckdb_result_error(&result);
+      FAIL() << "DuckDB rejected transpiled SQL\n"
+             << "source_sql:\n"
+             << source_sql << "\n"
+             << "emitted_sql:\n"
+             << emitted << "\n"
+             << "duckdb_error:\n"
+             << (err == nullptr ? "(null)" : err);
+    }
+    ::duckdb_destroy_result(&result);
+  }
+
+  void AssertSqlTranspileBinds(absl::string_view sql) {
+    const ::googlesql::ResolvedStatement* stmt = Analyze(sql);
+    TestTranspiler t;
+    AssertTranspileBinds(stmt, sql, &t);
+  }
+
+  ::duckdb_database db_ = nullptr;
+  ::duckdb_connection conn_ = nullptr;
 };
 
 }  // namespace transpiler
