@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// CompareError compares the gateway's error envelope against an
+// expected.error block. Returns an empty string on match.
+func CompareError(expected ExpectedError, status int, body []byte) string {
+	return errorDiff(expected, status, body)
+}
+
 // errorDiff compares the gateway's error envelope against an
 // `expected.error` block and returns an empty string on match or a
 // human-readable message on mismatch.

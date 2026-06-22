@@ -232,14 +232,12 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 	}()
 
 	base := env.BaseURL + "/bigquery/v2/projects/" + fx.ProjectID
-	for i, step := range fx.Setup {
-		if stepErr := runSetupStep(ctx, base, step, fx.DefaultDataset); stepErr != nil {
-			result.Message = fmt.Sprintf("setup[%d]: %v", i, stepErr)
-			return markDuration(result, started)
-		}
+	if stepErr := RunSetupSteps(ctx, base, fx.Setup, fx.DefaultDataset); stepErr != nil {
+		result.Message = stepErr.Error()
+		return markDuration(result, started)
 	}
 
-	queryBody, marshalErr := marshalJobsQueryBody(fx.Query, fx.DefaultDataset)
+	queryBody, marshalErr := MarshalJobsQueryBody(fx.Query, fx.DefaultDataset, nil)
 	if marshalErr != nil {
 		result.Message = marshalErr.Error()
 		return markDuration(result, started)

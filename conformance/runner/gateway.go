@@ -44,14 +44,15 @@ func postQuery(ctx context.Context, baseURL, sql string) (int, []byte, error) {
 }
 
 func postQueryWithDefaultDataset(ctx context.Context, baseURL, sql, defaultDataset string) (int, []byte, error) {
-	queryBody, err := marshalJobsQueryBody(sql, defaultDataset)
+	queryBody, err := MarshalJobsQueryBody(sql, defaultDataset, nil)
 	if err != nil {
 		return 0, nil, err
 	}
 	return doRequest(ctx, baseURL+"/queries", queryBody)
 }
 
-func marshalJobsQueryBody(sql, defaultDataset string) ([]byte, error) {
+// MarshalJobsQueryBody builds the jobs.query JSON body. Exported for sub-lanes.
+func MarshalJobsQueryBody(sql, defaultDataset string, params []bqtypes.QueryParameter) ([]byte, error) {
 	body := map[string]any{
 		"query":        sql,
 		"useLegacySql": false,
@@ -59,9 +60,17 @@ func marshalJobsQueryBody(sql, defaultDataset string) ([]byte, error) {
 	if defaultDataset != "" {
 		body["defaultDataset"] = map[string]string{"datasetId": defaultDataset}
 	}
+	if len(params) > 0 {
+		body["parameterMode"] = "NAMED"
+		body["queryParameters"] = params
+	}
 	queryBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal query: %w", err)
 	}
 	return queryBody, nil
+}
+
+func marshalJobsQueryBody(sql, defaultDataset string) ([]byte, error) {
+	return MarshalJobsQueryBody(sql, defaultDataset, nil)
 }

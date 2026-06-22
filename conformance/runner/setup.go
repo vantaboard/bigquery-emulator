@@ -10,6 +10,22 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 )
 
+// RunSetupSteps executes every setup step against the gateway base URL.
+// Exported for sub-lanes (differential replay, production recorders).
+func RunSetupSteps(ctx context.Context, base string, steps []SetupStep, defaultDataset string) error {
+	for i, step := range steps {
+		if err := runSetupStep(ctx, base, step, defaultDataset); err != nil {
+			return fmt.Errorf("setup[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// ValidateExported exposes setup-step validation for corpus loaders.
+func (s SetupStep) ValidateExported() error {
+	return s.validate()
+}
+
 // runSetupStep dispatches one setup step to the matching helper.
 // Errors bubble up unchanged; the caller wraps them with the step
 // index for the diff message.
