@@ -23,6 +23,7 @@ import { ResultsTable } from '@/features/explorer/components/ResultsTable';
 import { SqlEditor } from '@/features/explorer/components/SqlEditor';
 import { buildExplorerSearchParams } from '@/features/explorer/urlState';
 import { ReferencePanel } from '@/features/query/ReferencePanel';
+import { SaveDestinationModal, type SaveDestination } from '@/features/query/SaveDestinationModal';
 import { SaveNameModal } from '@/features/query/SaveNameModal';
 import { loadSqlCatalog } from '@/features/query/sqlCatalog';
 
@@ -197,17 +198,17 @@ export function QueryTab({ tab }: QueryTabProps) {
         setSaveOpen(false);
     };
 
-    const onSaveView = async (viewName: string) => {
-        if (!tab.projectId || !tab.datasetId) return;
+    const onSaveView = async ({ projectId, datasetId, name }: SaveDestination) => {
+        if (!projectId || !datasetId) return;
         const ok = await validateSelectQuery();
         if (!ok) return;
 
-        const ddl = `CREATE OR REPLACE VIEW \`${tab.projectId}.${tab.datasetId}.${viewName}\` AS\n${tab.sql.trim()}`;
+        const ddl = `CREATE OR REPLACE VIEW \`${projectId}.${datasetId}.${name}\` AS\n${tab.sql.trim()}`;
         saveDdlMutation.mutate(
-            { ddl, projectId: tab.projectId },
+            { ddl, projectId },
             {
                 onSuccess: () => {
-                    notifyTablesChanged(tab.projectId, tab.datasetId!);
+                    notifyTablesChanged(projectId, datasetId);
                     void queryClient.invalidateQueries({ queryKey: ['explorer'] });
                 },
             },
@@ -368,7 +369,7 @@ export function QueryTab({ tab }: QueryTabProps) {
                                                 role="menuitem"
                                                 data-testid="save-view"
                                                 className="flex w-full px-3 py-1.5 text-left text-sm hover:bg-white/5 disabled:opacity-50"
-                                                disabled={!tab.datasetId || saveDdlMutation.isPending}
+                                                disabled={saveDdlMutation.isPending}
                                                 onClick={() => {
                                                     setSaveOpen(false);
                                                     setSaveAction('view');
@@ -485,15 +486,17 @@ export function QueryTab({ tab }: QueryTabProps) {
                 onClose={() => updateUi({ referencePanelOpen: false })}
             />
 
-            <SaveNameModal
+            <SaveDestinationModal
                 open={saveAction === 'view'}
                 title="Save view"
-                label="View name"
-                defaultValue={tab.tableId ? `${tab.tableId}_view` : ''}
+                nameLabel="View name"
+                defaultProjectId={tab.projectId}
+                defaultDatasetId={tab.datasetId}
+                defaultName={tab.tableId ? `${tab.tableId}_view` : ''}
                 submitLabel="Save view"
                 testId="save-view-modal"
                 onClose={() => setSaveAction(null)}
-                onSubmit={(name) => void onSaveView(name)}
+                onSubmit={(destination) => void onSaveView(destination)}
             />
 
             <SaveNameModal
