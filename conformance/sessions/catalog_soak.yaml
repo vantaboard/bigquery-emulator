@@ -1,0 +1,63 @@
+name: catalog_soak
+description: |
+  End-to-end soak: adversarial CREATE/REPLACE/DROP VIEW plus dataset ACL
+  PATCH cycles against one persistent engine. Each iteration asserts the
+  subprocess stays alive (expect_alive). Guards plan 03 crash-safety.
+project_id: proj-session-catalog-soak
+steps:
+  - dataset: ds_main
+  - table:
+      dataset: ds_main
+      id: profiles
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: name, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_main
+      table: profiles
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+  - dataset: ds_tenant_a
+  - dataset: ds_tenant_b
+  - sql: CREATE VIEW ds_tenant_a.profiles AS SELECT * FROM ds_main.profiles
+  - sql: CREATE VIEW ds_tenant_b.profiles AS SELECT * FROM ds_main.profiles
+  - rest:
+      method: PATCH
+      path: datasets/ds_main
+      body:
+        access:
+          - role: READER
+            view:
+              projectId: proj-session-catalog-soak
+              datasetId: ds_tenant_a
+              tableId: profiles
+  - repeat: 8
+    steps:
+      - sql: CREATE OR REPLACE VIEW ds_tenant_a.profiles AS SELECT id, name FROM ds_main.profiles
+      - sql: CREATE OR REPLACE VIEW ds_tenant_b.profiles AS SELECT id FROM ds_main.profiles WHERE id > 0
+      - rest:
+          method: PATCH
+          path: datasets/ds_main
+          body:
+            access:
+              - role: READER
+                view:
+                  projectId: proj-session-catalog-soak
+                  datasetId: ds_tenant_a
+                  tableId: profiles
+              - role: READER
+                view:
+                  projectId: proj-session-catalog-soak
+                  datasetId: ds_tenant_b
+                  tableId: profiles
+      - query: SELECT COUNT(*) AS n FROM ds_tenant_a.profiles
+        expect_rows:
+          - {n: "2"}
+      - expect_alive: true
+  - sql: DROP VIEW ds_tenant_a.profiles
+  - sql: CREATE VIEW ds_tenant_a.profiles AS SELECT name FROM ds_main.profiles
+  - query: SELECT COUNT(*) AS n FROM ds_tenant_b.profiles
+    expect_rows:
+      - {n: "2"}
+  - expect_alive: true

@@ -1,15 +1,9 @@
 name: authorize_view_repeat
 description: |
-  Reproduces the reported engine abort when CREATE OR REPLACE VIEW plus
-  dataset access authorization repeats across setup/teardown cycles.
-  The engine CHECK-fails on a duplicate catalog entry during view replay
-  and the subprocess dies (signal: aborted).
-
-  known_failing until plan 03 (engine crash-safety) lands Status conversion
-  for duplicate catalog registration — see
-  .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
-known_failing: true
-known_failing_ref: .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
+  Regression for the reported engine abort when CREATE OR REPLACE VIEW plus
+  dataset access authorization repeats across setup/teardown cycles. The engine
+  must stay alive and return structured errors or idempotent replace — never
+  signal: aborted.
 project_id: proj-session-authorize-view
 steps:
   - dataset: ds_main
