@@ -286,6 +286,34 @@ tasks:
         cd "$root"
         go run ./conformance/cmd/differential-record
 
+  session:
+    desc: |
+      Run stateful multi-step session fixtures (one long-lived engine per
+      session). Honors EMULATOR_BIN, SESSIONS, OUTPUT, OUTPUT_FILE, PROFILE.
+    vars:
+      SESSIONS:
+        sh: echo "${SESSIONS:-conformance/sessions}"
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        PROFILE_FLAG=""
+        if [ -n "{{.PROFILE}}" ]; then
+          PROFILE_FLAG="--profile {{.PROFILE}}"
+        fi
+        # shellcheck disable=SC2086
+        go run ./conformance/cmd/session \
+          --sessions "{{.SESSIONS}}" \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          $PROFILE_FLAG \
+          $OUTPUT_FILE_FLAG
+
   update-baselines:
     desc: |
       Rewrite the expected: block of one or more fixtures with the engine's actual output. Pass FIXTURE=path or default to FIXTURES (the whole directory). Honors PROFILE. Read the diff before committing.

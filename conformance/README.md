@@ -588,6 +588,38 @@ Each mismatch is tagged as one of:
 | `error_divergence` | One side errors, the other succeeds |
 | `crash` | Engine abort or RPC failure |
 
+## Session fixtures
+
+Session fixtures under [`conformance/sessions/`](sessions/) exercise **ordered,
+stateful sequences** against a **single long-lived** `emulator_main` process.
+Unlike the YAML fixture lane (one query per fresh engine), sessions can express
+multi-step client workflows, `repeat:` loops, generic REST steps (`rest:`),
+mid-session `restart:` (same `--data_dir`), and assertions such as
+`expect_alive`, `expect_table_list`, and `expect_rows` on intermediate queries.
+
+```bash
+# Run every committed session (skips _selftest_* files).
+task conformance:session
+
+# JSON report for CI artifacts.
+task conformance:session OUTPUT=json OUTPUT_FILE=conformance-session.json
+
+# Single session file.
+go run ./conformance/cmd/session \
+  --sessions conformance/sessions/dataset_list_after_view_op.yaml \
+  --engine-binary ./bin/emulator_main
+```
+
+Optional session fields:
+
+- `known_failing` — expected divergence; counted as SKIP, not FAIL (mirrors the
+  differential / bqutils pattern). Use with `known_failing_ref` pointing at the
+  owning fix plan when the repro must stay red until an engine fix lands.
+
+CI job `session` in
+[`.github/workflows/conformance.yml`](../.github/workflows/conformance.yml)
+runs after `build-engine`.
+
 ## Process hygiene
 
 The runner registers signal handlers (`SIGINT`, `SIGTERM`) that
