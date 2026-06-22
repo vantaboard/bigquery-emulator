@@ -30,7 +30,10 @@ const JSONSchemaVersion = 1
 // outputFormatText is the runner's default --output format: a
 // human-readable text renderer. Hoisted to a const so the default,
 // the validator, and the dispatcher all reference one source of truth.
-const outputFormatText = "text"
+const (
+	outputFormatText = "text"
+	outputFormatJSON = "json"
+)
 
 // Result is one fixture x profile outcome. The JSON tags mirror what
 // the diff CI consumes; keep them stable.
@@ -116,7 +119,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 		return nil, err
 	}
 	report := iterateMatrix(ctx, fixtures, enabled, opts)
-	if opts.Output == "json" {
+	if opts.Output == outputFormatJSON {
 		if err := writeJSONReport(opts.Out, report); err != nil {
 			return report, fmt.Errorf("write json report: %w", err)
 		}
@@ -147,7 +150,7 @@ func prepareOptions(opts Options) (Options, error) {
 	if opts.Output == "" {
 		opts.Output = outputFormatText
 	}
-	if opts.Output != outputFormatText && opts.Output != "json" {
+	if opts.Output != outputFormatText && opts.Output != outputFormatJSON {
 		return opts, fmt.Errorf("unknown --output %q (want text or json)",
 			opts.Output)
 	}

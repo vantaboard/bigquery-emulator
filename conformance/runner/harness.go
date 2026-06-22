@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,18 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 )
+
+const httpMethodGet = "GET"
+
+// spawnState captures everything needed to restart a spawned emulator with the
+// same --data_dir and profile flags.
+type spawnState struct {
+	engineBinary string
+	engineArgs   []string
+	engineAddr   string
+	profile      Profile
+	harnessOpts  HarnessOptions
+}
 
 // engineReadyTimeout matches the value the production gateway uses;
 // keeps the cold-start budget consistent across CI lanes.
@@ -50,6 +63,10 @@ type EmulatorEnv struct {
 	// dataDir is the temporary `--data_dir` the harness allocated
 	// for this emulator. The teardown path removes it.
 	dataDir string
+
+	// spawn is set for subprocess engines so RestartEngine can relaunch
+	// against the same data_dir mid-session.
+	spawn *spawnState
 }
 
 // Close terminates the subprocess (if any), closes the gRPC channel,
@@ -219,6 +236,13 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 		client:     client,
 		cmd:        cmd,
 		dataDir:    dataDir,
+		spawn: &spawnState{
+			engineBinary: opts.EngineBinary,
+			engineArgs:   append([]string(nil), args...),
+			engineAddr:   addr,
+			profile:      p,
+			harnessOpts:  opts,
+		},
 	}, nil
 }
 
@@ -329,49 +353,90 @@ func freePort() (int, error) {
 	return port, nil
 }
 
+// DoHTTPRequest issues an arbitrary JSON HTTP call against the gateway.
+func DoHTTPRequest(ctx context.Context, method, url string, body []byte) (int, []byte, error) {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	var bodyReader io.Reader
+	if len(body) > 0 {
+		bodyReader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build request %s %s: %w", method, url, err)
+	}
+	if bodyReader != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("http %s %s: %w", method, url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("read body from %s %s: %w", method, url, err)
+	}
+	return resp.StatusCode, respBody, nil
+}
+
+// RestartEngine gracefully stops the spawned subprocess and relaunches it with
+// the same argv (including --data_dir). No-op when --connect was used.
+func (e *EmulatorEnv) RestartEngine(ctx context.Context) error {
+	if e == nil || e.spawn == nil {
+		return errors.New("restart requires a spawned emulator (not --connect mode)")
+	}
+	if e.httpServer != nil {
+		e.httpServer.Close()
+		e.httpServer = nil
+	}
+	if e.client != nil {
+		if err := e.client.Close(); err != nil {
+			return fmt.Errorf("close engine client before restart: %w", err)
+		}
+		e.client = nil
+	}
+	if e.cmd != nil && e.cmd.Process != nil {
+		_ = e.cmd.Process.Signal(os.Interrupt)
+		done := make(chan struct{})
+		go func() {
+			_, _ = e.cmd.Process.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = e.cmd.Process.Kill()
+			<-done
+		}
+	}
+	cmd, err := launchEngine(e.spawn.harnessOpts, e.spawn.engineArgs)
+	if err != nil {
+		return fmt.Errorf("restart spawn: %w", err)
+	}
+	e.cmd = cmd
+	client, err := waitForReady(ctx, e.spawn.engineAddr)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		return err
+	}
+	e.client = client
+	e.httpServer = httptest.NewServer(
+		gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client))
+	e.BaseURL = e.httpServer.URL
+	return nil
+}
+
 // doRequest is the runner's slimmed-down HTTP helper. Every caller
 // POSTs a JSON body, so the method is hard-coded to POST and the body
 // is required (callers already gate on whether they have something to
 // send before calling). Errors are wrapped with the URL so the
 // runner-internal error path is easy to debug.
 func doRequest(ctx context.Context, url string, body []byte) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url,
-		bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, fmt.Errorf("build request POST %s: %w", url, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, nil, fmt.Errorf("http POST %s: %w", url, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, nil, fmt.Errorf("read body from POST %s: %w",
-			url, err)
-	}
-	return resp.StatusCode, respBody, nil
+	return DoHTTPRequest(ctx, http.MethodPost, url, body)
 }
 
 // doPatchRequest POSTs a JSON body with HTTP PATCH. Used by setup steps
 // that mutate table metadata (e.g. column governance via tables.patch).
 func doPatchRequest(ctx context.Context, url string, body []byte) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url,
-		bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, fmt.Errorf("build request PATCH %s: %w", url, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, nil, fmt.Errorf("http PATCH %s: %w", url, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, nil, fmt.Errorf("read body from PATCH %s: %w",
-			url, err)
-	}
-	return resp.StatusCode, respBody, nil
+	return DoHTTPRequest(ctx, http.MethodPatch, url, body)
 }
