@@ -1,7 +1,6 @@
 // Matrix coverage for ParseParameterValue wire forms (plan 04).
-#include "backend/engine/semantic/value.h"
-
 #include "absl/time/time.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
@@ -23,14 +22,22 @@ struct ParameterMatrixCase {
 
 std::vector<ParameterMatrixCase> AcceptedMatrixCases() {
   return {
-      {"TIMESTAMP", nullptr, "2026-06-22T10:00:00", true,
+      {"TIMESTAMP",
+       nullptr,
+       "2026-06-22T10:00:00",
+       true,
        "timestamp_naive_iso_t"},
-      {"TIMESTAMP", nullptr, "2026-06-22 10:00:00", true,
-       "timestamp_space"},
+      {"TIMESTAMP", nullptr, "2026-06-22 10:00:00", true, "timestamp_space"},
       {"TIMESTAMP", nullptr, "2026-06-22T10:00:00Z", true, "timestamp_z"},
-      {"TIMESTAMP", nullptr, "2026-06-22T10:00:00+00:00", true,
+      {"TIMESTAMP",
+       nullptr,
+       "2026-06-22T10:00:00+00:00",
+       true,
        "timestamp_offset"},
-      {"TIMESTAMP", nullptr, "2026-06-22T10:00:00.123456", true,
+      {"TIMESTAMP",
+       nullptr,
+       "2026-06-22T10:00:00.123456",
+       true,
        "timestamp_fractional"},
       {"TIMESTAMP", nullptr, "2026-06-22", true, "timestamp_date_only"},
       {"DATE", nullptr, "2020-06-15", true, "date_iso"},
@@ -39,7 +46,10 @@ std::vector<ParameterMatrixCase> AcceptedMatrixCases() {
       {"TIME", nullptr, "12:30:45", true, "time_hms"},
       {"TIME", nullptr, "12:30:45.123456", true, "time_fractional"},
       {"NUMERIC", nullptr, "3.14159", true, "numeric"},
-      {"BIGNUMERIC", nullptr, "99999999999999999999999999999.999999999", true,
+      {"BIGNUMERIC",
+       nullptr,
+       "99999999999999999999999999999.999999999",
+       true,
        "bignumeric"},
       {"BOOL", nullptr, "true", true, "bool_true"},
       {"BOOL", nullptr, "false", true, "bool_false"},
@@ -58,8 +68,8 @@ std::vector<ParameterMatrixCase> RejectedMatrixCases() {
   };
 }
 
-class ParameterMatrixTest
-    : public testing::TestWithParam<ParameterMatrixCase> {};
+class ParameterMatrixTest : public testing::TestWithParam<ParameterMatrixCase> {
+};
 
 TEST_P(ParameterMatrixTest, ParseParameterValue) {
   const ParameterMatrixCase& c = GetParam();
@@ -73,14 +83,16 @@ TEST_P(ParameterMatrixTest, ParseParameterValue) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    Accepted, ParameterMatrixTest,
+    Accepted,
+    ParameterMatrixTest,
     testing::ValuesIn(AcceptedMatrixCases()),
     [](const testing::TestParamInfo<ParameterMatrixCase>& info) {
       return info.param.label;
     });
 
 INSTANTIATE_TEST_SUITE_P(
-    Rejected, ParameterMatrixTest,
+    Rejected,
+    ParameterMatrixTest,
     testing::ValuesIn(RejectedMatrixCases()),
     [](const testing::TestParamInfo<ParameterMatrixCase>& info) {
       return info.param.label;
