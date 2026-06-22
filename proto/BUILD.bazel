@@ -16,6 +16,7 @@ package(default_visibility = ["//visibility:public"])
 proto_library(
     name = "emulator_proto",
     srcs = ["emulator.proto"],
+    strip_import_prefix = "/proto",
 )
 
 cc_proto_library(
@@ -33,6 +34,7 @@ cc_grpc_library(
 proto_library(
     name = "storage_read_proto",
     srcs = ["storage_read.proto"],
+    strip_import_prefix = "/proto",
     deps = [":emulator_proto"],
 )
 
@@ -51,6 +53,7 @@ cc_grpc_library(
 proto_library(
     name = "storage_write_proto",
     srcs = ["storage_write.proto"],
+    strip_import_prefix = "/proto",
     deps = [":emulator_proto"],
 )
 
