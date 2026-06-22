@@ -333,6 +333,29 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "catalog_crash_safety_test",
+    srcs = ["catalog_crash_safety_test.cc"],
+    deps = [
+        ":googlesql_catalog",
+        ":udf_registration_catalog",
+        ":udf_registry",
+        ":view_registry",
+        "//backend/schema",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
 cc_library(
     name = "udf_registration_catalog",
     srcs = ["udf_registration_catalog.cc"],

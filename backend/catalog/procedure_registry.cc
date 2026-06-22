@@ -77,6 +77,17 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
   if (it == by_project.end()) return;
   for (const auto& proc : it->second.procedures) {
     if (proc == nullptr) continue;
+    const ::googlesql::Procedure* existing = nullptr;
+    if (catalog.GetProcedure(proc->Name(), &existing).ok()) {
+      if (existing == proc.get()) {
+        continue;
+      }
+      // SimpleCatalog::AddProcedure uses InsertOrDie and exposes no
+      // RemoveProcedure. Replay runs once on a fresh catalog in
+      // GoogleSqlCatalog's constructor; skip duplicate-name inserts
+      // so a second replay on the same catalog cannot abort the engine.
+      continue;
+    }
     catalog.AddProcedure(proc.get());
   }
 }

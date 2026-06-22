@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -73,8 +74,32 @@ void ReplayTvfsIntoCatalog(absl::string_view project_id,
   absl::MutexLock lock(&mu);
   auto it = by_project.find(std::string(project_id));
   if (it == by_project.end()) return;
+  // Purge retired TVFs so a long-lived catalog does not keep resolving
+  // dropped routines or shadow re-registered ones (same pattern as
+  // ReplayFunctionsIntoCatalog in udf_registry.cc).
+  if (!it->second.retired_tvfs.empty()) {
+    absl::flat_hash_set<const ::googlesql::TableValuedFunction*> retired;
+    retired.reserve(it->second.retired_tvfs.size());
+    for (const auto& tvf : it->second.retired_tvfs) {
+      retired.insert(tvf.get());
+    }
+    catalog.RemoveTableValuedFunctions(
+        [&retired](const ::googlesql::TableValuedFunction* tvf) {
+          return retired.contains(tvf);
+        });
+  }
   for (const auto& tvf : it->second.tvfs) {
     if (tvf == nullptr) continue;
+    const std::string name = tvf->Name();
+    const ::googlesql::TableValuedFunction* existing = nullptr;
+    if (catalog.GetTableValuedFunction(name, &existing).ok() &&
+        existing == tvf.get()) {
+      continue;
+    }
+    catalog.RemoveTableValuedFunctions(
+        [&name](const ::googlesql::TableValuedFunction* existing_fn) {
+          return absl::EqualsIgnoreCase(existing_fn->Name(), name);
+        });
     catalog.AddTableValuedFunction(tvf.get());
   }
 }
