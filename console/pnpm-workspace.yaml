@@ -1,0 +1,15 @@
+# Allow esbuild (Vite's bundler) to run its postinstall so the platform
+# binary is linked. Without this pnpm skips the build and `vite` cannot start.
+allowBuilds:
+  esbuild: true
+
+# Force every consumer (including the @uiw/react-codemirror chain) onto a
+# single, mutually compatible set of CodeMirror core packages. Without this,
+# pnpm can resolve `@codemirror/lint@6.9.7` against `@codemirror/view@6.41.x`,
+# which fails because lint imports `activateHover` from a newer view build —
+# surfacing as "multiple instances of @codemirror/state" in the editor.
+overrides:
+  '@codemirror/state': 6.6.0
+  '@codemirror/view': 6.41.1
+  '@codemirror/lint': 6.9.5
+  '@codemirror/autocomplete': 6.20.1

@@ -13,6 +13,25 @@ export default defineConfig(({ mode }) => {
             alias: {
                 '@': path.resolve(__dirname, 'src'),
             },
+            // CodeMirror breaks instanceof checks when more than one copy of
+            // its core packages is loaded. Force a single instance so the
+            // editor's extension set resolves correctly.
+            dedupe: ['@codemirror/state', '@codemirror/view'],
+        },
+        // Pre-bundle the CodeMirror packages together so they share a single
+        // @codemirror/state instance. Without this, @uiw/react-codemirror and
+        // the language/extension packages can be optimized into separate chunks
+        // that each carry their own copy, breaking instanceof checks.
+        optimizeDeps: {
+            include: [
+                '@uiw/react-codemirror',
+                '@codemirror/state',
+                '@codemirror/view',
+                '@codemirror/autocomplete',
+                '@codemirror/lint',
+                '@codemirror/lang-sql',
+                '@codemirror/lang-json',
+            ],
         },
         server: {
             port: Number(env.VITE_DEV_PORT ?? 5173),
