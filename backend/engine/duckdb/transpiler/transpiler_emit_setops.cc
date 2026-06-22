@@ -60,11 +60,19 @@ std::string Transpiler::EmitSetOperationItem(
   }
   std::string inner = EmitScan(item->scan());
   if (inner.empty()) return "";
+  const bool use_join_aliases = join_output_columns_use_id_aliases_;
   std::vector<std::string> projections;
   projections.reserve(item->output_column_list_size());
   for (int i = 0; i < item->output_column_list_size(); ++i) {
     const ::googlesql::ResolvedColumn& src = item->output_column_list(i);
     const ::googlesql::ResolvedColumn& dst = parent->column_list(i);
+    if (use_join_aliases) {
+      projections.push_back(
+          absl::StrCat(internal::JoinColumnIdAlias(src.column_id()),
+                       " AS ",
+                       internal::QuoteIdent(dst.name())));
+      continue;
+    }
     std::string src_q = internal::QuoteIdent(src.name());
     if (src.name() == dst.name()) {
       projections.push_back(std::move(src_q));
@@ -161,6 +169,7 @@ std::string Transpiler::EmitSetOperationScan(
     input_has_rn_column_ = false;
     input_rn_ordering_ = false;
     output_includes_input_rn_ = false;
+    join_output_columns_use_id_aliases_ = false;
     output_order_items_.clear();
     output_order_column_ids_.clear();
     std::string s = EmitSetOperationItem(node->input_item_list(i), node);
@@ -183,6 +192,10 @@ std::string Transpiler::EmitSetOperationScan(
     }
     items.push_back(std::move(s));
   }
+  // Set-op arms may have used join id aliases internally; the combined
+  // result schema is the parent's user-visible column_list names.
+  join_output_columns_use_id_aliases_ = false;
+  join_output_uses_id_aliases_ = false;
   std::string union_sql = absl::StrJoin(items, absl::StrCat(" ", op_kw, " "));
   if (preserve_union_order) {
     std::vector<std::string> cols;
@@ -217,9 +230,10 @@ std::string Transpiler::EmitOrderByScan(
   // pass for collations lands separately, so we fall back when it
   // is set.
   if (node == nullptr) return "";
-  const bool input_id_aliases = join_output_uses_id_aliases_;
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
+  const bool input_has_join_aliases =
+      join_output_uses_id_aliases_ || join_id_aliases_in_query_;
   std::vector<std::string> items;
   items.reserve(node->order_by_item_list_size());
   for (int i = 0; i < node->order_by_item_list_size(); ++i) {
@@ -247,7 +261,7 @@ std::string Transpiler::EmitOrderByScan(
        (input_scan->node_kind() == ::googlesql::RESOLVED_PROJECT_SCAN &&
         input_scan->GetAs<::googlesql::ResolvedProjectScan>()
                 ->expr_list_size() == 0));
-  if (input_id_aliases && join_passthrough_input &&
+  if (input_has_join_aliases && join_passthrough_input &&
       input_scan->column_list_size() > 0) {
     std::vector<std::string> cols;
     cols.reserve(input_scan->column_list_size());

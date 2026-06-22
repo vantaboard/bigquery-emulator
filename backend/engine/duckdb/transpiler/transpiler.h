@@ -397,6 +397,9 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Sticky for the current query: any JOIN in the scan tree used id
   // aliases, so analytic-captured ORDER BY keys must remap by column_id.
   bool join_id_aliases_in_query_ = false;
+  // True while the active scan subtree still exposes join output as
+  // __bq_j_<column_id> (cleared when a computed ProjectScan renames).
+  bool join_output_columns_use_id_aliases_ = false;
 
   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST
   // ordinality or an explicit row_number() stamp).

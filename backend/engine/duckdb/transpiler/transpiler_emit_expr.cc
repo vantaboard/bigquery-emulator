@@ -393,17 +393,19 @@ std::string Transpiler::EmitFunctionArgument(
 
 std::string Transpiler::EmitOutputColumn(
     const ::googlesql::ResolvedOutputColumn* node) {
-  // Final user-visible alias mapping. The inner query exposes each
-  // physical column under its `ResolvedColumn::name()`; the output
-  // schema renames it to `node->name()`. We collapse the alias when
-  // both are equal so the emitted SQL stays readable for the common
-  // case (`SELECT id FROM people` -> the output name and the
-  // physical column name both resolve to `"id"`).
+  // Final user-visible alias mapping. The inner query exposes join-renamed
+  // columns as __bq_j_<id>; map each output back to the user-facing name.
+  // Use join_id_aliases_in_query_ (sticky for the whole query) because
+  // join_output_uses_id_aliases_ is cleared when a later passthrough
+  // ProjectScan finishes lowering.
   if (node == nullptr) return "";
-  std::string col =
-      join_output_uses_id_aliases_
-          ? internal::JoinColumnIdAlias(node->column().column_id())
-          : internal::QuoteIdent(node->column().name());
+  const bool use_join_aliases = join_output_columns_use_id_aliases_;
+  if (use_join_aliases) {
+    return absl::StrCat(internal::JoinColumnIdAlias(node->column().column_id()),
+                        " AS ",
+                        internal::QuoteIdent(node->name()));
+  }
+  std::string col = internal::QuoteIdent(node->column().name());
   if (node->name() == node->column().name()) {
     return col;
   }

@@ -69,6 +69,7 @@ std::string Transpiler::EmitQueryStmt(
   output_order_items_.clear();
   output_order_column_ids_.clear();
   join_id_aliases_in_query_ = false;
+  join_output_columns_use_id_aliases_ = false;
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -354,6 +355,9 @@ std::string Transpiler::EmitProjectScan(
     // Passthrough ProjectScan keeps join id aliases for downstream
     // OrderByScan / QueryStmt; computed projections expose user names.
     join_output_uses_id_aliases_ = node->expr_list_size() == 0;
+    if (node->expr_list_size() > 0) {
+      join_output_columns_use_id_aliases_ = false;
+    }
   }
 
   for (size_t i = 0; i < output_order_items_.size(); ++i) {

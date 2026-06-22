@@ -367,6 +367,7 @@ std::string Transpiler::EmitJoinScan(
     if (projections.empty()) return "";
     join_output_uses_id_aliases_ = true;
     join_id_aliases_in_query_ = true;
+    join_output_columns_use_id_aliases_ = true;
     return absl::StrCat("SELECT ",
                         projections,
                         " FROM (",
@@ -395,6 +396,7 @@ std::string Transpiler::EmitJoinScan(
   if (on.empty()) return "";
   join_output_uses_id_aliases_ = true;
   join_id_aliases_in_query_ = true;
+  join_output_columns_use_id_aliases_ = true;
   return absl::StrCat("SELECT ",
                       projections,
                       " FROM (",
