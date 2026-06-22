@@ -305,6 +305,9 @@ func bqStyleMessage(msg string) string {
 	if m := alreadyExistsResourceRE.FindStringSubmatch(msg); m != nil {
 		return bqStyleResourceMessage("Already Exists", m[1], m[2], m[3], m[4])
 	}
+	if strings.HasPrefix(msg, "semantic: invalid TIMESTAMP parameter value ") {
+		return "Invalid timestamp string"
+	}
 	return msg
 }
 

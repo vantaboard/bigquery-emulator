@@ -89,6 +89,11 @@ func TestBQStyleMessageRewritesStorageErrors(t *testing.T) {
 			in:   "Engine internal: contains table not found: dev.x.y substring",
 			want: "Engine internal: contains table not found: dev.x.y substring",
 		},
+		{
+			name: "invalid timestamp parameter",
+			in:   "semantic: invalid TIMESTAMP parameter value 'not-a-timestamp'",
+			want: "Invalid timestamp string",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
