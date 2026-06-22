@@ -260,11 +260,13 @@ void Transpiler::CaptureAnalyticOutputOrder(
           std::string col = EmitColumnRef(ref);
           if (col.empty()) return;
           output_order_items_.push_back(absl::StrCat(col, " ASC"));
+          output_order_column_ids_.push_back(ref->column().column_id());
         }
       } else if (!over_has_order) {
         std::string part_expr = EmitExpr(part_expr_node);
         if (part_expr.empty()) return;
         output_order_items_.push_back(absl::StrCat(part_expr, " ASC"));
+        output_order_column_ids_.push_back(-1);
       }
     }
   }
@@ -281,12 +283,15 @@ void Transpiler::CaptureAnalyticOutputOrder(
       output_order_items_.push_back(absl::StrCat(
           col,
           internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+      output_order_column_ids_.push_back(
+          item->column_ref()->column().column_id());
     }
   }
 
   if (input_rn_ordering_) {
     output_order_items_.push_back(
         absl::StrCat(internal::QuoteIdent(internal::kBqInputRnCol), " ASC"));
+    output_order_column_ids_.push_back(-1);
   }
 }
 

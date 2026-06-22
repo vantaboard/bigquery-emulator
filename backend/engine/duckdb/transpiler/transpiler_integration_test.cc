@@ -202,6 +202,39 @@ ORDER BY `bfuid_col_2` ASC NULLS LAST
   ASSERT_FALSE(sql.empty()) << "full bigframes stats query must transpile";
 }
 
+TEST_F(TranspilerTest, TranspileLeftJoinOrphanOrdersWithAnalyticDedup) {
+  // Regression for LEFT JOIN + ROW_NUMBER dedup (BigFrames cache shape):
+  // analytic-captured ORDER BY keys must remap to __bq_j_* join aliases.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(R"sql(
+SELECT o.id AS order_id, o.name AS order_name, o.profile_id, o.ts AS source_created_at
+FROM (
+  SELECT id, name, profile_id, ts FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ts DESC) AS rn
+    FROM (SELECT 1 AS id, 'a' AS name, 42 AS profile_id, TIMESTAMP '2020-01-01' AS ts)
+  ) WHERE rn = 1
+) o
+LEFT JOIN (
+  SELECT id, ts FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ts DESC) AS rn
+    FROM (SELECT 10 AS id, TIMESTAMP '2020-01-01' AS ts)
+  ) WHERE rn = 1
+) p ON o.profile_id = p.id
+WHERE o.profile_id IS NOT NULL AND p.id IS NULL
+)sql");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "orphan orders LEFT JOIN must transpile";
+  // Post-join wrap must not reference bare partition/order keys (email
+  // regression).
+  EXPECT_EQ(
+      sql.find(
+          "\"__bq_j_1\", \"__bq_j_2\", \"__bq_j_3\", \"__bq_j_4\", \"id\""),
+      std::string::npos)
+      << sql;
+  EXPECT_NE(sql.find("ORDER BY \"__bq_j_1\""), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, TranspileFullOuterJoinCoalesceOrderBy) {
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT COALESCE(CAST(u.id AS STRING), 'no-user') AS user_id, "

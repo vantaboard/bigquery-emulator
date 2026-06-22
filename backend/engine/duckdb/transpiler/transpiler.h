@@ -394,6 +394,9 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Set when the immediately-wrapped scan emit is a JOIN that projects
   // analyzer columns under `__bq_j_<column_id>` aliases.
   bool join_output_uses_id_aliases_ = false;
+  // Sticky for the current query: any JOIN in the scan tree used id
+  // aliases, so analytic-captured ORDER BY keys must remap by column_id.
+  bool join_id_aliases_in_query_ = false;
 
   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST
   // ordinality or an explicit row_number() stamp).
@@ -404,6 +407,9 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Final ORDER BY keys derived from the first analytic group's
   // PARTITION BY / ORDER BY spec (BigQuery result ordering).
   std::vector<std::string> output_order_items_;
+  // Parallel `ResolvedColumn::column_id()` for each output_order_items_
+  // entry; -1 when the key is not a simple column ref (expr / rn).
+  std::vector<int> output_order_column_ids_;
   // True when the user-visible SELECT list includes `__bq_input_rn`.
   bool output_includes_input_rn_ = false;
   // Suppresses appending `__bq_input_rn` to ProjectScan output when

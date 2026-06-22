@@ -323,6 +323,25 @@ inline std::string OrderItemLeadingColumn(const std::string& item) {
   return item.substr(0, end + 1);
 }
 
+inline std::string RemapOrderItemForJoinAliases(const std::string& item,
+                                                int column_id,
+                                                bool join_id_aliases) {
+  if (!join_id_aliases || column_id < 0) return item;
+  const std::string leading = OrderItemLeadingColumn(item);
+  if (leading.empty()) return item;
+  return absl::StrCat(JoinColumnIdAlias(column_id),
+                      item.substr(leading.size()));
+}
+
+inline std::string OrderColumnExprForWrap(const std::string& quoted_name,
+                                          int column_id,
+                                          bool join_id_aliases) {
+  if (join_id_aliases && column_id >= 0) {
+    return JoinColumnIdAlias(column_id);
+  }
+  return quoted_name;
+}
+
 inline bool OutputListContainsColumn(
     absl::string_view quoted_col, const ::googlesql::ResolvedQueryStmt* node) {
   if (node == nullptr) return false;
@@ -336,14 +355,23 @@ inline bool OutputListContainsColumn(
 
 inline std::vector<std::string> ExtraOrderColumnsForWrap(
     const std::vector<std::string>& order_items,
-    const ::googlesql::ResolvedQueryStmt* node) {
+    const ::googlesql::ResolvedQueryStmt* node,
+    const std::vector<int>* order_column_ids = nullptr,
+    bool join_id_aliases = false) {
   std::vector<std::string> extra;
-  for (const std::string& item : order_items) {
+  for (size_t i = 0; i < order_items.size(); ++i) {
+    const std::string& item = order_items[i];
     const std::string col = OrderItemLeadingColumn(item);
     if (col.empty() || col == QuoteIdent(kBqInputRnCol)) continue;
     if (OutputListContainsColumn(col, node)) continue;
-    if (std::find(extra.begin(), extra.end(), col) == extra.end()) {
-      extra.push_back(col);
+    const int column_id =
+        order_column_ids != nullptr && i < order_column_ids->size()
+            ? (*order_column_ids)[i]
+            : -1;
+    const std::string proj =
+        OrderColumnExprForWrap(col, column_id, join_id_aliases);
+    if (std::find(extra.begin(), extra.end(), proj) == extra.end()) {
+      extra.push_back(proj);
     }
   }
   return extra;

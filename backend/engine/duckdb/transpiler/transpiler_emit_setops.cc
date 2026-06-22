@@ -157,16 +157,19 @@ std::string Transpiler::EmitSetOperationScan(
     const bool saved_rn_order = input_rn_ordering_;
     const bool saved_output_rn = output_includes_input_rn_;
     const std::vector<std::string> saved_output_order = output_order_items_;
+    const std::vector<int> saved_output_order_ids = output_order_column_ids_;
     input_has_rn_column_ = false;
     input_rn_ordering_ = false;
     output_includes_input_rn_ = false;
     output_order_items_.clear();
+    output_order_column_ids_.clear();
     std::string s = EmitSetOperationItem(node->input_item_list(i), node);
     input_has_rn_column_ = saved_has_rn || input_has_rn_column_;
     input_rn_ordering_ = saved_rn_order || input_rn_ordering_;
     output_includes_input_rn_ = saved_output_rn || output_includes_input_rn_;
     if (output_order_items_.empty()) {
       output_order_items_ = saved_output_order;
+      output_order_column_ids_ = saved_output_order_ids;
     }
     if (s.empty()) return "";
     if (preserve_union_order) {
@@ -234,6 +237,7 @@ std::string Transpiler::EmitOrderByScan(
   // child scans (e.g. ROW_NUMBER PARTITION BY) may have queued for the
   // outer QueryStmt wrap.
   output_order_items_.clear();
+  output_order_column_ids_.clear();
   input_rn_ordering_ = false;
   std::string projection = "*";
   const ::googlesql::ResolvedScan* input_scan = node->input_scan();

@@ -171,6 +171,7 @@ std::string Transpiler::EmitWithScan(
   const bool body_needs_input_rn =
       internal::ScanTreeContainsAnalytic(node->query());
   const std::vector<std::string> saved_output_order = output_order_items_;
+  const std::vector<int> saved_output_order_ids = output_order_column_ids_;
   bool any_cte_has_rn = false;
   std::vector<std::string> ctes;
   ctes.reserve(node->with_entry_list_size());
@@ -178,6 +179,7 @@ std::string Transpiler::EmitWithScan(
     const bool saved_rn_in_cte = input_rn_ordering_;
     input_rn_ordering_ = false;
     output_order_items_.clear();
+    output_order_column_ids_.clear();
     const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
     if (entry == nullptr || entry->with_subquery() == nullptr) return "";
     if (entry->with_query_name().empty()) return "";
@@ -267,6 +269,7 @@ std::string Transpiler::EmitWithScan(
   }
   input_rn_ordering_ = any_cte_has_rn;
   output_order_items_ = saved_output_order;
+  output_order_column_ids_ = saved_output_order_ids;
   std::string body = EmitScan(node->query());
   input_rn_ordering_ = saved_rn_at_with || input_rn_ordering_;
   if (body.empty()) return "";

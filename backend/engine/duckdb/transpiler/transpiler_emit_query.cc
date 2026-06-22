@@ -67,6 +67,8 @@ std::string Transpiler::EmitQueryStmt(
   if (node == nullptr) return "";
   (void)node->is_value_table();
   output_order_items_.clear();
+  output_order_column_ids_.clear();
+  join_id_aliases_in_query_ = false;
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -98,12 +100,24 @@ std::string Transpiler::EmitQueryStmt(
   std::string sql = absl::StrCat(
       "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
   if (!output_order_items_.empty()) {
+    std::vector<std::string> wrap_order_items;
+    wrap_order_items.reserve(output_order_items_.size());
+    for (size_t i = 0; i < output_order_items_.size(); ++i) {
+      const int col_id = i < output_order_column_ids_.size()
+                             ? output_order_column_ids_[i]
+                             : -1;
+      wrap_order_items.push_back(internal::RemapOrderItemForJoinAliases(
+          output_order_items_[i], col_id, join_id_aliases_in_query_));
+    }
     const std::vector<std::string> extra_order_cols =
-        internal::ExtraOrderColumnsForWrap(output_order_items_, node);
+        internal::ExtraOrderColumnsForWrap(wrap_order_items,
+                                           node,
+                                           &output_order_column_ids_,
+                                           join_id_aliases_in_query_);
     const bool order_needs_rn =
         input_rn_ordering_ && !output_includes_input_rn_ &&
-        std::any_of(output_order_items_.begin(),
-                    output_order_items_.end(),
+        std::any_of(wrap_order_items.begin(),
+                    wrap_order_items.end(),
                     [](const std::string& item) {
                       return item.find(internal::QuoteIdent(
                                  internal::kBqInputRnCol)) != std::string::npos;
@@ -124,13 +138,14 @@ std::string Transpiler::EmitQueryStmt(
                          " FROM (",
                          inner,
                          ") ORDER BY ",
-                         absl::StrJoin(output_order_items_, ", "),
+                         absl::StrJoin(wrap_order_items, ", "),
                          ")");
     } else {
       absl::StrAppend(
-          &sql, " ORDER BY ", absl::StrJoin(output_order_items_, ", "));
+          &sql, " ORDER BY ", absl::StrJoin(wrap_order_items, ", "));
     }
     output_order_items_.clear();
+    output_order_column_ids_.clear();
     input_rn_ordering_ = false;
   } else if (input_rn_ordering_) {
     // DuckDB allows ORDER BY a column from the inner subquery even when
@@ -147,6 +162,7 @@ std::string Transpiler::EmitCtasSelect(
     const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt) {
   if (stmt == nullptr || stmt->query() == nullptr) return "";
   output_order_items_.clear();
+  output_order_column_ids_.clear();
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -182,6 +198,7 @@ std::string Transpiler::EmitInsertSelect(
     const ::googlesql::ResolvedInsertStmt* stmt) {
   if (stmt == nullptr || stmt->query() == nullptr) return "";
   output_order_items_.clear();
+  output_order_column_ids_.clear();
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -339,15 +356,20 @@ std::string Transpiler::EmitProjectScan(
     join_output_uses_id_aliases_ = node->expr_list_size() == 0;
   }
 
-  for (const std::string& item : output_order_items_) {
+  for (size_t i = 0; i < output_order_items_.size(); ++i) {
+    const std::string& item = output_order_items_[i];
     const std::string col = internal::OrderItemLeadingColumn(item);
     if (col.empty() || col == internal::QuoteIdent(internal::kBqInputRnCol))
       continue;
-    if (std::find(projections.begin(), projections.end(), col) !=
+    const int column_id =
+        i < output_order_column_ids_.size() ? output_order_column_ids_[i] : -1;
+    const std::string proj = internal::OrderColumnExprForWrap(
+        col, column_id, join_id_aliases_in_query_ || input_id_aliases);
+    if (std::find(projections.begin(), projections.end(), proj) !=
         projections.end()) {
       continue;
     }
-    projections.push_back(col);
+    projections.push_back(proj);
   }
   if (input_has_rn_column_ && !suppress_rn_in_project_) {
     const std::string rn = internal::QuoteIdent(internal::kBqInputRnCol);

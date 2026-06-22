@@ -385,6 +385,7 @@ std::string Transpiler::EmitUnnestCrossProductScan(
   }
   if (sql.empty()) return "";
   join_output_uses_id_aliases_ = true;
+  join_id_aliases_in_query_ = true;
   input_has_rn_column_ = true;
   return sql;
 }
