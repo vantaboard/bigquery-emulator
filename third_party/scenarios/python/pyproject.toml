@@ -1,0 +1,7 @@
+[project]
+name = "bigquery-emulator-workflow-scenarios"
+version = "0.0.0"
+description = "First-party google-cloud-bigquery workflow scenarios against the emulator"
+requires-python = ">=3.10"
+readme = "README.md"
+license = "Apache-2.0"

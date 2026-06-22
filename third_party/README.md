@@ -9,6 +9,7 @@ kept here as a sibling to the in-repo SQL-fixture conformance harness:
 | **YAML fixture conformance** | `conformance/` | `task conformance:*` | SQL semantics through this repo's purpose-built runner (`go run ./conformance/cmd/runner`). The default `[local]` profile runs every fixture against the local execution coordinator + DuckDB storage; results pinned in YAML. |
 | **Differential BQ oracle replay** | `conformance/differential/` | `task conformance:differential` | Replays committed production-BigQuery oracles against the emulator using the same typed-cell comparator as YAML fixtures. CI job `differential` in `.github/workflows/conformance.yml`; recording via `task conformance:differential-record` (manual, requires GCP). |
 | **Third-party client conformance** | `third_party/<lang>-bigquery-tests/` | `task thirdparty:*` | The published Google BigQuery client libraries (Go, Node.js, Python, Java, BigQuery DataFrames) and **dbt-bigquery** functional tests talk to the emulator's REST + gRPC surface end-to-end. Tests come from upstream sample/snippet repos (and dbt-labs/dbt-adapters for the dbt lane). The Java lane runs a curated 15-IT Failsafe set against the local emulator (6 java-bigquery ITs exercising surfaces this emulator implements; 9 across bigqueryconnection/bigquerydatatransfer/bigquerystorage that currently fail with `NOT_IMPLEMENTED`-shaped errors until shallow backends land — see `ROADMAP.md` and `taskfiles/thirdparty.yml`). The other lanes run live when `BIGQUERY_EMULATOR_HOST` is exported. |
+| **First-party workflow scenarios** | `third_party/scenarios/python/` | `task thirdparty:scenarios` | Repo-owned multi-step flows through the real `google-cloud-bigquery` Python client (authorize-view, dedup CTAS, dashboard params, orphan orders). CI job `scenarios-live` in `.github/workflows/thirdparty-samples.yml`. Expected values are production-validated via `conformance/differential/` oracles. |
 
 The two lanes are deliberately separate. A SQL-shape regression should fail
 the fixture lane; a client-library-compat regression (header parsing, REST
@@ -682,6 +683,35 @@ DBT_BIGQUERY_RUN_TRIAGE=1 \
 See [`FEASIBILITY.md`](dbt-bigquery-tests/FEASIBILITY.md) for the client-level
 `api_endpoint` probe results (list/create dataset, query job — all OK on
 `:9050`).
+
+## First-party workflow scenarios (`scenarios/python`)
+
+Repo-owned multi-step flows that mirror reported customer usage through the
+real **`google-cloud-bigquery` Python client** — not upstream sample snippets.
+Each scenario sets up datasets/tables via the client, runs a realistic workflow,
+and asserts post-state rows/scalars. Expected values are pinned to production
+BigQuery oracles under `conformance/differential/oracle/` (plan 01).
+
+| Scenario module | Flow | Production oracle / fixture |
+|-----------------|------|----------------------------|
+| `test_authorize_view.py` | Source table + tenant views + `update_dataset(['access_entries'])` ×3 tenants | `conformance/sessions/authorize_view_repeat.yaml` |
+| `test_dedup_ctas.py` | `CREATE OR REPLACE TABLE … AS SELECT * EXCEPT(rn) … ROW_NUMBER()` | `create_or_replace_table_backtick_qualified.yaml` |
+| `test_dashboard_params.py` | CTE rollup (`COUNTIF`, `JSON_EXTRACT_SCALAR`, `TIMESTAMP_SUB`, `UNION DISTINCT`) + naive TIMESTAMP param | `timestamp_param_naive.yaml`, dashboard CTE shape |
+| `test_orphan_orders.py` | Anti-join over QUALIFY-deduped views | `orphan_orders_antijoin.yaml` |
+
+```bash
+export BIGQUERY_EMULATOR_HOST=http://localhost:9050
+task thirdparty:scenarios
+```
+
+Scenarios known to fail until upstream engine/transpiler plans land are marked
+`xfail` in pytest (strict=False) so the lane stays green while still exercising
+the flows on every run. CI: job **`scenarios-live`** in
+`.github/workflows/thirdparty-samples.yml` (gated after `build-engine`, like
+the other thirdparty live lanes).
+
+Knobs: `SCENARIOS_PYTHON`, `SCENARIOS_PYTEST_ARGS`, `SCENARIOS_CMD_TIMEOUT`
+(see `taskfiles/thirdparty.yml`).
 
 ## bigquery-utils UDF conformance (non-gating)
 

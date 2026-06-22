@@ -21,6 +21,7 @@
 #   task thirdparty:python-bigquery-dataframes-snippet-gate
 #                                                # narrow CI-friendly bigframes allowlist
 #   task thirdparty:dbt-bigquery-tests           # dbt-bigquery functional pytest (uvx)
+#   task thirdparty:scenarios                    # first-party workflow scenarios (Python client)
 #
 # Bring-up contract: each suite task below calls `task emulator-up`
 # after its own vendor-tree existence check, so a fresh clone gets a
@@ -155,7 +156,7 @@ tasks:
       # a fresh container bringup.
       - |
         set -uo pipefail
-        suites="golang-bigquery-tests python-bigquery-tests node-bigquery-tests java-bigquery-tests python-bigquery-dataframes-snippet-gate"
+        suites="golang-bigquery-tests python-bigquery-tests node-bigquery-tests java-bigquery-tests python-bigquery-dataframes-snippet-gate scenarios"
         failed=""
         # Default each suite to a fresh emulator data volume so per-run
         # UUID collisions ("dataset already exists", "table already
@@ -1249,3 +1250,85 @@ tasks:
         # shellcheck disable=SC2086
         _run uvx --python "${py}" --with-requirements requirements-test.txt \
           pytest --profile=emulator -v --durations=10 ${_pytest_args}
+
+  # First-party workflow scenarios exercised through the real
+  # google-cloud-bigquery Python client (not upstream sample snippets).
+  # See third_party/scenarios/python/ and third_party/README.md.
+  scenarios:
+    desc: Run first-party Python workflow scenarios against the emulator (see third_party/scenarios/python/)
+    cmds:
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        scaffold="${root}/third_party/scenarios/python"
+        if [ ! -f "${scaffold}/conftest.py" ]; then
+          echo "third_party/scenarios/python scaffold missing" >&2
+          exit 1
+        fi
+      - task: emulator-up
+      - |
+        set -euo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        scaffold="${root}/third_party/scenarios/python"
+        if [ -n "${BIGQUERY_EMULATOR_HOST:-}" ]; then
+          bash "${root}/scripts/preflight_python_samples_emulator.sh"
+        fi
+        _bqhost="${BIGQUERY_EMULATOR_HOST:-http://localhost:9050}"
+        if [ -n "$_bqhost" ] && ! printf '%s' "$_bqhost" | grep -qE '^https?://'; then
+          export BIGQUERY_EMULATOR_HOST="http://${_bqhost#//}"
+        else
+          export BIGQUERY_EMULATOR_HOST="${_bqhost}"
+        fi
+        export GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT:-dev}"
+        export BIGQUERY_STORAGE_GRPC_ENDPOINT="${BIGQUERY_STORAGE_GRPC_ENDPOINT:-localhost:9060}"
+        export PYTHONUNBUFFERED=1
+        py="${SCENARIOS_PYTHON:-}"
+        if [ -z "$py" ]; then
+          py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+        fi
+        case "$py" in
+          3.10|3.11|3.12|3.13|3.14) ;;
+          *)
+            _found=""
+            for _v in 3.13 3.12 3.11 3.10; do
+              if command -v "python${_v}" >/dev/null 2>&1; then
+                py="${_v}"
+                _found=1
+                echo "scenarios: default Python unsupported for pins; using python${_v}." >&2
+                break
+              fi
+            done
+            if [ -z "${_found}" ]; then
+              echo "scenarios: requires Python 3.10-3.14 (got ${py}). Set SCENARIOS_PYTHON." >&2
+              exit 1
+            fi
+            ;;
+        esac
+        _to="${SCENARIOS_CMD_TIMEOUT:-15m}"
+        _run() {
+          case "${_to}" in
+            0|off|none) "$@" ;;
+            *)
+              if command -v timeout >/dev/null 2>&1; then
+                if timeout --help 2>&1 | grep -q -- '--foreground'; then
+                  timeout --foreground -k 30s "${_to}" "$@"
+                else
+                  timeout -k 30s "${_to}" "$@"
+                fi
+              else
+                echo "scenarios: timeout not on PATH; running without wall-clock cap." >&2
+                "$@"
+              fi
+              ;;
+          esac
+        }
+        _pytest_args="${SCENARIOS_PYTEST_ARGS:--v --durations=10}"
+        cd "${scaffold}"
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "scenarios: install uv (https://docs.astral.sh/uv/) for uvx pytest runs." >&2
+          exit 1
+        fi
+        echo "scenarios: emulator=${BIGQUERY_EMULATOR_HOST} project=${GOOGLE_CLOUD_PROJECT} python=${py}"
+        # shellcheck disable=SC2086
+        _run uvx --python "${py}" --with-requirements requirements-test.txt \
+          pytest ${_pytest_args}

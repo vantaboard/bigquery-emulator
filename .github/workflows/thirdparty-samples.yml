@@ -286,7 +286,52 @@ jobs:
         if: always()
         run: docker compose down -v --remove-orphans 2>/dev/null || true
 
-  golang-bigquery-tests-live:
+  scenarios-live:
+    if: >-
+      github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: workflow scenarios (live emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      THIRDPARTY_SKIP_BUILD: "1"
+      THIRDPARTY_FRESH_VOLUME: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: Set up thirdparty docker emulator
+        uses: ./.github/actions/setup-thirdparty-docker-emulator
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+
+      - name: Run thirdparty:scenarios
+        run: task thirdparty:scenarios
+        env:
+          BIGQUERY_EMULATOR_HOST: "http://localhost:9050"
+          BIGQUERY_STORAGE_GRPC_ENDPOINT: "localhost:9060"
+          SCENARIOS_PYTHON: "3.13"
+
+      - name: Stop emulator
+        if: always()
+        run: docker compose down -v --remove-orphans 2>/dev/null || true
     if: >-
       github.event_name == 'workflow_run'
       && github.event.workflow_run.conclusion == 'success'
