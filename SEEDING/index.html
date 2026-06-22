@@ -1183,7 +1183,24 @@ in declaration order.</p>
 <li>Rows are key/value maps. Missing keys become <code>NULL</code> cells; extra
   keys not in the schema are silently dropped, matching the
   <code>tabledata.insertAll</code> REST handler.</li>
+<li><strong>REPEATED STRUCT</strong> columns (including subfields typed <code>JSON</code>) must
+  be written as YAML sequences of maps keyed by subfield name. The
+  loader maps subfields by name against the table schema; a schema-blind
+  fallback would iterate map values only and can swap columns (e.g.
+  feeding <code>"profile"</code> into a JSON slot). Example:</li>
 </ul>
+<div class="language-yaml highlight"><pre><span></span><code><span class="nt">schema</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">structarr</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">STRUCT</span>
+<span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REPEATED</span>
+<span class="w">    </span><span class="nt">fields</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">key</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">STRING</span><span class="p p-Indicator">}</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">value</span><span class="p p-Indicator">,</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">JSON</span><span class="p p-Indicator">}</span>
+<span class="nt">rows</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">structarr</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">profile</span>
+<span class="w">        </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;{&quot;age&quot;:</span><span class="nv"> </span><span class="s">10}&#39;</span>
+</code></pre></div>
 <h3 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code>cat<span class="w"> </span>&gt;<span class="w"> </span>/tmp/seed.yaml<span class="w"> </span><span class="s">&lt;&lt;&#39;YAML&#39;</span>
 <span class="s">project_id: dev</span>

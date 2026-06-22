@@ -843,6 +843,21 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Parse">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#statement-kind-naming" class="md-nav__link">
+    <span class="md-ellipsis">
+      Statement kind naming
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -928,9 +943,12 @@ are <strong>not</strong> part of the public BigQuery REST surface.</p>
 <p>The Docker entrypoint shim (<code>docker/gateway_main.sh</code>) injects <code>--enable-sql-tools-api</code>
 by default unless the caller already passed the flag.</p>
 <p>By default, only loopback callers may use the API. For remote access (CI, LAN
-UI), combine <code>--sql-tools-api-allow-remote</code> with <code>--sql-tools-api-token</code> (or
-<code>BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN</code>) and send the header
-<code>X-BigQuery-Emulator-SqlTools-Token</code> on each request.</p>
+UI), combine <code>--sql-tools-api-allow-remote</code> with an optional
+<code>--sql-tools-api-token</code> (or <code>BIGQUERY_EMULATOR_SQL_TOOLS_TOKEN</code>) and send the
+header <code>X-BigQuery-Emulator-SqlTools-Token</code> on each request when configured.</p>
+<p>POST endpoints (<code>format</code>, <code>parse</code>, <code>tokenize</code>, <code>complete</code>, <code>analyze</code>) require a
+running engine subprocess; the gateway returns <strong>503</strong> when the SqlTools gRPC
+client is unavailable. <strong>GET</strong> <code>/capabilities</code> works without the engine.</p>
 <h2 id="capabilities-probe">Capabilities probe<a class="headerlink" href="#capabilities-probe" title="Permanent link">&para;</a></h2>
 <p><strong>GET</strong> <code>/api/emulator/sql/capabilities</code></p>
 <p>Returns <code>404</code> when SQL Tools is disabled (lets UIs fall back to client-side
@@ -1087,7 +1105,37 @@ accept <code>statementIndex</code> or <code>cursorByteOffset</code> to scope par
 <span class="p">}</span>
 </code></pre></div>
 <p>Diagnostics include optional span fields: <code>endLine</code>, <code>endColumn</code>, <code>startByte</code>,
-<code>endByte</code> (and <code>startUtf16</code> / <code>endUtf16</code> when <code>offsetUnit</code> is <code>utf16</code>).</p>
+<code>endByte</code> (and <code>startUtf16</code> / <code>endUtf16</code> when <code>offsetUnit</code> is <code>utf16</code>). Span
+fields are omitted when the engine has no byte range; when present, <code>startByte: 0</code>
+is serialized explicitly (not elided).</p>
+<h3 id="statement-kind-naming">Statement kind naming<a class="headerlink" href="#statement-kind-naming" title="Permanent link">&para;</a></h3>
+<p>Both <code>/parse</code> and <code>/analyze</code> return <code>statementKinds</code>, but the strings differ in
+source:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Source</th>
+<th>Example values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/parse</code></td>
+<td>Parse tree node names</td>
+<td><code>QueryStatement</code>, <code>CreateTableStmt</code>, …</td>
+</tr>
+<tr>
+<td><code>/analyze</code></td>
+<td>Resolved AST node names (same strings today)</td>
+<td><code>QueryStatement</code>, …</td>
+</tr>
+</tbody>
+</table>
+<p>UIs that expect coarse labels like <code>"SELECT"</code> should map from these resolved /
+parse node names locally. <code>/analyze</code> only populates <code>referencedTables</code> when the
+full statement analyzes successfully; parse-only or incomplete SQL may return
+diagnostics with an empty <code>referencedTables</code> array.</p>
 <h2 id="tokenize">Tokenize<a class="headerlink" href="#tokenize" title="Permanent link">&para;</a></h2>
 <p><strong>Request</strong></p>
 <div class="language-json highlight"><pre><span></span><code><span class="p">{</span>
@@ -1133,7 +1181,9 @@ allowed when <code>cursorByteOffset === 0</code> (blank editor tab).</p>
 <span class="p">}</span>
 </code></pre></div>
 <p>Candidate <code>kind</code> values include <code>keyword</code>, <code>function</code>, <code>dataset</code>, <code>table</code>,
-<code>view</code>, <code>routine</code>, and <code>column</code>.</p>
+<code>view</code>, <code>routine</code>, <code>procedure</code>, and <code>column</code>. Table/view candidates include
+<code>dataset.table</code> and <code>project.dataset.table</code> forms when catalog entries exist.
+Routine <code>detail</code> summarizes language and routine kind (e.g. <code>SQL scalar function</code>).</p>
 <h2 id="analyze">Analyze<a class="headerlink" href="#analyze" title="Permanent link">&para;</a></h2>
 <p>Extracts tables/views referenced by a query so UIs can fetch schemas via the
 existing BigQuery REST surface without client-side parsing.</p>

@@ -1339,6 +1339,18 @@ per-project metadata.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Dataset metadata:</strong> REST-only fields (<code>friendlyName</code>, <code>description</code>,
+<code>labels</code>, <code>defaultCollation</code>, <code>defaultTableExpirationMs</code>,
+<code>defaultPartitionExpirationMs</code>, <code>defaultRoundingMode</code>,
+<code>maxTimeTravelHours</code>, <code>isCaseInsensitive</code>, <code>resourceTags</code>, <code>replicas[]</code>,
+<code>access</code>) persist in the gateway <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go"><code>MetadataStore</code></a> and
+merge on GET/PATCH/UPDATE. <code>creationTime</code> is stamped on insert and kept
+stable across GETs; <code>lastModifiedTime</code> advances on each write. Cross-region
+<code>replicas[]</code> is echo-only (no live replication).</p>
+<p><strong>Delete with contents:</strong> <code>DELETE .../datasets/{datasetId}?deleteContents=true</code>
+drops the dataset and all tables in the engine catalog and evicts the
+matching metadata-store entries. Without <code>deleteContents=true</code>, deleting a
+non-empty dataset returns <strong>400</strong> (<code>failedPrecondition</code>).</p>
 <h3 id="tables-bigquerytables">Tables (<code>bigquery.tables.*</code>)<a class="headerlink" href="#tables-bigquerytables" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1406,6 +1418,20 @@ per-project metadata.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Table metadata:</strong> REST-only fields (<code>friendlyName</code>, <code>description</code>,
+<code>labels</code>, <code>expirationTime</code>, partitioning/clustering specs,
+<code>defaultCollation</code>, <code>defaultRoundingMode</code>, <code>caseInsensitive</code>,
+<code>resourceTags</code>, <code>tableConstraints</code>, <code>view</code> / <code>materializedView</code>
+definitions including <code>view.useLegacySql</code>, <code>requirePartitionFilter</code>,
+encryption/external config) persist in <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go"><code>MetadataStore</code></a>.
+<code>type</code> includes <code>TABLE</code>, <code>VIEW</code>, <code>MATERIALIZED_VIEW</code>, <code>EXTERNAL</code>, and
+<code>SNAPSHOT</code> (copy-job destinations; see COPY jobs below).
+<code>creationTime</code> / <code>lastModifiedTime</code> follow the same overlay rules as
+datasets. <strong>Storage stats:</strong> <code>numRows</code> is computed from
+<code>Catalog.ListRows</code>; all byte counters (<code>numBytes</code>, <code>numLongTermBytes</code>,
+<code>numActiveLogicalBytes</code>, <code>numTotalLogicalBytes</code>, physical-byte fields,
+<code>numTimeTravelPhysicalBytes</code>) are explicitly stubbed to <code>"0"</code> until the
+engine exposes byte accounting.</p>
 <p><strong>External tables:</strong> <code>tables.insert</code> accepts
 <code>externalDataConfiguration</code> (<code>sourceUris</code>, <code>sourceFormat</code>, <code>schema</code>,
 <code>csvOptions</code>, …). Supported GCS formats (<code>CSV</code>, <code>NEWLINE_DELIMITED_JSON</code>,
@@ -1415,6 +1441,17 @@ catalog at insert time; <code>externalDataConfiguration</code> round-trips throu
 the gateway <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go"><code>MetadataStore</code></a> on GET/PATCH/UPDATE.
 <code>type</code> defaults to <code>EXTERNAL</code>. Google Sheets (<code>GOOGLE_SHEETS</code> /
 <code>googleSheetsOptions</code>) returns <strong>501</strong> with a clear message.</p>
+<p><strong>Logical views:</strong> <code>CREATE [OR REPLACE] VIEW</code> via <code>jobs.query</code> registers
+the view in the engine's in-memory catalog and persists the DDL in
+<code>DuckDBStorage</code> (<code>__bqemu_views</code>). <code>tables.list</code> / <code>tables.get</code>
+return <code>type=VIEW</code> and <code>view.query</code> (with <code>view.useLegacySql=false</code> for
+GoogleSQL views). After an engine restart the gateway rehydrates views
+from storage so <code>tables.get</code> still resolves through
+<code>Catalog.DescribeTable</code> even though the gateway's in-memory metadata
+overlay is empty. <code>CREATE MATERIALIZED VIEW</code> DDL is also surfaced on
+<code>tables.list</code> / <code>tables.get</code> as <code>type=MATERIALIZED_VIEW</code> with
+<code>materializedView.query</code> (the engine materializes rows into a physical
+table).</p>
 <p>Query-time ephemeral external tables use <code>tableDefinitions</code> on
 <code>jobs.query</code> and <code>configuration.query</code> (jobs.insert). When the query
 omits <code>defaultDataset</code>, definitions are registered under internal dataset
@@ -1445,6 +1482,14 @@ omits <code>defaultDataset</code>, definitions are registered under internal dat
 </tr>
 </tbody>
 </table>
+<p><strong><code>tabledata.list</code> notes:</strong> <code>maxResults</code> defaults to <strong>10000</strong> (cap <strong>100000</strong>).
+<code>maxResults=0</code> returns <code>totalRows</code>/<code>etag</code> with zero rows and no <code>pageToken</code>
+(same semantics as <code>jobs.getQueryResults</code>). <code>pageToken</code> is a decimal row index.
+<code>selectedFields</code> projects top-level columns (comma-separated; dotted paths
+select the top-level STRUCT). <code>formatOptions.useInt64Timestamp=true</code> emits
+TIMESTAMP cells as JSON int64 microseconds. Logical <strong>views</strong> have no Parquet
+backing — use <code>jobs.query</code> for preview; native tables paginate via
+<code>pageToken</code>.</p>
 <h3 id="jobs-bigqueryjobs">Jobs (<code>bigquery.jobs.*</code>)<a class="headerlink" href="#jobs-bigqueryjobs" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1515,13 +1560,52 @@ materialized from the job registry before the engine executes the SQL
 <p><strong>COPY / EXTRACT / undelete:</strong> <code>configuration.copy</code> copies rows
 from <code>sourceTable</code> / <code>sourceTables</code> into <code>destinationTable</code>, honoring
 <code>writeDisposition</code> (<code>WRITE_EMPTY</code>, <code>WRITE_TRUNCATE</code>, <code>WRITE_APPEND</code>).
-Live sources prefer engine SQL (<code>CREATE TABLE AS SELECT</code> / <code>UNION ALL</code>);
-snapshot sources (<code>tableId@epoch</code>) and SQL fallbacks use catalog row copy.
+<code>operationType</code> accepts <code>COPY</code> (default), <code>SNAPSHOT</code>, <code>RESTORE</code>, and
+<code>CLONE</code> (clone billing is not modeled; treated like <code>COPY</code>). <code>SNAPSHOT</code>
+jobs stamp the destination with <code>type: SNAPSHOT</code> and optional
+<code>destinationExpirationTime</code> on <code>tables.get</code>; <code>RESTORE</code> recreates a
+<code>TABLE</code> from a snapshot source. Live sources prefer engine SQL
+(<code>CREATE TABLE AS SELECT</code> / <code>UNION ALL</code>); snapshot decorators on live
+tables use <code>FOR SYSTEM_TIME AS OF TIMESTAMP_MILLIS(epoch)</code> in SQL.
+Deleted-table snapshot decorators (<code>tableId@epoch</code>) and SQL fallbacks
+use catalog row copy via <code>snapshots.Store</code>. Copy-dataset in the UI is
+orchestrated as one copy job per table (no single dataset-copy job type).
 <code>configuration.extract</code> serializes a source table to <code>destinationUris</code>
 (<code>CSV</code>, <code>NEWLINE_DELIMITED_JSON</code>, optional <code>GZIP</code>) via fake-gcs HTTP upload.
 Table undelete (python <code>test_undelete_table</code>, node <code>undeleteTable</code>) is a
 COPY job from a snapshot decorator after <code>tables.delete</code>; there is no
 separate <code>tables.undelete</code> RPC.</p>
+<p><strong>LOAD jobs:</strong> <code>configuration.load</code> ingests object data into
+<code>destinationTable</code> synchronously (job returns <code>state: DONE</code>). Supported
+<code>sourceFormat</code> values: <code>CSV</code>, <code>NEWLINE_DELIMITED_JSON</code>, <code>AVRO</code>, <code>PARQUET</code>,
+<code>ORC</code>, and <code>DATASTORE_BACKUP</code>. Supported URI schemes:</p>
+<table>
+<thead>
+<tr>
+<th>Scheme</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file://</code></td>
+<td>Local dev paths (preferred for offline ingest)</td>
+</tr>
+<tr>
+<td>absolute path</td>
+<td>Same as <code>file://</code> without the prefix</td>
+</tr>
+<tr>
+<td><code>gs://</code></td>
+<td>Requires the fake-gcs storage emulator (<code>FAKE_GCS_PORT</code> / <code>STORAGE_EMULATOR_HOST</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Unsupported in the load path: <code>s3://</code>, <code>https://</code> direct fetch, and
+<code>GOOGLE_SHEETS</code> (use external tables instead). Upload variants:
+<code>POST /upload/.../jobs?uploadType=multipart</code> (job JSON part + file part) and
+resumable upload (<code>uploadType=resumable</code> init + <code>PUT</code> chunks). See
+<a href="../guides/load-jobs/"><code>docs/guides/load-jobs.md</code></a> for UI-oriented examples.</p>
 <h3 id="queries-synchronous-query-api">Queries (synchronous query API)<a class="headerlink" href="#queries-synchronous-query-api" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1594,7 +1678,9 @@ surface through the <code>Catalog.ListRoutines</code> / <code>GetRoutine</code> 
 <code>UpsertRoutine</code> / <code>DeleteRoutine</code> gRPC RPCs. REST
 insert/get/list/update/delete delegates to those RPCs when the gateway
 is wired to <code>emulator_main</code>; the in-memory <a href="https://github.com/vantaboard/bigquery-emulator/tree/main/gateway/routines/"><code>gateway/routines/</code></a>
-store mirrors responses for the synchronous query path.
+store mirrors responses for the synchronous query path and supplies
+<code>creationTime</code> / <code>lastModifiedTime</code> / <code>etag</code> on catalog-backed reads.
+<code>routines.list</code> unions catalog and store entries when both are active.
 <code>CREATE FUNCTION</code> / <code>CREATE PROCEDURE</code> DDL via <code>jobs.query</code> also
 registers routines and surfaces <code>ddlTargetRoutine</code> on the job
 statistics envelope.</p>
