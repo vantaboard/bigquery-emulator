@@ -250,6 +250,42 @@ tasks:
           --profile duckdb \
           $OUTPUT_FILE_FLAG
 
+  differential:
+    desc: |
+      Replay the committed production-BigQuery oracle lane against the
+      emulator. Requires bin/emulator_main. Honors EMULATOR_BIN, OUTPUT,
+      OUTPUT_FILE, PROFILE.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        OUTPUT_FILE_FLAG=""
+        if [ -n "{{.OUTPUT_FILE}}" ]; then
+          OUTPUT_FILE_FLAG="--output-file {{.OUTPUT_FILE}}"
+        fi
+        PROFILE_FLAG=""
+        if [ -n "{{.PROFILE}}" ]; then
+          PROFILE_FLAG="--profile {{.PROFILE}}"
+        fi
+        # shellcheck disable=SC2086
+        go run ./conformance/cmd/differential \
+          --engine-binary "{{.EMULATOR_BIN}}" \
+          --output "{{.OUTPUT}}" \
+          $PROFILE_FLAG \
+          $OUTPUT_FILE_FLAG
+
+  differential-record:
+    desc: |
+      Record production BigQuery oracles for the differential corpus.
+      No-op when BIGQUERY_DIFFERENTIAL_PROJECT is unset. Requires ADC.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        go run ./conformance/cmd/differential-record
+
   update-baselines:
     desc: |
       Rewrite the expected: block of one or more fixtures with the engine's actual output. Pass FIXTURE=path or default to FIXTURES (the whole directory). Honors PROFILE. Read the diff before committing.

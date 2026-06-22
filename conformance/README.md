@@ -32,6 +32,16 @@ UDFs, time travel, wildcard tables, GIS, security, `MATCH_RECOGNIZE`,
 > [`.github/workflows/googlesql-parity.yml`](../.github/workflows/googlesql-parity.yml)
 > gates on `manifest/pinned.json`. Re-triage after GoogleSQL upgrades with
 > `go run ./conformance/cmd/googlesql-corpus --triage --gate-pinned=false`.
+>
+> **Differential production-BigQuery oracle lane** (`task conformance:differential`):
+> replays committed oracles under [`conformance/differential/oracle/`](differential/oracle/)
+> against the emulator for each case in [`conformance/differential/corpus/`](differential/corpus/).
+> Uses the same typed-cell comparator as YAML fixtures. CI job `differential` in
+> [`.github/workflows/conformance.yml`](../.github/workflows/conformance.yml)
+> runs the replay only (no GCP access). Record fresh oracles with
+> `task conformance:differential-record` when `BIGQUERY_DIFFERENTIAL_PROJECT` and
+> ADC are available; otherwise pin from `bq query` output and mark
+> `oracle_source: bq-cli` per `.cursor/rules/conformance-bq-validation.mdc`.
 
 ## Quick start
 
@@ -525,6 +535,58 @@ Already comfortable with the above? The short version:
    `task conformance:update-baselines FIXTURE=...`) to write the
    captured rows back into the fixture, then **read the diff**
    carefully before committing.
+
+## Differential lane
+
+The differential lane compares emulator output against **committed
+production-BigQuery oracles** instead of hand-pinned `expected:` blocks in
+fixture YAML. It exists to catch semantic divergences the YAML suite misses
+when expectations were bootstrapped from emulator output.
+
+### Layout
+
+| Path | Role |
+|------|------|
+| `conformance/differential/corpus/*.yaml` | One case per file: `setup:`, `query:`, `oracle_ref:` |
+| `conformance/differential/oracle/*.json` | Recorded schema/rows/error + provenance (`captured_at`, `job_id`) |
+
+Corpus YAML reuses the fixture `setup:` / `query:` schema. Optional fields:
+
+- `oracle_ref` — basename under `oracle/` (required)
+- `oracle_source` — `recorded` or `bq-cli` provenance hint
+- `match` — `ordered` / `unordered` override for replay
+- `known_failing` — expected divergence; counted as SKIP, not FAIL
+- `query_parameters` — named parameters for parameterized queries
+
+### Commands
+
+```bash
+# Replay committed oracles (CI path; no GCP creds).
+task conformance:differential
+
+# JSON report for CI artifacts.
+task conformance:differential OUTPUT=json OUTPUT_FILE=conformance-differential.json
+
+# Record oracles from production BigQuery (manual/opt-in).
+export BIGQUERY_DIFFERENTIAL_PROJECT=my-gcp-project
+gcloud auth application-default login
+task conformance:differential-record
+```
+
+When `BIGQUERY_DIFFERENTIAL_PROJECT` is unset, `differential-record` prints
+setup instructions and exits 0.
+
+### Divergence classification
+
+Each mismatch is tagged as one of:
+
+| Kind | Meaning |
+|------|---------|
+| `match` | Oracle and emulator agree |
+| `feature_gap` | Emulator returns Unimplemented / not-yet-landed |
+| `semantic_divergence` | Both succeed, rows differ |
+| `error_divergence` | One side errors, the other succeeds |
+| `crash` | Engine abort or RPC failure |
 
 ## Process hygiene
 

@@ -133,3 +133,50 @@ jobs:
           name: conformance-bqutils
           path: conformance-bqutils.json
           if-no-files-found: warn
+
+  differential:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event != 'workflow_dispatch'
+    name: conformance (differential)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up engine from build-engine artifact
+        uses: ./.github/actions/setup-engine-from-artifact
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          head-sha: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Run differential oracle replay lane
+        run: |
+          task conformance:differential \
+            OUTPUT=json \
+            OUTPUT_FILE=conformance-differential.json
+
+      - name: Upload differential conformance report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: conformance-differential
+          path: conformance-differential.json
+          if-no-files-found: warn
