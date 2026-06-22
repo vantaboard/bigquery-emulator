@@ -626,6 +626,12 @@ public-facing policy.
   (pinned by `conformance/fixtures/udf/tvf_relation_argument.yaml`).
   Conformance fixtures under `conformance/fixtures/udf/` (+
   `gateway/e2e/routine_persistence_test.go` for restart proof).
+  REST-created views (`tables.insert` with `view.query`) persist through
+  the same engine path and survive restart
+  (`gateway/e2e/restart_durability_test.go`,
+  `conformance/sessions/restart_view_durability.yaml`). Operators
+  migrating from recidiviz/goccy `--database=/path/file.db` should switch
+  to `--data-dir=/path` (see [REST API persistence notes](./docs/REST_API.md#persistence-and-data-dir)).
   `LANGUAGE python` scalar UDFs register through `python_udf_registry.cc`
   and evaluate at call time on the semantic executor via a sandboxed
   `python3` subprocess (`python_udf_runtime.cc`; pinned by

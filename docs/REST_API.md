@@ -481,6 +481,57 @@ plumbing.
   but **not enforced** — every column is returned regardless. Pushing
   projection into the storage layer is deferred to a future plan.
 
+## Persistence and `--data-dir`
+
+The C++ engine persists catalog state under a **directory** passed as
+`--data-dir` on `gateway_main` (forwarded to `emulator_main` as
+`--data_dir`). A healthy initialized tree contains:
+
+* `catalog.duckdb` — DuckDB catalog (views, routines, metadata tables)
+* `<project>/<dataset>/*.meta.json` — table sidecars
+* `<project>/<dataset>/*.parquet` — row data for materialized tables
+
+View definitions created through **any** path (`CREATE VIEW` DDL,
+`tables.insert` with a `view.query` body) are registered in the engine
+catalog and persisted to `catalog.duckdb`; they **rehydrate on restart**
+when the same `--data-dir` is mounted.
+
+### Migrating from recidiviz / goccy `--database`
+
+The widely-deployed recidiviz fork (and goccy/bigquery-emulator) used a
+**single SQLite file**:
+
+```yaml
+# old compose (recidiviz fork)
+command: ["--database=/opt/x.db"]
+volumes:
+  - bq-data:/opt
+```
+
+This emulator expects a **directory**:
+
+```yaml
+# this emulator
+command: ["--data-dir=/opt"]
+volumes:
+  - bq-data:/opt
+```
+
+| Old flag | New flag | Notes |
+|---|---|---|
+| `--database=/opt/x.db` | `--data-dir=/opt` | Parent directory of the old file |
+| (same volume mount) | (same volume mount) | Re-use the volume; do **not** point `--data-dir` at the `.db` file itself |
+
+`gateway_main` still accepts `--database` for compatibility: it maps to
+`--data-dir=<parent>` and logs a deprecation warning. **Data in the old
+single-file SQLite format is not automatically loaded.** If
+`--data-dir` contains orphaned `*.db` files but no `catalog.duckdb`, the
+gateway warns at startup rather than silently starting empty.
+
+Operators migrating a live volume should either re-seed from YAML
+(`--seed-data-file`) or confirm `catalog.duckdb` exists after the first
+successful run under `--data-dir`.
+
 ## Authentication posture
 
 The emulator follows `cloud-spanner-emulator`'s posture: it parses but
