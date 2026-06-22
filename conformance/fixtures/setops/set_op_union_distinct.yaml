@@ -1,3 +1,6 @@
+# R7: UNION DISTINCT → "SetOperationScan op is not UNION ALL".
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 # set_op_union_distinct: UNION DISTINCT deduplicates across arms.
 name: set_op_union_distinct
 description: |

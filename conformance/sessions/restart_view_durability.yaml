@@ -1,12 +1,15 @@
-# R2: View created via client returns 0 rows (session lane).
-# Reported: v0.4.x (email thread)
+# R5: Views not persisted across container restart (client tables.insert path).
+# Reported: v0.5.0 (email thread)
 # Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
-name: view_select_after_create_via_client_path
+# Durability fix tracked in plan 08; flip known_failing when restart_view_durability is green.
+name: restart_view_durability
+known_failing: true
+known_failing_ref: .cursor/plans/conformance-hardening/08-persistence-restart-migration.plan.md
 description: |
-  Client-shaped flow: create a view via REST tables.insert (view.query body),
-  then immediately SELECT through it in the same session. Mirrors
-  view_rest_insert_select_rows but as an ordered multi-step session.
-project_id: proj-session-view-client
+  Regression for R5: a view created via REST tables.insert (view.query body —
+  the client path) must survive a graceful engine restart against the same
+  --data_dir and return identical rows on SELECT.
+project_id: proj-session-restart-view
 steps:
   - dataset: ds_main
   - sql: CREATE TABLE ds_main.profiles_staging (id INT64, inserted_at TIMESTAMP, name STRING)
@@ -26,6 +29,14 @@ steps:
             SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn
             FROM ds_main.profiles_staging
           ) WHERE rn = 1
+  - query: SELECT id, name FROM ds_main.profiles_dedup ORDER BY id
+    expect_rows:
+      - {id: "1", name: new-ada}
+      - {id: "2", name: linus}
+  - restart: true
+  - expect_table_list:
+      dataset: ds_main
+      contains: [profiles_staging, profiles_dedup]
   - query: SELECT id, name FROM ds_main.profiles_dedup ORDER BY id
     expect_rows:
       - {id: "1", name: new-ada}

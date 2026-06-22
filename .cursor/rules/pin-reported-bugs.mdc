@@ -1,0 +1,53 @@
+---
+description: User-reported defects must ship with a regression fixture in the same PR
+alwaysApply: false
+globs: conformance/**/*
+---
+
+# Pin reported bugs as regression fixtures
+
+Every fix for a **user-reported defect** must include a committed regression
+artifact in the **same PR** as the fix. Do not merge engine or gateway fixes
+that lack a pinning test — that is how fix → re-break → re-fix churn returns.
+
+## What to add
+
+1. **Declarative fixture** — YAML under `conformance/fixtures/` (prefer
+   `core_usage/` for everyday client shapes), `conformance/sessions/` for
+   multi-step stateful flows, or `conformance/differential/corpus/` when the
+   oracle is production BigQuery.
+2. **Unit / binding test** — when the repro is transpiler- or catalog-specific,
+   add a focused C++ or Go test beside the fix (e.g.
+   `transpiler_emit_composition_test.cc`, `catalog_crash_safety_test.cc`).
+3. **Index entry** — append or update the tag row in
+   [`conformance/REGRESSIONS.md`](../conformance/REGRESSIONS.md) with live
+   paths and the fixing commit.
+
+## Fixture header (required)
+
+At the top of every pinning artifact, include:
+
+```yaml
+# R{N}: <one-line symptom>
+# Reported: <version or "email thread">
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+```
+
+Assign the next free `R` tag from the index, or reuse an existing tag when
+extending the same reported defect.
+
+## Expectations must be production-validated
+
+For `core_usage/` and `verified_production: true` fixtures, derive
+`expected.rows` / `expected.error` from production BigQuery (`bq` CLI), never
+from emulator output. See `.cursor/rules/conformance-core-usage.mdc`.
+
+## Not fixed yet?
+
+Commit the repro anyway. Mark it `known_failing: true` (sessions /
+differential) or document `known_failing` in `REGRESSIONS.md`. Never delete a
+repro to green CI — flip to passing when the fix lands.
+
+## Origin
+
+Backfill and policy: `.cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md`

@@ -1,6 +1,9 @@
+# R4: Engine abort on duplicate catalog name during view replay.
+# Reported: v0.4.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: authorize_view_repeat
 description: |
-  Regression for the reported engine abort when CREATE OR REPLACE VIEW plus
+  Engine abort when CREATE OR REPLACE VIEW plus
   dataset access authorization repeats across setup/teardown cycles. The engine
   must stay alive and return structured errors or idempotent replace — never
   signal: aborted.

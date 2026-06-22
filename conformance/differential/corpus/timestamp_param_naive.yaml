@@ -1,4 +1,6 @@
-# Reported divergence: naive TIMESTAMP param without Z suffix (plan 01 / email thread).
+# R6: Naive TIMESTAMP param '2026-06-22T10:00:00' rejected.
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: timestamp_param_naive
 description: |
   Parameterized query using a TIMESTAMP literal without an explicit timezone

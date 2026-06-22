@@ -1,5 +1,11 @@
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
 
+// R9: Anti-join over QUALIFY-deduped views — DuckDB binder "column id not
+// found". Plan:
+// .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+// See also:
+// .cursor/plans/conformance-hardening/06-transpiler-binding-property-tests.plan.md
+
 namespace bigquery_emulator {
 namespace backend {
 namespace engine {
@@ -121,8 +127,9 @@ TEST_F(TranspilerCompositionTest, SeededCompositionGeneratorBinds) {
     const int wrap2 = static_cast<int>(LcgNext(&rng) % 3);
 
     const char* key_col = base == 0 ? "id" : "order_id";
-    std::string inner = base == 0 ? "SELECT id, name FROM people"
-                                  : "SELECT order_id, customer_id FROM bq_orders";
+    std::string inner = base == 0
+                            ? "SELECT id, name FROM people"
+                            : "SELECT order_id, customer_id FROM bq_orders";
 
     if (wrap1 == 1) {
       inner = WrapQualifyDedupSubquery(key_col, inner);
@@ -134,14 +141,24 @@ TEST_F(TranspilerCompositionTest, SeededCompositionGeneratorBinds) {
 
     std::string sql;
     if (wrap2 == 0) {
-      sql = absl::StrCat("SELECT ", key_col, " FROM (", inner, ") t WHERE ",
-                         key_col, " >= 0");
+      sql = absl::StrCat(
+          "SELECT ", key_col, " FROM (", inner, ") t WHERE ", key_col, " >= 0");
     } else if (wrap2 == 1) {
       sql = absl::StrCat("WITH w AS (", inner, ") SELECT COUNT(*) AS c FROM w");
     } else {
-      sql = absl::StrCat("SELECT a.", key_col, " FROM (", inner, ") a LEFT JOIN (",
-                         inner, ") b ON a.", key_col, " = b.", key_col,
-                         " WHERE b.", key_col, " IS NULL");
+      sql = absl::StrCat("SELECT a.",
+                         key_col,
+                         " FROM (",
+                         inner,
+                         ") a LEFT JOIN (",
+                         inner,
+                         ") b ON a.",
+                         key_col,
+                         " = b.",
+                         key_col,
+                         " WHERE b.",
+                         key_col,
+                         " IS NULL");
     }
 
     SCOPED_TRACE(absl::StrCat("case=", i, " sql=", sql));

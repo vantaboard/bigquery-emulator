@@ -1,6 +1,9 @@
+# R3: After view fix, tables.list on source dataset returns empty.
+# Reported: v0.4.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: dataset_list_after_view_op
 description: |
-  Regression for R3: after creating and authorizing a view, tables.list on the
+  After creating and authorizing a view, tables.list on the
   source dataset must still enumerate base tables (not go empty).
   Reported when a view fix caused ds_main to list zero tables.
 project_id: proj-session-dataset-list

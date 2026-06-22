@@ -1,3 +1,6 @@
+# R2: View created via client (REST tables.insert) returns 0 rows.
+# Reported: v0.4.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: view_rest_insert_select_rows
 verified_production: true
 description: |

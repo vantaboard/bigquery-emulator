@@ -1,3 +1,6 @@
+# R8: CTE in subquery → "WithRefScan without active WithScan bindings".
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 # with_scan_scalar_subquery: CTE referenced from a SELECT-list scalar subquery.
 #
 # Pins the semantic executor path where output projection must reuse

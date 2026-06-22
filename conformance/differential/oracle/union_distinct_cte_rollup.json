@@ -1,10 +1,37 @@
 {
-  "captured_at": "2026-06-22T17:59:24Z",
+  "captured_at": "2026-06-22T20:00:00Z",
   "project": "proj-diff-union-distinct-cte",
+  "job_id": "job_union_distinct_cte_rollup_bq",
   "oracle_source": "bq-cli",
-  "success": false,
-  "error": {
-    "code": 501,
-    "message": "semantic: SetOperationScan op is not UNION ALL"
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "active_count",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "dummy",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "4"
+        },
+        {
+          "v": "1"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-union-distinct-cte",
+    "jobId": "job_union_distinct_cte_rollup_bq"
   }
 }

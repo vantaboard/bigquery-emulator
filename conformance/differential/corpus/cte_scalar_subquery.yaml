@@ -1,4 +1,6 @@
-# Reported divergence: CTE referenced from a scalar subquery (plan 01 / email thread).
+# R8: CTE referenced from a scalar subquery in SELECT list.
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: cte_scalar_subquery
 description: |
   Non-recursive CTE referenced by a scalar subquery in the SELECT list.

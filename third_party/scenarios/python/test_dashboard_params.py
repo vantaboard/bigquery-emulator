@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from google.cloud import bigquery
-import pytest
+
 
 # Oracle: conformance/differential/oracle/timestamp_param_naive.json
 # 1782122400000000 microseconds since epoch == 2026-06-22 10:00:00 UTC
@@ -36,10 +36,6 @@ FROM events
 """
 
 
-@pytest.mark.xfail(
-    reason="naive TIMESTAMP param rejection (plan 04-params / timestamp_param_naive)",
-    strict=False,
-)
 def test_dashboard_params(client: bigquery.Client) -> None:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[

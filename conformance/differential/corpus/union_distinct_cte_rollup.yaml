@@ -1,4 +1,6 @@
-# Reported divergence: UNION DISTINCT inside a CTE rollup (plan 01 / email thread).
+# R7: UNION DISTINCT inside a CTE rollup (dashboard shape).
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: union_distinct_cte_rollup
 description: |
   Dashboard-style CTE with UNION DISTINCT dedup plus scalar subquery over the

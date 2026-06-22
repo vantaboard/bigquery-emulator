@@ -1,4 +1,6 @@
-# Reported divergence: anti-join over QUALIFY-deduped views (plan 01 / email thread).
+# R9: Anti-join over QUALIFY-deduped views → DuckDB "column id not found".
+# Reported: v0.5.x (email thread)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: orphan_orders_antijoin
 description: |
   LEFT JOIN orders to profiles with WHERE p.id IS NULL over views that use

@@ -1,10 +1,37 @@
 {
-  "captured_at": "2026-06-22T17:59:07Z",
+  "captured_at": "2026-06-22T20:00:00Z",
   "project": "proj-diff-cte-scalar-subquery",
+  "job_id": "job_cte_scalar_subquery_bq",
   "oracle_source": "bq-cli",
-  "success": false,
-  "error": {
-    "code": 500,
-    "message": "semantic: WithRefScan without active WithScan bindings"
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "cnt",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "ok",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "2"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-cte-scalar-subquery",
+    "jobId": "job_cte_scalar_subquery_bq"
   }
 }

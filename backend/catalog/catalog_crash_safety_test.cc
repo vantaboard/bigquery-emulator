@@ -1,11 +1,14 @@
 // Crash-safety regression tests for client-reachable catalog paths.
 //
-// A duplicate bare view name across datasets used to abort the engine via
-// SimpleCatalog::AddTable during eager view replay. Views now resolve lazily
-// through FindProjectView; these tests assert catalog construction and
+// R4: Engine abort on duplicate catalog name during view replay (authorize-view
+// repeat). A duplicate bare view name across datasets used to abort the engine
+// via SimpleCatalog::AddTable during eager view replay. Views now resolve
+// lazily through FindProjectView; these tests assert catalog construction and
 // registration never abort on adversarial duplicate names or replay cycles.
 //
-// See .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
+// Plan:
+// .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+// See also: .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
 
 #include <cstdlib>
 #include <filesystem>
@@ -82,8 +85,8 @@ class CatalogCrashSafetyTest : public ::testing::Test {
     std::random_device rd;
     std::seed_seq seed{rd(), rd()};
     std::mt19937_64 rng(seed);
-    data_dir_ = fs::path(tmpdir) /
-                absl::StrCat("bqemu-catalog-crash-safety-", rng());
+    data_dir_ =
+        fs::path(tmpdir) / absl::StrCat("bqemu-catalog-crash-safety-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
     auto opened = storage::duckdb::DuckDBStorage::Open(data_dir_.string());
@@ -111,9 +114,11 @@ class CatalogCrashSafetyTest : public ::testing::Test {
 
   CatalogBundle MakeCatalog(absl::string_view default_dataset = "") {
     auto type_factory = std::make_unique<::googlesql::TypeFactory>();
-    auto catalog = std::make_unique<GoogleSqlCatalog>(
-        kProject, storage_.get(), type_factory.get(), MakeLanguageOptions(),
-        default_dataset);
+    auto catalog = std::make_unique<GoogleSqlCatalog>(kProject,
+                                                      storage_.get(),
+                                                      type_factory.get(),
+                                                      MakeLanguageOptions(),
+                                                      default_dataset);
     return {std::move(type_factory), std::move(catalog)};
   }
 
@@ -137,8 +142,8 @@ class CatalogCrashSafetyTest : public ::testing::Test {
       return absl::InternalError("CREATE VIEW has null resolved stmt");
     }
     ::googlesql::TypeFactory* reg_tf = EnsureProjectTypeFactory(kProject);
-    return RegisterProjectView(kProject, *create_view, std::move(output),
-                               reg_tf);
+    return RegisterProjectView(
+        kProject, *create_view, std::move(output), reg_tf);
   }
 
   fs::path data_dir_{};
@@ -150,23 +155,19 @@ TEST_F(CatalogCrashSafetyTest,
   ASSERT_TRUE(storage_->CreateDataset({kProject, "ds_a"}, "US").ok());
   ASSERT_TRUE(storage_->CreateDataset({kProject, "ds_b"}, "US").ok());
 
-  ASSERT_TRUE(
-      RegisterViewFromSql(
-          "CREATE VIEW ds_a.profiles AS SELECT id FROM ds_base.source")
-          .ok());
-  ASSERT_TRUE(
-      RegisterViewFromSql(
-          "CREATE VIEW ds_b.profiles AS SELECT id FROM ds_base.source")
-          .ok());
+  ASSERT_TRUE(RegisterViewFromSql(
+                  "CREATE VIEW ds_a.profiles AS SELECT id FROM ds_base.source")
+                  .ok());
+  ASSERT_TRUE(RegisterViewFromSql(
+                  "CREATE VIEW ds_b.profiles AS SELECT id FROM ds_base.source")
+                  .ok());
 
   for (int i = 0; i < 5; ++i) {
     CatalogBundle bundle = MakeCatalog();
     const ::googlesql::Table* table_a = nullptr;
     const ::googlesql::Table* table_b = nullptr;
-    EXPECT_TRUE(
-        bundle.catalog->FindTable({"ds_a", "profiles"}, &table_a).ok());
-    EXPECT_TRUE(
-        bundle.catalog->FindTable({"ds_b", "profiles"}, &table_b).ok());
+    EXPECT_TRUE(bundle.catalog->FindTable({"ds_a", "profiles"}, &table_a).ok());
+    EXPECT_TRUE(bundle.catalog->FindTable({"ds_b", "profiles"}, &table_b).ok());
     ASSERT_NE(table_a, nullptr);
     ASSERT_NE(table_b, nullptr);
     EXPECT_NE(table_a, table_b);
@@ -218,11 +219,10 @@ TEST_F(CatalogCrashSafetyTest,
   const ::googlesql::LanguageOptions language = MakeCatalogLanguageOptions();
 
   for (int i = 0; i < 5; ++i) {
-    ASSERT_TRUE(
-        RegisterViewFromSql(
-            "CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM "
-            "ds_base.source")
-            .ok());
+    ASSERT_TRUE(RegisterViewFromSql(
+                    "CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM "
+                    "ds_base.source")
+                    .ok());
     GoogleSqlCatalog* reg_catalog = GetOrCreateRegistrationCatalog(
         kProject, storage_.get(), &reg_tf, language, "ds_tenant");
     ASSERT_NE(reg_catalog, nullptr);
