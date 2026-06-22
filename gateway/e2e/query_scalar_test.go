@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -219,7 +220,7 @@ func TestQueryScalarSelectTimestampParameterIsoWithoutTimezone(t *testing.T) {
 	if len(resp.Rows) != 1 || len(resp.Rows[0].F) != 1 {
 		t.Fatalf("rows shape = %+v, want one row with one cell", resp.Rows)
 	}
-	if v := resp.Rows[0].F[0].V; v != "2026-06-22 10:00:00 UTC" && v != "2026-06-22 10:00:00+00" {
-		t.Errorf("rows[0].f[0].v = %v, want UTC timestamp for 2026-06-22T10:00:00", v)
+	if v := fmt.Sprint(resp.Rows[0].F[0].V); v != "1782122400000000" {
+		t.Errorf("rows[0].f[0].v = %v, want microsecond wire encoding for 2026-06-22T10:00:00 UTC", v)
 	}
 }
