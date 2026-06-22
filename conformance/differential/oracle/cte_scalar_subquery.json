@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-22T17:59:07Z",
+  "project": "proj-diff-cte-scalar-subquery",
+  "oracle_source": "bq-cli",
+  "success": false,
+  "error": {
+    "code": 500,
+    "message": "semantic: WithRefScan without active WithScan bindings"
+  }
+}

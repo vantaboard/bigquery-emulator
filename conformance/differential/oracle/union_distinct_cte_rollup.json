@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-22T17:59:24Z",
+  "project": "proj-diff-union-distinct-cte",
+  "oracle_source": "bq-cli",
+  "success": false,
+  "error": {
+    "code": 501,
+    "message": "semantic: SetOperationScan op is not UNION ALL"
+  }
+}

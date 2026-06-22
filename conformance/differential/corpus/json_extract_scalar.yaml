@@ -1,0 +1,7 @@
+name: json_extract_scalar
+description: JSON_EXTRACT_SCALAR pulls a string field from JSON text.
+oracle_ref: json_extract_scalar.json
+oracle_source: bq-cli
+project_id: proj-diff-json-extract
+query: |
+  SELECT JSON_EXTRACT_SCALAR('{"name":"ada","age":42}', '$.name') AS name

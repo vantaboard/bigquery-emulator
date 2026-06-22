@@ -1,0 +1,25 @@
+name: left_join
+description: LEFT JOIN preserves left rows when the right side has no match.
+oracle_ref: left_join.json
+oracle_source: bq-cli
+project_id: proj-diff-left-join
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.customers (id INT64, name STRING)
+  - sql: CREATE TABLE ds_diff.orders (customer_id INT64, amount INT64)
+  - rows:
+      dataset: ds_diff
+      table: customers
+      rows:
+        - {id: 1, name: ada}
+        - {id: 2, name: linus}
+  - rows:
+      dataset: ds_diff
+      table: orders
+      rows:
+        - {customer_id: 1, amount: 50}
+query: |
+  SELECT c.name, o.amount
+  FROM ds_diff.customers c
+  LEFT JOIN ds_diff.orders o ON c.id = o.customer_id
+  ORDER BY c.name

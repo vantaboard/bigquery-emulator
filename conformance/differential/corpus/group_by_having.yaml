@@ -1,0 +1,21 @@
+name: group_by_having
+description: GROUP BY with HAVING filters aggregated groups.
+oracle_ref: group_by_having.json
+oracle_source: bq-cli
+project_id: proj-diff-group-by-having
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.sales (region STRING, amount INT64)
+  - rows:
+      dataset: ds_diff
+      table: sales
+      rows:
+        - {region: us, amount: 10}
+        - {region: us, amount: 15}
+        - {region: eu, amount: 5}
+query: |
+  SELECT region, SUM(amount) AS total
+  FROM ds_diff.sales
+  GROUP BY region
+  HAVING SUM(amount) > 10
+  ORDER BY region

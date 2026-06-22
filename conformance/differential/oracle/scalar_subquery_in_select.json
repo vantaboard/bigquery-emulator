@@ -1,0 +1,47 @@
+{
+  "captured_at": "2026-06-22T17:59:17Z",
+  "project": "proj-diff-scalar-subquery",
+  "job_id": "job_1782151157529217143_2",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "max_price",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        },
+        {
+          "v": "20"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "2"
+        },
+        {
+          "v": "20"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-scalar-subquery",
+    "jobId": "job_1782151157529217143_2"
+  }
+}

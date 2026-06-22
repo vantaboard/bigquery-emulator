@@ -1,0 +1,26 @@
+name: full_join
+description: FULL OUTER JOIN returns all rows from both sides.
+oracle_ref: full_join.json
+oracle_source: bq-cli
+project_id: proj-diff-full-join
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.l (id INT64)
+  - sql: CREATE TABLE ds_diff.r (id INT64)
+  - rows:
+      dataset: ds_diff
+      table: l
+      rows:
+        - {id: 1}
+        - {id: 2}
+  - rows:
+      dataset: ds_diff
+      table: r
+      rows:
+        - {id: 2}
+        - {id: 3}
+query: |
+  SELECT l.id AS left_id, r.id AS right_id
+  FROM ds_diff.l l
+  FULL OUTER JOIN ds_diff.r r ON l.id = r.id
+  ORDER BY COALESCE(l.id, r.id)

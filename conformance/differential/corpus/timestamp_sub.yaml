@@ -1,0 +1,10 @@
+name: timestamp_sub
+description: TIMESTAMP_SUB shifts a timestamp by an interval.
+oracle_ref: timestamp_sub.json
+oracle_source: bq-cli
+project_id: proj-diff-timestamp-sub
+query: |
+  SELECT FORMAT_TIMESTAMP(
+    '%Y-%m-%d %H:%M:%E*S',
+    TIMESTAMP_SUB(TIMESTAMP '2026-06-22 12:00:00 UTC', INTERVAL 90 MINUTE)
+  ) AS shifted

@@ -1,0 +1,26 @@
+name: inner_join
+description: INNER JOIN returns matching rows from both sides.
+oracle_ref: inner_join.json
+oracle_source: bq-cli
+project_id: proj-diff-inner-join
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.a (id INT64, label STRING)
+  - sql: CREATE TABLE ds_diff.b (id INT64, score INT64)
+  - rows:
+      dataset: ds_diff
+      table: a
+      rows:
+        - {id: 1, label: x}
+        - {id: 2, label: y}
+  - rows:
+      dataset: ds_diff
+      table: b
+      rows:
+        - {id: 1, score: 10}
+        - {id: 3, score: 30}
+query: |
+  SELECT a.id, a.label, b.score
+  FROM ds_diff.a a
+  INNER JOIN ds_diff.b b ON a.id = b.id
+  ORDER BY a.id

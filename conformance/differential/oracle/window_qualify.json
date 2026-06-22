@@ -1,0 +1,37 @@
+{
+  "captured_at": "2026-06-22T17:59:25Z",
+  "project": "proj-diff-window-qualify",
+  "job_id": "job_1782151165080148586_2",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "player",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "pts",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "ada"
+        },
+        {
+          "v": "10"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-window-qualify",
+    "jobId": "job_1782151165080148586_2"
+  }
+}

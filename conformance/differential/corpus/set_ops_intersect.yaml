@@ -1,0 +1,26 @@
+name: set_ops_intersect
+description: INTERSECT DISTINCT returns rows present in both inputs.
+oracle_ref: set_ops_intersect.json
+oracle_source: bq-cli
+project_id: proj-diff-setops-intersect
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.a (n INT64)
+  - sql: CREATE TABLE ds_diff.b (n INT64)
+  - rows:
+      dataset: ds_diff
+      table: a
+      rows:
+        - {n: 1}
+        - {n: 2}
+  - rows:
+      dataset: ds_diff
+      table: b
+      rows:
+        - {n: 2}
+        - {n: 3}
+query: |
+  SELECT n FROM ds_diff.a
+  INTERSECT DISTINCT
+  SELECT n FROM ds_diff.b
+  ORDER BY n

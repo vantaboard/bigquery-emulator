@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:05Z",
+  "project": "proj-diff-selftest-pass",
+  "job_id": "job_1782151145351013054_1",
+  "oracle_source": "emulator-bootstrap",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "answer",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "42"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-selftest-pass",
+    "jobId": "job_1782151145351013054_1"
+  }
+}

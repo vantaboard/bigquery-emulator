@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:18Z",
+  "project": "proj-diff-select-literal",
+  "job_id": "job_1782151158608145158_1",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "n",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-select-literal",
+    "jobId": "job_1782151158608145158_1"
+  }
+}

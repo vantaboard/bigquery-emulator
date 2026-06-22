@@ -1,0 +1,37 @@
+# Reported divergence: anti-join over QUALIFY-deduped views (plan 01 / email thread).
+name: orphan_orders_antijoin
+description: |
+  LEFT JOIN orders to profiles with WHERE p.id IS NULL over views that use
+  QUALIFY ROW_NUMBER dedup — mirrors recidiviz-fork orphan-order flow.
+oracle_ref: orphan_orders_antijoin.json
+oracle_source: bq-cli
+project_id: proj-diff-orphan-orders
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.orders (order_id INT64, customer_id INT64)
+  - sql: CREATE TABLE ds_diff.profiles (id INT64, name STRING)
+  - rows:
+      dataset: ds_diff
+      table: orders
+      rows:
+        - {order_id: 1, customer_id: 10}
+        - {order_id: 2, customer_id: 99}
+  - rows:
+      dataset: ds_diff
+      table: profiles
+      rows:
+        - {id: 10, name: alice}
+  - sql: |
+      CREATE VIEW ds_diff.v_orders AS
+      SELECT * FROM ds_diff.orders
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY order_id) = 1
+  - sql: |
+      CREATE VIEW ds_diff.v_profiles AS
+      SELECT * FROM ds_diff.profiles
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY id) = 1
+query: |
+  SELECT o.order_id
+  FROM ds_diff.v_orders o
+  LEFT JOIN ds_diff.v_profiles p ON o.customer_id = p.id
+  WHERE p.id IS NULL
+  ORDER BY o.order_id

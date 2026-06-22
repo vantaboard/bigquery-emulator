@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:04Z",
+  "project": "proj-diff-selftest-fail",
+  "job_id": "job_1782151144256133090_1",
+  "oracle_source": "emulator-bootstrap",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "n",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "99"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-selftest-fail",
+    "jobId": "job_1782151144256133090_1"
+  }
+}

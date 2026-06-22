@@ -1,0 +1,17 @@
+# Reported divergence: UNION DISTINCT inside a CTE rollup (plan 01 / email thread).
+name: union_distinct_cte_rollup
+description: |
+  Dashboard-style CTE with UNION DISTINCT dedup plus scalar subquery over the
+  CTE binding. Pins semantic-executor routing via JSON_EXTRACT_SCALAR.
+oracle_ref: union_distinct_cte_rollup.json
+oracle_source: bq-cli
+project_id: proj-diff-union-distinct-cte
+query: |
+  WITH active AS (
+    SELECT id FROM UNNEST([1, 1, 2, 3]) AS id
+    UNION DISTINCT
+    SELECT id FROM UNNEST([3, 4]) AS id
+  )
+  SELECT
+    (SELECT COUNT(DISTINCT id) FROM active) AS active_count,
+    JSON_EXTRACT_SCALAR('{"x": "1"}', '$.x') AS dummy

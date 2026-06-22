@@ -1,0 +1,19 @@
+name: window_qualify
+description: QUALIFY filters window-function results post-evaluation.
+oracle_ref: window_qualify.json
+oracle_source: bq-cli
+project_id: proj-diff-window-qualify
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.scores (player STRING, pts INT64)
+  - rows:
+      dataset: ds_diff
+      table: scores
+      rows:
+        - {player: ada, pts: 10}
+        - {player: linus, pts: 10}
+        - {player: grace, pts: 5}
+query: |
+  SELECT player, pts
+  FROM ds_diff.scores
+  QUALIFY ROW_NUMBER() OVER (ORDER BY pts DESC, player) = 1

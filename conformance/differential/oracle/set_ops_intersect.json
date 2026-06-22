@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:20Z",
+  "project": "proj-diff-setops-intersect",
+  "job_id": "job_1782151160846702138_3",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "n",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "2"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-setops-intersect",
+    "jobId": "job_1782151160846702138_3"
+  }
+}

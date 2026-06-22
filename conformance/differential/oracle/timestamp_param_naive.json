@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-22T17:59:21Z",
+  "project": "proj-diff-timestamp-param",
+  "oracle_source": "bq-cli",
+  "success": false,
+  "error": {
+    "code": 400,
+    "message": "semantic: invalid TIMESTAMP parameter value '2026-06-22T10:00:00'"
+  }
+}

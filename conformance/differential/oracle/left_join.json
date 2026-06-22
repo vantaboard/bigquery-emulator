@@ -1,0 +1,47 @@
+{
+  "captured_at": "2026-06-22T17:59:15Z",
+  "project": "proj-diff-left-join",
+  "job_id": "job_1782151155298039525_3",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "name",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "amount",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "ada"
+        },
+        {
+          "v": "50"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "linus"
+        },
+        {
+          "v": null
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-left-join",
+    "jobId": "job_1782151155298039525_3"
+  }
+}

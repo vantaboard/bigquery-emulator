@@ -1,0 +1,6 @@
+name: select_literal
+description: Trivial constant SELECT round-trip for everyday smoke coverage.
+oracle_ref: select_literal.json
+oracle_source: bq-cli
+project_id: proj-diff-select-literal
+query: SELECT 1 AS n

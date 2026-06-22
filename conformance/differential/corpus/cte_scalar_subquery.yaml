@@ -1,0 +1,16 @@
+# Reported divergence: CTE referenced from a scalar subquery (plan 01 / email thread).
+name: cte_scalar_subquery
+description: |
+  Non-recursive CTE referenced by a scalar subquery in the SELECT list.
+oracle_ref: cte_scalar_subquery.json
+oracle_source: bq-cli
+project_id: proj-diff-cte-scalar-subquery
+query: |
+  WITH p AS (
+    SELECT 1 AS id
+    UNION ALL
+    SELECT 2 AS id
+  )
+  SELECT
+    (SELECT COUNT(*) FROM p) AS cnt,
+    JSON_EXTRACT_SCALAR('{"ok": true}', '$.ok') AS ok

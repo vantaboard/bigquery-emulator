@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:16Z",
+  "project": "proj-diff-orphan-orders",
+  "job_id": "job_1782151156430126221_5",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "order_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "2"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-orphan-orders",
+    "jobId": "job_1782151156430126221_5"
+  }
+}

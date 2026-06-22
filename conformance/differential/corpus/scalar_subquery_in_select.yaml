@@ -1,0 +1,20 @@
+name: scalar_subquery_in_select
+description: Scalar subquery in the SELECT list returns one value per row.
+oracle_ref: scalar_subquery_in_select.json
+oracle_source: bq-cli
+project_id: proj-diff-scalar-subquery
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.items (id INT64, price INT64)
+  - rows:
+      dataset: ds_diff
+      table: items
+      rows:
+        - {id: 1, price: 10}
+        - {id: 2, price: 20}
+query: |
+  SELECT
+    id,
+    (SELECT MAX(price) FROM ds_diff.items) AS max_price
+  FROM ds_diff.items
+  ORDER BY id

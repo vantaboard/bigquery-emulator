@@ -1,0 +1,17 @@
+name: countif_aggregate
+description: COUNTIF counts rows matching a predicate.
+oracle_ref: countif_aggregate.json
+oracle_source: bq-cli
+project_id: proj-diff-countif
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.events (kind STRING)
+  - rows:
+      dataset: ds_diff
+      table: events
+      rows:
+        - {kind: click}
+        - {kind: view}
+        - {kind: click}
+query: |
+  SELECT COUNTIF(kind = 'click') AS clicks FROM ds_diff.events

@@ -1,0 +1,57 @@
+{
+  "captured_at": "2026-06-22T17:59:10Z",
+  "project": "proj-diff-full-join",
+  "job_id": "job_1782151150902637426_3",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "left_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "right_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        },
+        {
+          "v": "1"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "2"
+        },
+        {
+          "v": "2"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": null
+        },
+        {
+          "v": null
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-full-join",
+    "jobId": "job_1782151150902637426_3"
+  }
+}

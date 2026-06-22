@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-22T17:59:08Z",
+  "project": "proj-diff-dashboard-rollup",
+  "oracle_source": "bq-cli",
+  "success": false,
+  "error": {
+    "code": 400,
+    "message": "5:3: Syntax error: Different set operations cannot be used in the same query without using parentheses for grouping [at 5:3]"
+  }
+}

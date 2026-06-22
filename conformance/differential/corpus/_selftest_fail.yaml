@@ -1,0 +1,7 @@
+# Self-test: intentional oracle mismatch proves the lane fails loudly (plan 01 Tests).
+name: _selftest_fail
+description: Lane self-test with a deliberately wrong oracle row value.
+oracle_ref: _selftest_fail.json
+oracle_source: emulator-bootstrap
+project_id: proj-diff-selftest-fail
+query: SELECT 7 AS n

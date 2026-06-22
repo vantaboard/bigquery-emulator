@@ -1,0 +1,7 @@
+# Self-test: oracle matches emulator output (plan 01 Tests).
+name: _selftest_pass
+description: Lane self-test that must PASS against the local emulator.
+oracle_ref: _selftest_pass.json
+oracle_source: emulator-bootstrap
+project_id: proj-diff-selftest-pass
+query: SELECT 42 AS answer

@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-06-22T17:59:19Z",
+  "project": "proj-diff-setop-union-distinct",
+  "job_id": "job_1782151159725259180_1",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "2"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "3"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "4"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-setop-union-distinct",
+    "jobId": "job_1782151159725259180_1"
+  }
+}

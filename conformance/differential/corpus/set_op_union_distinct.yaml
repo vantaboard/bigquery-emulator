@@ -1,0 +1,9 @@
+name: set_op_union_distinct
+description: UNION DISTINCT deduplicates across inline relations.
+oracle_ref: set_op_union_distinct.json
+oracle_source: bq-cli
+project_id: proj-diff-setop-union-distinct
+query: |
+  SELECT id FROM UNNEST([1, 2, 2, 3]) AS id
+  UNION DISTINCT
+  SELECT id FROM UNNEST([2, 3, 4]) AS id

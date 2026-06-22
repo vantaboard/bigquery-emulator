@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:09Z",
+  "project": "proj-diff-exists-subquery",
+  "job_id": "job_1782151149783829060_3",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-exists-subquery",
+    "jobId": "job_1782151149783829060_3"
+  }
+}

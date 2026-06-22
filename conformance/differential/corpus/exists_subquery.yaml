@@ -1,0 +1,27 @@
+name: exists_subquery
+description: EXISTS semi-join filters rows with a correlated subquery.
+oracle_ref: exists_subquery.json
+oracle_source: bq-cli
+project_id: proj-diff-exists-subquery
+setup:
+  - dataset: ds_diff
+  - sql: CREATE TABLE ds_diff.orders (id INT64, customer_id INT64)
+  - sql: CREATE TABLE ds_diff.vip (customer_id INT64)
+  - rows:
+      dataset: ds_diff
+      table: orders
+      rows:
+        - {id: 1, customer_id: 10}
+        - {id: 2, customer_id: 20}
+  - rows:
+      dataset: ds_diff
+      table: vip
+      rows:
+        - {customer_id: 10}
+query: |
+  SELECT o.id
+  FROM ds_diff.orders o
+  WHERE EXISTS (
+    SELECT 1 FROM ds_diff.vip v WHERE v.customer_id = o.customer_id
+  )
+  ORDER BY o.id

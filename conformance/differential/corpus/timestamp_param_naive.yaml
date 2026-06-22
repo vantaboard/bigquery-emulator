@@ -1,0 +1,13 @@
+# Reported divergence: naive TIMESTAMP param without Z suffix (plan 01 / email thread).
+name: timestamp_param_naive
+description: |
+  Parameterized query using a TIMESTAMP literal without an explicit timezone
+  suffix, matching client dashboard flows.
+oracle_ref: timestamp_param_naive.json
+oracle_source: bq-cli
+project_id: proj-diff-timestamp-param
+query: SELECT @reference_dt AS reference_dt
+query_parameters:
+  - name: reference_dt
+    type: TIMESTAMP
+    value: "2026-06-22T10:00:00"

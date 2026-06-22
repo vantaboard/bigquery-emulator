@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-06-22T17:59:06Z",
+  "project": "proj-diff-countif",
+  "job_id": "job_1782151146502070129_2",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "clicks",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "2"
+        }
+      ]
+    }
+  ],
+  "jobReference": {
+    "projectId": "proj-diff-countif",
+    "jobId": "job_1782151146502070129_2"
+  }
+}
