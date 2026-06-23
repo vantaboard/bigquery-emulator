@@ -56,11 +56,15 @@ static void AppendScanColumnIds(const ::googlesql::ResolvedScan* scan,
 }
 
 static std::string QualifyLateralArrayExpr(
-    const ::googlesql::ResolvedExpr* expr) {
+    const ::googlesql::ResolvedExpr* expr, bool input_id_aliases) {
   if (expr == nullptr) return "";
   if (expr->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
     const auto* ref = expr->GetAs<::googlesql::ResolvedColumnRef>();
     if (ref == nullptr) return "";
+    if (input_id_aliases) {
+      return absl::StrCat(
+          "__bq_l.", internal::JoinColumnIdAlias(ref->column().column_id()));
+    }
     return absl::StrCat("__bq_l.", internal::QuoteIdent(ref->column().name()));
   }
   return "";
@@ -263,13 +267,15 @@ static std::string EmitCrossProductMultiArrayScanImpl(
 static std::string EmitCorrelatedArrayScan(
     const ::googlesql::ResolvedArrayScan* node,
     const std::string& input,
+    bool input_id_aliases,
     bool* input_has_rn_column,
     bool* join_output_uses_id_aliases) {
   if (node == nullptr || input.empty() || input_has_rn_column == nullptr ||
       join_output_uses_id_aliases == nullptr) {
     return "";
   }
-  const std::string arr = QualifyLateralArrayExpr(node->array_expr_list(0));
+  const std::string arr =
+      QualifyLateralArrayExpr(node->array_expr_list(0), input_id_aliases);
   if (arr.empty()) return "";
   const std::string quoted_col =
       internal::QuoteIdent(node->element_column_list(0).name());
@@ -287,7 +293,9 @@ static std::string EmitCorrelatedArrayScan(
     const std::string quoted = internal::QuoteIdent(col.name());
     std::string ref;
     if (left_ids.contains(col_id)) {
-      ref = absl::StrCat("__bq_l.", quoted);
+      ref = input_id_aliases
+                ? absl::StrCat("__bq_l.", internal::JoinColumnIdAlias(col_id))
+                : absl::StrCat("__bq_l.", quoted);
     } else if (col_id == elem_col_id) {
       ref = absl::StrCat("__bq_unnest__.", quoted_col);
     } else {
@@ -340,8 +348,18 @@ std::string Transpiler::EmitArrayScan(
           ::googlesql::RESOLVED_SINGLE_ROW_SCAN) {
     std::string input = EmitScan(node->input_scan());
     if (input.empty()) return "";
-    return EmitCorrelatedArrayScan(
-        node, input, &input_has_rn_column_, &join_output_uses_id_aliases_);
+    const bool input_id_aliases = join_output_uses_id_aliases_;
+    std::string correlated =
+        EmitCorrelatedArrayScan(node,
+                                input,
+                                input_id_aliases,
+                                &input_has_rn_column_,
+                                &join_output_uses_id_aliases_);
+    if (!correlated.empty()) {
+      join_id_aliases_in_query_ = true;
+      join_output_columns_use_id_aliases_ = true;
+    }
+    return correlated;
   }
   std::string arr = EmitExpr(node->array_expr_list(0));
   if (arr.empty()) return "";
@@ -386,6 +404,7 @@ std::string Transpiler::EmitUnnestCrossProductScan(
   if (sql.empty()) return "";
   join_output_uses_id_aliases_ = true;
   join_id_aliases_in_query_ = true;
+  join_output_columns_use_id_aliases_ = true;
   input_has_rn_column_ = true;
   return sql;
 }

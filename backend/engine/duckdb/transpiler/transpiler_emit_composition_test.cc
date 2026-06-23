@@ -1,4 +1,5 @@
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
+#include "googlesql/public/types/array_type.h"
 
 // R9: Anti-join over QUALIFY-deduped views — DuckDB binder "column id not
 // found". Plan:
@@ -56,11 +57,61 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
         });
     catalog_->AddOwnedTable(std::move(bq_orders));
 
+    const ::googlesql::ArrayType* vals_type = nullptr;
+    ASSERT_TRUE(
+        type_factory_->MakeArrayType(type_factory_->get_int64(), &vals_type)
+            .ok());
+    auto items = std::make_unique<::googlesql::SimpleTable>(
+        "items",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"vals", vals_type},
+        });
+    catalog_->AddOwnedTable(std::move(items));
+
+    const ::googlesql::ArrayType* tags_type = nullptr;
+    ASSERT_TRUE(
+        type_factory_->MakeArrayType(type_factory_->get_string(), &tags_type)
+            .ok());
+    auto arrays = std::make_unique<::googlesql::SimpleTable>(
+        "arrays",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"tags", tags_type},
+        });
+    catalog_->AddOwnedTable(std::move(arrays));
+
     ExecDdl("CREATE TABLE bq_orders (order_id BIGINT, customer_id BIGINT)");
     ExecDdl("CREATE TABLE profiles (id BIGINT, name VARCHAR)");
     ExecDdl("CREATE TABLE people (id BIGINT, name VARCHAR)");
+    ExecDdl("CREATE TABLE items (id BIGINT, vals BIGINT[])");
+    ExecDdl("CREATE TABLE arrays (tags STRING[])");
   }
 };
+
+TEST_F(TranspilerCompositionTest, CorrelatedUnnestFromTableBinds) {
+  static constexpr const char kSql[] = R"sql(
+SELECT id, n
+FROM items, UNNEST(items.vals) AS n
+ORDER BY id, n
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
+
+TEST_F(TranspilerCompositionTest, CoreUsageUnnestArrayShapeBinds) {
+  static constexpr const char kSql[] = R"sql(
+SELECT tag FROM arrays, UNNEST(tags) AS tag
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
+
+TEST_F(TranspilerCompositionTest, NestedUnnestCrossProductBinds) {
+  static constexpr const char kSql[] = R"sql(
+SELECT n, m
+FROM UNNEST(GENERATE_ARRAY(1, 2)) AS n
+CROSS JOIN UNNEST(GENERATE_ARRAY(10, 11)) AS m
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
 
 TEST_F(TranspilerCompositionTest, OrphanOrdersQualifyDedupAntiJoinBinds) {
   static constexpr const char kSql[] = R"sql(
