@@ -1,14 +1,35 @@
+---
+name: SQL Tools completion and analyze
+overview: SQL Tools API endpoints work; polish completion for user routines, qualified names, and diagnostic offset edge cases.
+todos:
+  - id: user-routines-in-complete
+    content: Emit DDL-created routines with kind:routine, fqn, and signature detail in /complete
+    status: pending
+  - id: qualified-name-candidates
+    content: Project-qualified table/dataset/routine candidates for 3-part typing
+    status: pending
+  - id: in-scope-column-fallback
+    content: Heuristic FROM-table column completion when analyze fails on incomplete SQL
+    status: pending
+  - id: diagnostic-offset-zero
+    content: Fix omitempty dropping startByte:0 in diagnostic JSON
+    status: pending
+  - id: e2e-sqltools-regression
+    content: gateway/sqltools tests — capabilities, analyze referencedTables, complete with user UDF
+    status: pending
+isProject: false
+---
+
 # 09 — SQL Tools API completion depth, /analyze, diagnostics polish
 
-- **UI gap:** #13 (13a remote access, 13b completion depth, 13c analyze, 13d
-  diagnostics) (priority **P9**)
-- **Base path:** `/api/emulator/sql/*` (docs: `docs/SQL_TOOLS_API.md`).
-- **Verified state at HEAD (`d390572`):** All six endpoints
-  (capabilities/format/parse/tokenize/complete/analyze) work, with UTF-8/UTF-16
-  offset handling. This plan is targeted polish; most of 13a/13c/13d are already
-  done.
+- **UI gaps:** #14 (API enablement), #15 (completion), #16 (analyze), #17 (ops)
+- **Priority:** #14/#16/#17 **verify-only**; #15 **partial polish (P9)**
+- **Verified state at HEAD (`60d19b3e`):** All six endpoints 200 with `--enable-sql-tools-api`.
 
-## Enablement & access (13a — already done; verify only)
+## Enablement & access (#14 / #17 — verify only)
+
+Verified 2026-06-23: `GET /api/emulator/sql/capabilities` returns expected shape;
+POST endpoints 200 with engine attached.
 
 - Gate flag `--enable-sql-tools-api` (`binaries/gateway_main/cli.go` ~267–268;
   server wiring `gateway/server.go` ~255–267). Disabled → 404.
@@ -31,7 +52,11 @@
 `--allow-remote`, and that POST endpoints need the engine (capabilities works
 without it).
 
-## Gap 13b — `/complete` depth (the real work)
+## Gap #15 — `/complete` depth (remaining work)
+
+Verified 2026-06-23: user-created UDF `add_two` appears in `/complete` but as
+`kind: function` without `fqn` (should be `kind: routine` per `catalog_names.cc`
+convention for catalog routines).
 
 Engine: `backend/sqltools/sql_tools_complete.cc` + `catalog_names.cc`
 (catalog population) + `sql_references.cc` (analyze-driven scope), orchestrated
@@ -41,7 +66,7 @@ in `frontend/handlers/sqltools.cc` (~146–232). Gateway wire/offsets:
 | Candidate source | State | Gap |
 |------------------|-------|-----|
 | builtin function names (kind `function`) | ✅ | — |
-| catalog routine/function names (kind `routine`) | ✅ | `detail`/`kind` are coarse (`SQL`/`routine`) |
+| catalog routine/function names (kind `routine`) | ⚠️ | User DDL routines merged as `function`; missing `fqn` |
 | table/view names after `FROM` | ✅ | — |
 | in-scope **columns** after `SELECT ... FROM table` | ⚠️ partial | requires a successful `AnalyzeSqlText`; incomplete/invalid SQL → analyze fails silently → no columns |
 | qualified `project.dataset.table` | ⚠️ partial | tables/routines carry `label=dataset.x` + `fqn=project.dataset.x`; datasets list dataset-id only (no project-qualified dataset candidates) |
@@ -59,7 +84,11 @@ in `frontend/handlers/sqltools.cc` (~146–232). Gateway wire/offsets:
 3. **Richer candidate metadata.** Populate `detail`/`kind` for routines beyond
    `SQL`/`routine` (signature summary, return type) so the UI shows useful hints.
 
-## Gap 13c — `/analyze` (already done; minor alignment)
+## Gap #16 — `/analyze` (verify only)
+
+Verified 2026-06-23: `POST /analyze` with `` SELECT * FROM `local-project.ds.t` ``
+returns `referencedTables` + `statementKinds`. Unqualified single-part names may
+fail analyze if table is not in default dataset scope.
 
 Exists (`handler.go` ~380–437; `frontend/handlers/sqltools.cc` ~235–295) and
 returns `referencedTables[]` (`projectId`/`datasetId`/`tableId`/`alias`/`kind`),

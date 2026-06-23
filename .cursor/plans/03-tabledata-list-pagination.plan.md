@@ -1,12 +1,23 @@
+---
+name: tabledata.list pagination
+overview: Native GET /tables/{id}/data pagination works for Preview; harden edge cases and BQ parity fields.
+todos:
+  - id: e2e-multi-page
+    content: gateway/e2e — insert 5 rows, paginate with maxResults=2 and pageToken
+    status: pending
+  - id: selected-fields-format
+    content: Optional — selectedFields, formatOptions parity if UI needs them
+    status: pending
+  - id: view-preview-path
+    content: Document or implement view preview via tabledata.list vs query fallback
+    status: pending
+isProject: false
+---
+
 # 03 — tabledata.list (table data preview) pagination & parity
 
 - **UI gap:** #4 (priority **P3**)
-- **UI feature:** Preview tab with pagination (`maxResults`, `pageToken`). The UI
-  currently falls back to `SELECT * FROM \`p.d.t\` LIMIT N` via `POST .../queries`
-  when the native endpoint is unusable, losing true pagination.
-- **Verified state at HEAD (`d390572`):** **Works** for native (Parquet-backed)
-  tables; several BigQuery-contract fields and large-table/view behaviors are
-  missing. This plan is mostly hardening + tests, not new core.
+- **Verified state at HEAD (`60d19b3e`):** **Pass** — pagination verified with 5-row table.
 
 ## Current state at HEAD (grounded)
 

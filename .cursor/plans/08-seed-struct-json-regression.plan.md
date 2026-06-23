@@ -1,11 +1,20 @@
+---
+name: Seed STRUCT JSON regression
+overview: Regression guard ensuring seed loader REPEATED STRUCT+JSON columns insert correctly on docker compose startup.
+todos:
+  - id: yaml-e2e-seed
+    content: Add end-to-end seed YAML test with REPEATED STRUCT JSON fixture
+    status: pending
+  - id: keep-unit-tests
+    content: Maintain TestCatalogApplier_InsertRows_RepeatedStruct coverage
+    status: pending
+isProject: false
+---
+
 # 08 — Seed loader REPEATED STRUCT + JSON (regression guard)
 
-- **UI gap:** #12 (priority **P8**)
-- **Scope:** local `docker compose up` with rich seed data containing a REPEATED
-  STRUCT column whose subfields include a JSON type.
-- **Verified state at HEAD (`d390572`):** **Already fixed** in commit `684aad2`
-  (`fix(seed): map REPEATED STRUCT fields by name on insert`). This plan is a
-  regression guard + a missing end-to-end YAML test, **not** a bug fix.
+- **Scope:** local dev ergonomics (not UI inventory #1–17)
+- **Verified state at HEAD (`60d19b3e`):** **Fixed** — regression guard only.
 
 ## Original symptom (UI brief, v0.5.0)
 

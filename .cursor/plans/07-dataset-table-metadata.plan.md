@@ -1,11 +1,30 @@
+---
+name: Dataset and table metadata
+overview: Dataset and table Details tabs receive full BigQuery metadata fields including resourceTags, replicas, storage stats, and view/MV typing.
+todos:
+  - id: table-view-useLegacySql
+    content: Add view.useLegacySql to ViewDefinition with default false on GET
+    status: pending
+  - id: table-resource-tags-constraints
+    content: Round-trip table resourceTags and tableConstraints via metadata overlay
+    status: pending
+  - id: storage-byte-stats
+    content: Populate numBytes breakdown (real or explicit 0) on tables.get
+    status: pending
+  - id: dataset-insert-timestamps
+    content: Persist creationTime on dataset insert; bump lastModifiedTime only on writes
+    status: pending
+  - id: e2e-delete-dataset
+    content: e2e DELETE dataset ?deleteContents=true cascade (gap 8 verify)
+    status: pending
+isProject: false
+---
+
 # 07 — Dataset & table metadata completeness (+ delete dataset)
 
-- **UI gaps:** #1 (dataset metadata), #2 (table metadata richness), #9 (delete
-  dataset — already works) (priority **P7**)
-- **UI features:** Dataset Details tab and Table Details tab ("Table info",
-  "Storage info", view query section) render every BigQuery-console field, even
-  when empty. Missing fields render `—`.
-- **Verified state at HEAD (`d390572`):** Partial for #1/#2; #9 works.
+- **UI gaps:** #1 (dataset metadata), #2 (table metadata), #8/#9 (delete — works), #12 (replicas)
+- **Priority:** **P7**
+- **Verified state at HEAD (`60d19b3e`):** Partial for #1/#2; #8/#12 **pass**.
 
 ## Shared mechanism
 
@@ -29,30 +48,21 @@ Handlers: `gateway/handlers/datasets.go` (`DatasetInsert` ~149, `DatasetGet`
 | Field | State | Action |
 |-------|-------|--------|
 | `friendlyName`, `description`, `location` | ✅ works | none |
-| `labels` | ✅ works (PATCH delete semantics tested) | none |
-| `defaultCollation` | ✅ works (round-trip tested) | none |
-| `defaultTableExpirationMs`, `defaultPartitionExpirationMs` | ✅ works | add explicit test for the former |
+| `labels` | ✅ works | none |
+| `defaultCollation` | ✅ works | none |
+| `defaultRoundingMode` | ✅ works | none |
+| `maxTimeTravelHours` | ✅ works (string wire type) | none |
+| `isCaseInsensitive` | ✅ works | none |
+| `resourceTags` | ✅ works | UI brief “tags” = wire `resourceTags` |
+| `replicas[]` | ✅ echo on PATCH/GET | verify-only (static) |
+| `defaultTableExpirationMs`, `defaultPartitionExpirationMs` | ✅ works | none |
 | `access` | ✅ works | none |
-| `creationTime` | ⚠️ synthesized fresh each GET (not persisted) | persist in overlay |
-| `lastModifiedTime` | ⚠️ set to now on every response | persist; bump on write only |
-| `defaultRoundingMode` | ❌ missing | add field + overlay |
-| `maxTimeTravelHours` | ❌ missing | add field + overlay |
-| `isCaseInsensitive` | ❌ missing | add field + overlay |
-| `tags` | ❌ missing | add field + overlay |
-| `replicas[]` | ❌ missing | add field + overlay (static/echo) |
+| `creationTime` | ⚠️ stable on GET; fresh on insert | persist on insert |
+| `lastModifiedTime` | ⚠️ bumps on write | verify insert path |
 
-**Steps:**
-1. Add `defaultRoundingMode`, `maxTimeTravelHours`, `isCaseInsensitive`, `tags`
-   (map), `replicas[]` to `bqtypes.Dataset` with correct JSON tags +
-   explicit-set semantics where empty-vs-unset matters (mirror
-   `defaultCollation`).
-2. Persist them in `stripEngineOwnedDatasetFields` /
-   `applyDatasetMetadataOverlay` / `mergeDatasetMetadataOverlay`.
-3. Persist `creationTime` once (on insert) and `lastModifiedTime` on each write;
-   stop synthesizing them per GET (`datasetResource` ~62–65).
-4. Consider the gRPC v2 path `gateway/handlers/bqv2grpc/convert.go` (~44–60)
-   which currently drops `defaultCollation` / `defaultTableExpirationMs` /
-   `access` — align if non-REST clients matter.
+**Steps (remaining):**
+1. Persist `creationTime` on dataset insert; ensure `lastModifiedTime` only bumps on writes.
+2. Table-level gaps (Gap 2 below) — `view.useLegacySql`, `resourceTags`, `tableConstraints`, byte stats.
 
 ---
 
@@ -87,9 +97,12 @@ Handler: `gateway/handlers/tables.go` `TableGet` (~340–398). Types:
 
 | Field | State | Action |
 |-------|-------|--------|
-| `numRows` | ✅ computed (`Catalog.ListRows` total, ~384–396) | none |
-| `numBytes` | ❌ field exists, never set | compute/estimate |
-| `numLongTermBytes`, `numActiveLogicalBytes`, `numTotalLogicalBytes`, `numCurrentPhysicalBytes`, `numPhysicalBytes`, `numActivePhysicalBytes`, `numLongTermPhysicalBytes`, `numTimeTravelPhysicalBytes` | ❌ missing | add fields; populate from engine or stub explicit `0` |
+| `numRows` | ✅ computed | none |
+| `numBytes`, `numLongTermBytes` | ✅ present (often `0`) | improve accuracy or document stub |
+| `numActiveLogicalBytes`, physical breakdown | ❌ missing | add fields; real or explicit `0` |
+| `view.useLegacySql` | ❌ missing | add + overlay |
+| `resourceTags`, `tableConstraints` | ❌ missing | add + overlay |
+| `defaultRoundingMode`, `caseInsensitive` | ❌ missing | add + overlay |
 
 **Steps:**
 1. Extend `bqtypes.Table` / `ViewDefinition` with the missing fields:

@@ -1,13 +1,24 @@
+---
+name: Load jobs and local ingest
+overview: Load jobs and multipart upload work for gs/file paths; document limits and defer cross-cloud schemes to plan 11.
+todos:
+  - id: document-load-matrix
+    content: Enumerate supported sourceFormat and URI schemes in docs/REST_API.md
+    status: pending
+  - id: e2e-multipart-csv
+    content: e2e multipart CSV upload → tabledata.list reads rows
+    status: pending
+  - id: storage-emulator-note
+    content: Document STORAGE_EMULATOR_HOST requirement for gs:// in dev
+    status: pending
+isProject: false
+---
+
 # 05 — Load jobs + local file ingest + multipart upload
 
-- **UI gap:** #5 (specifically 5a empty-create works; 5b CTAS; 5c load jobs)
-  (priority **P5**)
-- **UI features:** Create Table from external URIs (GCS/S3/Azure/Drive/Bigtable)
-  and from local upload (multipart). Also CTAS (covered by plan 01 DDL).
-- **Verified state at HEAD (`d390572`):** **Works** for `gs://` (via storage
-  emulator), `file://`, absolute paths, multipart + resumable upload, and
-  CSV/JSON/AVRO/PARQUET/ORC/DATASTORE_BACKUP. Mostly doc + a couple of optional
-  scheme additions.
+- **UI gap:** #5 (priority **P5**)
+- **Verified state at HEAD (`60d19b3e`):** **Partial** — local/file + gs submit OK; `s3://` unsupported.
+- **Related:** cross-cloud external tables → [`11-external-source-ingestion.plan.md`](11-external-source-ingestion.plan.md)
 
 ## Current state at HEAD (grounded)
 

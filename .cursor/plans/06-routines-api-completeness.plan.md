@@ -1,13 +1,26 @@
+---
+name: Routines API completeness
+overview: Routines list/get/create/update/delete return complete metadata; qualified-name query invocation is plan 10.
+todos:
+  - id: unify-list-sources
+    content: Union catalog + in-memory store in RoutineList so DDL routines always appear
+    status: pending
+  - id: catalog-timestamps
+    content: Non-zero creationTime/lastModifiedTime on catalog-backed GET (if still divergent)
+    status: pending
+  - id: catalog-aware-update
+    content: RoutineUpdate existence check against catalog when enabled
+    status: pending
+  - id: e2e-ddl-routine-list
+    content: gateway/e2e — CREATE FUNCTION → routines.list + routines.get
+    status: pending
+isProject: false
+---
+
 # 06 — Routines API completeness
 
-- **UI gap:** #11 (priority **P6**)
-- **UI calls:** `GET .../datasets/{d}/routines` (list) and
-  `GET .../datasets/{d}/routines/{routineId}` (get). Expected fields:
-  `routineType`, `language`, `definitionBody`, `arguments`, `returnType`,
-  `creationTime`, `lastModifiedTime`.
-- **Verified state at HEAD (`d390572`):** **Works** (full CRUD + discovery). The
-  v0.5.0 "routines not available" symptom is already resolved. Remaining issues
-  are correctness/consistency polish.
+- **UI gap:** #9 REST surface (priority **P6** for polish; **P2** for qualified calls → plan 10)
+- **Verified state at HEAD (`60d19b3e`):** REST CRUD **works**; query invocation gap → [`10-routine-qualified-name-resolution.plan.md`](10-routine-qualified-name-resolution.plan.md).
 
 ## Current state at HEAD (grounded)
 

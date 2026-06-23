@@ -1,10 +1,24 @@
+---
+name: Copy and snapshot jobs
+overview: Copy and snapshot modals work via configuration.copy jobs including SNAPSHOT operationType and destination expiration metadata.
+todos:
+  - id: e2e-copy-regression
+    content: gateway/e2e — basic copy job DONE + destination rows match source
+    status: pending
+  - id: e2e-snapshot-regression
+    content: gateway/e2e — SNAPSHOT operationType, destination type SNAPSHOT, expirationTime on tables.get
+    status: pending
+  - id: live-table-time-travel
+    content: Optional — SNAPSHOT from live table @epoch via FOR SYSTEM_TIME (deleted-table path works)
+    status: pending
+isProject: false
+---
+
 # 04 — Copy / snapshot / restore jobs (configuration.copy)
 
-- **UI gaps:** #6 (copy table), #7 (copy dataset), #8 (snapshot) (priority **P4**)
-- **UI features:** Copy table/view modal, Copy dataset (per-table orchestration),
-  Snapshot modal (TABLE only, with time-travel source refs).
-- **Verified state at HEAD (`d390572`):** basic COPY works; `operationType`
-  (SNAPSHOT/RESTORE) and `destinationExpirationTime` are missing.
+- **UI gaps:** #6 (copy table), #7 (snapshot), #8 (copy dataset orchestration)
+- **Priority:** **P4** → **verify-only** for basic copy + snapshot at HEAD
+- **Verified state at HEAD (`60d19b3e`):** Copy + SNAPSHOT **pass**; optional live time-travel polish.
 
 ## Current state at HEAD (grounded)
 
@@ -22,9 +36,10 @@ Dispatch: `gateway/handlers/jobs.go` (~161–162) routes `cfg.Copy != nil` →
 | `createDisposition` (CREATE_IF_NEEDED/NEVER) | ✅ | `executor.go` ~66–68, 91–103 |
 | `tableId@epochMs` on **deleted** tables | ✅ | `snapshots/store.go` ~72–149; test ~120–169 |
 | `tableId@epoch` on **live** tables | ⚠️ | SQL path only (`FOR SYSTEM_TIME AS OF`), no native storage time-travel (`executor.go` ~168–190) |
-| `operationType` COPY / SNAPSHOT / RESTORE | ❌ | not in `JobConfigurationCopy` |
-| `destinationExpirationTime` | ❌ | not wired |
-| copy entire dataset | UI-only | emulator does 1 job/table; UI orchestrates N |
+| `operationType` COPY / SNAPSHOT / RESTORE | ✅ SNAPSHOT verified | `jobs/registry.go` |
+| `destinationExpirationTime` | ✅ on job + destination table | verified on `:9050` |
+| destination `type: SNAPSHOT` | ✅ | `tables.get` |
+| copy entire dataset | UI-only | per-table copy works |
 
 ## Goal / done-criteria (UI-observable)
 
