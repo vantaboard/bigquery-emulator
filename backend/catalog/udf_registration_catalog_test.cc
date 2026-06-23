@@ -64,8 +64,8 @@ class UdfRegistrationCatalogTest : public ::testing::Test {
     std::random_device rd;
     std::seed_seq seed{rd(), rd()};
     std::mt19937_64 rng(seed);
-    data_dir_ = fs::path(tmpdir) /
-                absl::StrCat("bqemu-udf-reg-catalog-test-", rng());
+    data_dir_ =
+        fs::path(tmpdir) / absl::StrCat("bqemu-udf-reg-catalog-test-", rng());
     std::error_code ec;
     fs::remove_all(data_dir_, ec);
     auto opened = storage::duckdb::DuckDBStorage::Open(data_dir_.string());
@@ -83,11 +83,8 @@ class UdfRegistrationCatalogTest : public ::testing::Test {
   absl::Status RegisterProcedureFromSql(absl::string_view sql) {
     ::googlesql::TypeFactory analyze_tf;
     std::unique_ptr<GoogleSqlCatalog> catalog =
-        std::make_unique<GoogleSqlCatalog>(kProject,
-                                           storage_.get(),
-                                           &analyze_tf,
-                                           MakeLanguageOptions(),
-                                           "ds");
+        std::make_unique<GoogleSqlCatalog>(
+            kProject, storage_.get(), &analyze_tf, MakeLanguageOptions(), "ds");
     std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
     absl::Status analyzed = ::googlesql::AnalyzeStatement(
         sql, MakeAnalyzerOptions(), catalog.get(), &analyze_tf, &output);
@@ -104,8 +101,8 @@ class UdfRegistrationCatalogTest : public ::testing::Test {
     if (create_procedure == nullptr) {
       return absl::InternalError("CREATE PROCEDURE has null resolved stmt");
     }
-    return RegisterProjectProcedure(kProject, *create_procedure,
-                                    std::move(output));
+    return RegisterProjectProcedure(
+        kProject, *create_procedure, std::move(output));
   }
 
   fs::path data_dir_{};
