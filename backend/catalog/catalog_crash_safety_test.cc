@@ -201,6 +201,7 @@ TEST_F(CatalogCrashSafetyTest, ReplayFunctionsTwiceOnSameCatalogDoesNotAbort) {
   ::googlesql::SimpleCatalog catalog(kProject, &type_factory);
 
   ASSERT_TRUE(RegisterProjectFunction(kProject,
+                                      /*dataset_id=*/"",
                                       /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))

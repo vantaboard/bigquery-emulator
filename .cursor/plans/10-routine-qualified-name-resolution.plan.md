@@ -4,16 +4,16 @@ overview: Let queries invoke user UDFs with fully-qualified names (`SELECT `proj
 todos:
   - id: repro-qualified-udf
     content: Lock repro in gateway/e2e — CREATE FUNCTION then qualified SELECT returns rows (not 400 Function not found)
-    status: pending
+    status: completed
   - id: engine-catalog-lookup
     content: Resolve `project.dataset.routine` in analyzer catalog (mirror FindProjectView ordering in googlesql_catalog / udf_registry)
-    status: pending
+    status: completed
   - id: three-segment-backticks
     content: Support `` `proj`.`ds`.`fn` `` call syntax in addition to dotted single-backtick form
-    status: pending
+    status: completed
   - id: regression-unqualified
     content: Assert unqualified `SELECT fn(x)` and routines.list/get unchanged
-    status: pending
+    status: completed
 isProject: false
 ---
 

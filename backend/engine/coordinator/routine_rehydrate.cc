@@ -10,6 +10,7 @@
 #include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/python_udf_registry.h"
+#include "backend/catalog/routine_persistence.h"
 #include "backend/catalog/tvf_registry.h"
 #include "backend/catalog/udf_registration_catalog.h"
 #include "backend/catalog/udf_registry.h"
@@ -46,8 +47,13 @@ absl::Status RegisterResolvedRoutine(
       const bool is_temp =
           create_fn->create_scope() ==
           ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
+      const storage::RoutineId routine_id =
+          catalog::RoutineIdFromNamePath(create_fn->name_path(),
+                                         request.project_id,
+                                         request.default_dataset_id);
       absl::Status registered =
           catalog::RegisterProjectFunction(request.project_id,
+                                           routine_id.dataset_id,
                                            is_temp,
                                            std::move(analyzer_output),
                                            std::move(*fn_or));

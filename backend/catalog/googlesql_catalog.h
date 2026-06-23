@@ -152,6 +152,11 @@ class GoogleSqlCatalog : public ::googlesql::SimpleCatalog {
                          const FindOptions& options = FindOptions()) override
       ABSL_LOCKS_EXCLUDED(mu_);
 
+  absl::Status FindFunction(
+      const absl::Span<const std::string>& path,
+      const ::googlesql::Function** function,
+      const FindOptions& options = FindOptions()) override;
+
   absl::Status FindModel(const absl::Span<const std::string>& path,
                          const ::googlesql::Model** model,
                          const FindOptions& options = FindOptions()) override

@@ -50,6 +50,7 @@ TEST(UdfRegistryTest, ReRegisterKeepsOldPointerValidAndReplaysNewFunction) {
   ::googlesql::SimpleCatalog catalog(project, &type_factory);
 
   ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*dataset_id=*/"",
                                       /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
@@ -63,6 +64,7 @@ TEST(UdfRegistryTest, ReRegisterKeepsOldPointerValidAndReplaysNewFunction) {
   // Routine update path: re-register the same name. The old object
   // must stay alive because `catalog` still holds a raw pointer.
   ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*dataset_id=*/"",
                                       /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
@@ -87,6 +89,7 @@ TEST(UdfRegistryTest, DropRemovesFunctionFromCatalogOnNextReplay) {
   ::googlesql::SimpleCatalog catalog(project, &type_factory);
 
   ASSERT_TRUE(RegisterProjectFunction(project,
+                                      /*dataset_id=*/"",
                                       /*is_temp=*/false,
                                       /*analyzer_output=*/nullptr,
                                       MakeScalarFn(fn_name))
@@ -106,6 +109,45 @@ TEST(UdfRegistryTest, DropRemovesFunctionFromCatalogOnNextReplay) {
   const ::googlesql::Function* after_drop = nullptr;
   ASSERT_TRUE(catalog.GetFunction(fn_name, &after_drop).ok());
   EXPECT_EQ(after_drop, nullptr);
+}
+
+TEST(UdfRegistryTest, FindProjectFunctionResolvesDatasetQualifiedRoutine) {
+  const std::string project = "udf_registry_test_qualified";
+  const std::string dataset = "ds_udf";
+  const std::string routine = "add_one";
+
+  ::googlesql::TypeFactory type_factory;
+  ::googlesql::SimpleCatalog catalog(project, &type_factory);
+
+  ASSERT_TRUE(RegisterProjectFunction(project,
+                                      dataset,
+                                      /*is_temp=*/false,
+                                      /*analyzer_output=*/nullptr,
+                                      MakeScalarFn(routine))
+                  .ok());
+  ReplayFunctionsIntoCatalog(project, catalog);
+
+  const ::googlesql::Function* by_short = nullptr;
+  ASSERT_TRUE(catalog.GetFunction(routine, &by_short).ok());
+  ASSERT_NE(by_short, nullptr);
+
+  const ::googlesql::Function* qualified =
+      FindProjectFunction(project, dataset, routine);
+  ASSERT_NE(qualified, nullptr);
+  EXPECT_EQ(qualified, by_short);
+
+  EXPECT_EQ(FindProjectFunction(project, "other_ds", routine), nullptr);
+  EXPECT_EQ(FindProjectFunction(project, dataset, "missing"), nullptr);
+
+  const ::googlesql::Function* from_path = FindProjectFunctionFromPath(
+      {project, dataset, routine}, project, dataset);
+  ASSERT_NE(from_path, nullptr);
+  EXPECT_EQ(from_path, qualified);
+
+  const ::googlesql::Function* dotted = FindProjectFunctionFromPath(
+      {project + "." + dataset + "." + routine}, project, dataset);
+  ASSERT_NE(dotted, nullptr);
+  EXPECT_EQ(dotted, qualified);
 }
 
 }  // namespace

@@ -12,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "backend/catalog/js_udf_registry.h"
 #include "backend/catalog/python_udf_registry.h"
 #include "googlesql/public/analyzer_output.h"
@@ -26,11 +27,16 @@ namespace catalog {
 
 namespace {
 
+struct RegisteredFunctionEntry {
+  std::string dataset_id;
+  std::unique_ptr<const ::googlesql::Function> function;
+};
+
 struct ProjectFunctions {
   std::unique_ptr<::googlesql::TypeFactory> type_factory;
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
       analyzer_outputs;
-  std::vector<std::unique_ptr<const ::googlesql::Function>> functions;
+  std::vector<RegisteredFunctionEntry> functions;
   // Replaced/dropped functions are retired here instead of destroyed:
   // long-lived catalogs (the per-project registration catalog in
   // udf_registration_catalog.cc and any in-flight query catalogs) hold
@@ -50,6 +56,7 @@ absl::flat_hash_map<std::string, ProjectFunctions> by_project
 
 absl::Status RegisterProjectFunction(
     absl::string_view project_id,
+    absl::string_view dataset_id,
     bool is_temp,
     std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output,
     std::unique_ptr<const ::googlesql::Function> function) {
@@ -72,14 +79,105 @@ absl::Status RegisterProjectFunction(
   }
   const std::string fn_name = function->Name();
   for (auto it = bucket.functions.begin(); it != bucket.functions.end(); ++it) {
-    if (*it != nullptr && absl::EqualsIgnoreCase((*it)->Name(), fn_name)) {
-      bucket.retired_functions.push_back(std::move(*it));
-      bucket.functions.erase(it);
-      break;
+    if (it->function == nullptr) continue;
+    if (!absl::EqualsIgnoreCase(it->function->Name(), fn_name)) continue;
+    if (!dataset_id.empty() && !it->dataset_id.empty() &&
+        !absl::EqualsIgnoreCase(it->dataset_id, dataset_id)) {
+      continue;
     }
+    bucket.retired_functions.push_back(std::move(it->function));
+    bucket.functions.erase(it);
+    break;
   }
-  bucket.functions.push_back(std::move(function));
+  bucket.functions.push_back(
+      RegisteredFunctionEntry{std::string(dataset_id), std::move(function)});
   return absl::OkStatus();
+}
+
+const ::googlesql::Function* FindProjectFunction(
+    absl::string_view project_id,
+    absl::string_view dataset_id,
+    absl::string_view routine_name) {
+  if (project_id.empty() || routine_name.empty()) return nullptr;
+  absl::MutexLock lock(&mu);
+  auto it = by_project.find(std::string(project_id));
+  if (it == by_project.end()) return nullptr;
+  for (const RegisteredFunctionEntry& entry : it->second.functions) {
+    if (entry.function == nullptr) continue;
+    if (!absl::EqualsIgnoreCase(entry.function->Name(), routine_name)) continue;
+    if (!dataset_id.empty() && !entry.dataset_id.empty() &&
+        !absl::EqualsIgnoreCase(entry.dataset_id, dataset_id)) {
+      continue;
+    }
+    return entry.function.get();
+  }
+  return nullptr;
+}
+
+namespace {
+
+bool ParseRoutinePath(absl::Span<const std::string> path,
+                      absl::string_view catalog_project_id,
+                      absl::string_view default_dataset_id,
+                      absl::string_view* project_id,
+                      absl::string_view* dataset_id,
+                      absl::string_view* routine_id) {
+  if (project_id == nullptr || dataset_id == nullptr || routine_id == nullptr) {
+    return false;
+  }
+  if (path.empty()) return false;
+
+  if (path.size() == 1) {
+    absl::string_view single = path[0];
+    const size_t first_dot = single.find('.');
+    if (first_dot == absl::string_view::npos) {
+      return false;
+    }
+    const size_t second_dot = single.find('.', first_dot + 1);
+    if (second_dot != absl::string_view::npos) {
+      *project_id = single.substr(0, first_dot);
+      *dataset_id = single.substr(first_dot + 1, second_dot - first_dot - 1);
+      *routine_id = single.substr(second_dot + 1);
+      return true;
+    }
+    *project_id = catalog_project_id;
+    *dataset_id = single.substr(0, first_dot);
+    *routine_id = single.substr(first_dot + 1);
+    return true;
+  }
+  if (path.size() == 2) {
+    *project_id = catalog_project_id;
+    *dataset_id = path[0];
+    *routine_id = path[1];
+    return true;
+  }
+  if (path.size() == 3) {
+    *project_id = path[0];
+    *dataset_id = path[1];
+    *routine_id = path[2];
+    return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+const ::googlesql::Function* FindProjectFunctionFromPath(
+    absl::Span<const std::string> path,
+    absl::string_view catalog_project_id,
+    absl::string_view default_dataset_id) {
+  absl::string_view project_id;
+  absl::string_view dataset_id;
+  absl::string_view routine_id;
+  if (!ParseRoutinePath(path,
+                        catalog_project_id,
+                        default_dataset_id,
+                        &project_id,
+                        &dataset_id,
+                        &routine_id)) {
+    return nullptr;
+  }
+  return FindProjectFunction(project_id, dataset_id, routine_id);
 }
 
 ::googlesql::TypeFactory* LookupProjectTypeFactory(
@@ -110,8 +208,9 @@ bool IsProjectRegisteredFunction(absl::string_view project_id,
   absl::MutexLock lock(&mu);
   auto it = by_project.find(std::string(project_id));
   if (it == by_project.end()) return false;
-  for (const auto& fn : it->second.functions) {
-    if (fn != nullptr && absl::EqualsIgnoreCase(fn->Name(), fn_name)) {
+  for (const RegisteredFunctionEntry& entry : it->second.functions) {
+    if (entry.function != nullptr &&
+        absl::EqualsIgnoreCase(entry.function->Name(), fn_name)) {
       return true;
     }
   }
@@ -131,8 +230,9 @@ absl::Status DropProjectFunction(absl::string_view project_id,
   }
   auto& fns = it->second.functions;
   for (auto nit = fns.begin(); nit != fns.end(); ++nit) {
-    if (*nit != nullptr && absl::EqualsIgnoreCase((*nit)->Name(), fn_name)) {
-      it->second.retired_functions.push_back(std::move(*nit));
+    if (nit->function != nullptr &&
+        absl::EqualsIgnoreCase(nit->function->Name(), fn_name)) {
+      it->second.retired_functions.push_back(std::move(nit->function));
       fns.erase(nit);
       DropProjectJsUdf(project_id, fn_name);
       DropProjectPythonUdf(project_id, fn_name);
@@ -160,11 +260,12 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
       return retired.contains(fn);
     });
   }
-  for (const auto& fn : it->second.functions) {
-    if (fn == nullptr) continue;
-    const std::string name = fn->Name();
+  for (const RegisteredFunctionEntry& entry : it->second.functions) {
+    if (entry.function == nullptr) continue;
+    const std::string name = entry.function->Name();
     const ::googlesql::Function* existing = nullptr;
-    if (catalog.GetFunction(name, &existing).ok() && existing == fn.get()) {
+    if (catalog.GetFunction(name, &existing).ok() &&
+        existing == entry.function.get()) {
       continue;
     }
     // User-defined functions shadow built-ins with the same name
@@ -172,7 +273,7 @@ void ReplayFunctionsIntoCatalog(absl::string_view project_id,
     catalog.RemoveFunctions([&name](const ::googlesql::Function* existing_fn) {
       return absl::EqualsIgnoreCase(existing_fn->Name(), name);
     });
-    catalog.AddFunction(fn.get());
+    catalog.AddFunction(entry.function.get());
   }
 }
 

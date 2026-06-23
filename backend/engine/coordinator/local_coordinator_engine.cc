@@ -251,8 +251,14 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
     if (!fn_or.ok()) return fn_or.status();
     const bool is_temp = create_fn->create_scope() ==
                          ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
-    absl::Status registered = catalog::RegisterProjectFunction(
-        request.project_id, is_temp, std::move(*reg_output), std::move(*fn_or));
+    const storage::RoutineId routine_id = catalog::RoutineIdFromNamePath(
+        create_fn->name_path(), request.project_id, request.default_dataset_id);
+    absl::Status registered =
+        catalog::RegisterProjectFunction(request.project_id,
+                                         routine_id.dataset_id,
+                                         is_temp,
+                                         std::move(*reg_output),
+                                         std::move(*fn_or));
     if (!registered.ok()) return registered;
     absl::Status js_registered = catalog::RegisterJsUdfFromCreateFunction(
         request.project_id, *create_fn);

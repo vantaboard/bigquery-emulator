@@ -352,6 +352,23 @@ absl::Status GoogleSqlCatalog::FindTable(
   return absl::OkStatus();
 }
 
+absl::Status GoogleSqlCatalog::FindFunction(
+    const absl::Span<const std::string>& path,
+    const ::googlesql::Function** function,
+    const FindOptions& options) {
+  if (function == nullptr) {
+    return absl::InvalidArgumentError("FindFunction: output pointer is null");
+  }
+  *function = nullptr;
+  absl::Status found = SimpleCatalog::FindFunction(path, function, options);
+  if (found.ok() && *function != nullptr) return found;
+  const ::googlesql::Function* registered =
+      FindProjectFunctionFromPath(path, project_id_, default_dataset_id_);
+  if (registered == nullptr) return found;
+  *function = registered;
+  return absl::OkStatus();
+}
+
 absl::Status GoogleSqlCatalog::FindModel(
     const absl::Span<const std::string>& path,
     const ::googlesql::Model** model,

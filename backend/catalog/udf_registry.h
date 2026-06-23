@@ -32,9 +32,24 @@ namespace catalog {
 // `Function` object from `MakeFunctionFromCreateFunction` is needed.
 absl::Status RegisterProjectFunction(
     absl::string_view project_id,
+    absl::string_view dataset_id,
     bool is_temp,
     std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output,
     std::unique_ptr<const ::googlesql::Function> function);
+
+// Returns a registry-owned function matching `dataset_id.routine_name` in
+// `project_id`, or nullptr when no such routine is registered.
+const ::googlesql::Function* FindProjectFunction(
+    absl::string_view project_id,
+    absl::string_view dataset_id,
+    absl::string_view routine_name);
+
+// Resolves a qualified routine path (`ds.fn`, `proj.ds.fn`, or dotted
+// single-segment backtick form) via `FindProjectFunction`.
+const ::googlesql::Function* FindProjectFunctionFromPath(
+    absl::Span<const std::string> path,
+    absl::string_view catalog_project_id,
+    absl::string_view default_dataset_id);
 
 // Copy registered functions into `catalog` for analysis of later
 // statements in the same project.
