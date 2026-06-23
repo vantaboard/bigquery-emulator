@@ -5,6 +5,7 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/synchronization/mutex.h"
+#include "backend/catalog/procedure_registry.h"
 #include "backend/catalog/udf_registry.h"
 
 namespace bigquery_emulator {
@@ -47,6 +48,7 @@ GoogleSqlCatalog* GetOrCreateRegistrationCatalog(
     return entry.catalog.get();
   }
   ReplayFunctionsIntoCatalog(project_id, *entry.catalog);
+  ReplayProceduresIntoCatalog(project_id, *entry.catalog);
   return entry.catalog.get();
 }
 

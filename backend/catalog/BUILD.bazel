@@ -356,12 +356,35 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "udf_registration_catalog_test",
+    srcs = ["udf_registration_catalog_test.cc"],
+    deps = [
+        ":googlesql_catalog",
+        ":procedure_registry",
+        ":udf_registration_catalog",
+        ":udf_registry",
+        "//backend/schema",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
 cc_library(
     name = "udf_registration_catalog",
     srcs = ["udf_registration_catalog.cc"],
     hdrs = ["udf_registration_catalog.h"],
     deps = [
         ":googlesql_catalog",
+        ":procedure_registry",
         ":udf_registry",
         "//backend/storage",
         "@com_google_absl//absl/container:flat_hash_map",

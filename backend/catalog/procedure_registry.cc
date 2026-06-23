@@ -78,14 +78,13 @@ void ReplayProceduresIntoCatalog(absl::string_view project_id,
   for (const auto& proc : it->second.procedures) {
     if (proc == nullptr) continue;
     const ::googlesql::Procedure* existing = nullptr;
-    if (catalog.GetProcedure(proc->Name(), &existing).ok()) {
-      if (existing == proc.get()) {
-        continue;
-      }
-      // SimpleCatalog::AddProcedure uses InsertOrDie and exposes no
-      // RemoveProcedure. Replay runs once on a fresh catalog in
-      // GoogleSqlCatalog's constructor; skip duplicate-name inserts
-      // so a second replay on the same catalog cannot abort the engine.
+    const absl::Status found = catalog.GetProcedure(proc->Name(), &existing);
+    if (found.ok() && existing == proc.get()) {
+      continue;
+    }
+    // SimpleCatalog::GetProcedure can return OK with a null pointer when the
+    // name is absent; only skip when another procedure already owns the name.
+    if (found.ok() && existing != nullptr) {
       continue;
     }
     catalog.AddProcedure(proc.get());
