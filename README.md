@@ -1,7 +1,7 @@
 # BigQuery Emulator
 
 [![CI](https://github.com/vantaboard/bigquery-emulator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vantaboard/bigquery-emulator/actions/workflows/ci.yml)
-[![release](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge-release.json&v=0.6.5)](https://github.com/vantaboard/bigquery-emulator/releases/latest)
+[![release](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge-release.json&v=0.5.0)](https://github.com/vantaboard/bigquery-emulator/releases/latest)
 [![docs](https://img.shields.io/badge/docs-GitHub%20Pages-indigo)](https://vantaboard.github.io/bigquery-emulator/)
 [![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge.json)](https://vantaboard.github.io/bigquery-emulator/coverage/)
 [![coverage (go)](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/vantaboard/bigquery-emulator/gh-pages/badge-go.json)](https://vantaboard.github.io/bigquery-emulator/coverage/go.html)
