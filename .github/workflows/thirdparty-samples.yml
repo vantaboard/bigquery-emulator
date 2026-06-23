@@ -332,6 +332,8 @@ jobs:
       - name: Stop emulator
         if: always()
         run: docker compose down -v --remove-orphans 2>/dev/null || true
+
+  golang-bigquery-tests-live:
     if: >-
       github.event_name == 'workflow_run'
       && github.event.workflow_run.conclusion == 'success'
