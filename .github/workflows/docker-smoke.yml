@@ -82,14 +82,14 @@ jobs:
           DOCKER_BUILDKIT: "1"
           COMPOSE_DOCKER_CLI_BUILD: "1"
           DOCKER_SMOKE_SKIP_BUILD: "1"
-          GOOGLESQL_PREBUILT_URL: ${{ vars.GOOGLESQL_PREBUILT_URL }}
-          GOOGLESQL_PREBUILT_SHA256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
         run: |
           set -euo pipefail
+          eval "$(bash scripts/load_googlesql_prebuilt_pin.sh)"
           gsq_args=()
-          if [ -n "${GOOGLESQL_PREBUILT_URL}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256}" ]; then
+          if [ -n "${GOOGLESQL_PREBUILT_URL:-}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256:-}" ]; then
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_URL=${GOOGLESQL_PREBUILT_URL}")
             gsq_args+=(--build-arg "GOOGLESQL_PREBUILT_SHA256=${GOOGLESQL_PREBUILT_SHA256}")
+            echo "[docker-smoke] GoogleSQL prebuilt: ${GOOGLESQL_PREBUILT_URL}"
           fi
           bash scripts/docker_build_retry.sh docker buildx build \
             --tag bigquery-emulator:local \

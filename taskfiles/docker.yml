@@ -105,6 +105,20 @@ tasks:
           # `scripts/compute_docker_throttle.sh` for the derivation.
           eval "$(bash "${root}/scripts/compute_docker_throttle.sh")"
           eval "$(bash "${root}/scripts/load_googlesql_prebuilt_pin.sh")"
+          if [ -n "${GOOGLESQL_PREBUILT_URL:-}" ] && [ -n "${GOOGLESQL_PREBUILT_SHA256:-}" ]; then
+            echo "[docker:smoke] GoogleSQL prebuilt: ${GOOGLESQL_PREBUILT_URL} (sha256=${GOOGLESQL_PREBUILT_SHA256})"
+          else
+            echo "[docker:smoke] GoogleSQL: source fallback (set GOOGLESQL_PREBUILT_URL/_SHA256 or release.yml pins)"
+          fi
+
+          # Match CI docker-smoke: lift a host-built engine instead of
+          # compiling inside the container (avoids stale BuildKit Bazel
+          # cache cross-talk and matches release workflow).
+          if [ ! -f "${root}/bin/emulator_main" ] || [ ! -f "${root}/bin/libduckdb.so" ]; then
+            echo "[docker:smoke] building host engine (bin/emulator_main + bin/libduckdb.so)"
+            task emulator:build-engine:bazel
+          fi
+          export ENGINE_SOURCE=prebuilt
 
           if [ "${DOCKER_SMOKE_SKIP_BUILD:-0}" = "1" ]; then
             echo "[docker:smoke] docker compose up -d (DOCKER_SMOKE_SKIP_BUILD=1; image pre-loaded)"

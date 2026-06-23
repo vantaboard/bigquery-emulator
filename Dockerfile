@@ -274,10 +274,9 @@ ARG BAZEL_MEM_MB=
 
 # Build with a BuildKit cache mount on Bazel's user-root so subsequent
 # `docker build` invocations skip re-downloading and re-compiling
-# GoogleSQL. The first cold build dominates: figure ~25-55 min in
-# source mode; the prebuilt path drops that to ~5-10 min on a cold
-# tree because GoogleSQL's archive is already linked.
-RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clang18 \
+# GoogleSQL. Prebuilt and source modes use separate `--output_user_root`
+# trees so a stale source-mode analysis cache cannot poison prebuilt builds.
+RUN --mount=type=cache,target=/root/.cache,id=bigquery-emulator-bazel-clang18 \
     set -eux; \
     jobs="${BAZEL_JOBS}"; \
     if [ -z "$jobs" ]; then \
@@ -296,8 +295,9 @@ RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clan
       *)        echo "unknown googlesql mode '$mode'" >&2; exit 1 ;; \
     esac; \
     echo "engine-builder-bazel: --config=$gsq_cfg (jobs=$jobs mem=${mem})"; \
+    bazel_root="/root/.cache/bazel-${mode}"; \
     CC=/usr/bin/clang CXX=/usr/bin/clang++ PATH=/usr/bin:$PATH \
-        bazel build \
+        bazel --output_user_root="$bazel_root" build \
             --config="$gsq_cfg" \
             --jobs="${jobs}" \
             --local_resources=cpu="${jobs}" \
@@ -306,15 +306,17 @@ RUN --mount=type=cache,target=/root/.cache/bazel,id=bigquery-emulator-bazel-clan
             --action_env=CXX=/usr/bin/clang++ \
             //binaries/emulator_main:emulator_main; \
     mkdir -p /out; \
-    cp -L bazel-bin/binaries/emulator_main/emulator_main /out/emulator_main; \
+    cp -L "$bazel_root"/execroot/_main/bazel-out/k8-fastbuild/bin/binaries/emulator_main/emulator_main /out/emulator_main 2>/dev/null \
+        || cp -L bazel-bin/binaries/emulator_main/emulator_main /out/emulator_main; \
     chmod +w /out/emulator_main; \
-    duckdb_so="$(find -L bazel-bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit)"; \
+    duckdb_so="$(find -L "$bazel_root"/execroot/_main/bazel-out/k8-fastbuild/bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit 2>/dev/null \
+        || find -L bazel-bin/binaries/emulator_main/emulator_main.runfiles -name libduckdb.so -print -quit)"; \
     if [ -z "$duckdb_so" ]; then \
         echo 'engine-builder: libduckdb.so not found in runfiles' >&2; \
         exit 1; \
     fi; \
     cp -L "$duckdb_so" /out/libduckdb.so; \
-    bazel shutdown || true
+    bazel --output_user_root="$bazel_root" shutdown || true
 
 ###############################################################################
 # Stage 1b: Pre-built engine pass-through
