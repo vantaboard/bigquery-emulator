@@ -84,6 +84,8 @@ message TableRef {
   string project_id = 1;
   string dataset_id = 2;
   string table_id = 3;
+  // BigQuery REST `type` when known (e.g. VIEW). Empty defaults to TABLE.
+  string table_type = 4;
 }
 
 message FieldSchema {

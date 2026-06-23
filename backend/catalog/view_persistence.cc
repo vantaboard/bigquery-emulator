@@ -54,6 +54,7 @@ absl::Status PersistViewDdl(storage::Storage* storage,
   if (storage == nullptr) return absl::OkStatus();
   storage::ViewRecord rec;
   rec.ddl_sql = request.sql;
+  rec.view_query = std::string(stmt.sql());
   rec.id = ViewIdFromNamePath(
       stmt.name_path(), request.project_id, request.default_dataset_id);
   if (!ViewIdIsComplete(rec.id)) return absl::OkStatus();

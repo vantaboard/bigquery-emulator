@@ -128,11 +128,6 @@ std::string RenderDatasetMetaJson(absl::string_view location) {
   return absl::StrCat("{\n  \"location\": \"", escaped, "\"\n}\n");
 }
 
-// Lifts the embedded `schema` object out of a table sidecar JSON
-// blob and parses it back into a `schema::TableSchema`. The parser
-// is intentionally narrow: it does not validate the metadata fields
-// at the top level so a developer can hand-edit the file without
-// the storage layer slapping their hand.
 absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json) {
   // Locate the `"schema":` key. We don't want to drag a full JSON
   // parser in just to skip three lines of metadata; the file is
@@ -203,6 +198,116 @@ absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json) {
                                      std::string(status.message())));
   }
   return schema::TableSchemaFromProto(proto);
+}
+
+namespace {
+
+std::optional<std::string> ParseTopLevelJsonStringField(absl::string_view json,
+                                                        absl::string_view key) {
+  const std::string needle = absl::StrCat("\"", key, "\"");
+  const auto key_pos = json.find(needle);
+  if (key_pos == std::string_view::npos) {
+    return std::nullopt;
+  }
+  const auto colon = json.find(':', key_pos + needle.size());
+  if (colon == std::string_view::npos) {
+    return std::nullopt;
+  }
+  auto pos = colon + 1;
+  while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\n')) {
+    ++pos;
+  }
+  if (pos >= json.size() || json[pos] != '"') {
+    return std::nullopt;
+  }
+  ++pos;
+  std::string out;
+  out.reserve(64);
+  while (pos < json.size()) {
+    const char c = json[pos++];
+    if (c == '"') {
+      return out;
+    }
+    if (c == '\\' && pos < json.size()) {
+      const char esc = json[pos++];
+      switch (esc) {
+        case '"':
+          out.push_back('"');
+          break;
+        case '\\':
+          out.push_back('\\');
+          break;
+        case 'n':
+          out.push_back('\n');
+          break;
+        case 'r':
+          out.push_back('\r');
+          break;
+        case 't':
+          out.push_back('\t');
+          break;
+        default:
+          out.push_back(esc);
+          break;
+      }
+      continue;
+    }
+    out.push_back(c);
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+absl::StatusOr<std::string> RenderViewTableMetaJson(
+    const schema::TableSchema& schema,
+    absl::string_view view_query,
+    absl::string_view ddl_sql) {
+  absl::StatusOr<std::string> base_or = RenderTableMetaJson(schema);
+  if (!base_or.ok()) return base_or.status();
+  std::string escaped_query =
+      absl::StrReplaceAll(view_query, {{"\\", "\\\\"}, {"\"", "\\\""}});
+  std::string escaped_ddl = absl::StrReplaceAll(ddl_sql,
+                                                {{"\\", "\\\\"},
+                                                 {"\"", "\\\""},
+                                                 {"\n", "\\n"},
+                                                 {"\r", "\\r"},
+                                                 {"\t", "\\t"}});
+  // Insert view metadata before the closing brace of the wrapper
+  // object produced by `RenderTableMetaJson`.
+  std::string& out = *base_or;
+  if (!out.empty() && out.back() == '\n') {
+    out.pop_back();
+  }
+  if (!out.empty() && out.back() == '}') {
+    out.pop_back();
+  }
+  absl::StrAppend(&out,
+                  ",\n"
+                  "  \"tableType\": \"VIEW\",\n"
+                  "  \"viewQuery\": \"",
+                  escaped_query,
+                  "\",\n"
+                  "  \"ddlSql\": \"",
+                  escaped_ddl,
+                  "\"\n"
+                  "}\n");
+  return out;
+}
+
+absl::StatusOr<TableResourceInfo> ParseTableResourceInfo(
+    absl::string_view json) {
+  TableResourceInfo out;
+  if (auto table_type = ParseTopLevelJsonStringField(json, "tableType")) {
+    out.table_type = std::move(*table_type);
+  }
+  if (auto view_query = ParseTopLevelJsonStringField(json, "viewQuery")) {
+    out.view_query = std::move(*view_query);
+  }
+  if (auto ddl_sql = ParseTopLevelJsonStringField(json, "ddlSql")) {
+    out.ddl_sql = std::move(*ddl_sql);
+  }
+  return out;
 }
 
 }  // namespace internal

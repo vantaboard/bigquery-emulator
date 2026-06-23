@@ -38,7 +38,12 @@ tasks:
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
-        buf generate
+        PATH="$root/bin:$PATH" protoc -I proto \
+          --go_out=gateway/enginepb --go_opt=paths=source_relative \
+          --go-grpc_out=gateway/enginepb \
+          --go-grpc_opt=paths=source_relative,require_unimplemented_servers=false \
+          proto/emulator.proto
+        rm -rf gateway/enginepb/github.com gateway/enginepb/proto
 
   lint:
     desc: Lint proto/emulator.proto against buf.yaml's STANDARD ruleset

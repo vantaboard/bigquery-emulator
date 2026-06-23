@@ -124,6 +124,8 @@ class DuckDBStorage : public Storage {
   absl::Status UpsertView(const ViewRecord& record) override;
   absl::Status DeleteView(const ViewId& id) override;
   absl::StatusOr<std::vector<ViewRecord>> ListAllViews() const override;
+  absl::StatusOr<TableResourceInfo> GetTableResourceInfo(
+      const TableId& id) const override;
 
   absl::StatusOr<TableGovernance> GetTableGovernance(
       const TableId& id) const override;

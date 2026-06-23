@@ -58,6 +58,8 @@ func (s *TableServer) ListTables(
 			if overlay.Type != "" {
 				tableType = overlay.Type
 			}
+		} else if refType := ref.GetTableType(); refType != "" {
+			tableType = refType
 		}
 		items = append(items, listTableFromRef(
 			ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(), tableType, labels))

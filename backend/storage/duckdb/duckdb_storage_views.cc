@@ -1,9 +1,12 @@
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
@@ -15,6 +18,8 @@ namespace bigquery_emulator {
 namespace backend {
 namespace storage {
 namespace duckdb {
+
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -84,6 +89,75 @@ absl::StatusOr<std::vector<ViewRecord>> QueryViews(
   return out;
 }
 
+absl::Status WriteViewSidecar(absl::string_view data_dir,
+                              const ViewRecord& record) {
+  const TableId table_id{
+      record.id.project_id, record.id.dataset_id, record.id.view_id};
+  const fs::path ds_dir = fs::path(std::string(data_dir)) /
+                          table_id.project_id / table_id.dataset_id;
+  std::error_code ec;
+  if (!fs::exists(ds_dir, ec)) {
+    return absl::NotFoundError(absl::StrCat(
+        "dataset not found: ", table_id.project_id, ".", table_id.dataset_id));
+  }
+  absl::string_view view_query = record.view_query;
+  if (view_query.empty()) {
+    view_query = record.ddl_sql;
+  }
+  auto meta_json_or = internal::RenderViewTableMetaJson(
+      record.schema, view_query, record.ddl_sql);
+  if (!meta_json_or.ok()) return meta_json_or.status();
+  const fs::path meta_path =
+      ds_dir / absl::StrCat(table_id.table_id, internal::kTableMetaSuffix);
+  return internal::WriteFileAtomic(meta_path, *meta_json_or);
+}
+
+absl::Status RemoveViewSidecar(absl::string_view data_dir, const ViewId& id) {
+  const fs::path meta_path =
+      fs::path(std::string(data_dir)) / id.project_id / id.dataset_id /
+      absl::StrCat(id.view_id, internal::kTableMetaSuffix);
+  std::error_code ec;
+  if (!fs::exists(meta_path, ec)) {
+    return absl::OkStatus();
+  }
+  if (!fs::remove(meta_path, ec)) {
+    return internal::FilesystemStatus(
+        absl::StrCat("failed to remove view sidecar: ", meta_path.string()),
+        ec);
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<ViewRecord> ViewRecordFromSidecar(absl::string_view data_dir,
+                                                 const TableId& id) {
+  const fs::path meta_path =
+      fs::path(std::string(data_dir)) / id.project_id / id.dataset_id /
+      absl::StrCat(id.table_id, internal::kTableMetaSuffix);
+  auto contents_or = internal::ReadFile(meta_path);
+  if (!contents_or.ok()) return contents_or.status();
+  auto info_or = internal::ParseTableResourceInfo(*contents_or);
+  if (!info_or.ok()) return info_or.status();
+  if (!absl::EqualsIgnoreCase(info_or->table_type, "VIEW")) {
+    return absl::NotFoundError(absl::StrCat("table is not a logical view: ",
+                                            id.project_id,
+                                            ".",
+                                            id.dataset_id,
+                                            ".",
+                                            id.table_id));
+  }
+  ViewRecord rec;
+  rec.id.project_id = id.project_id;
+  rec.id.dataset_id = id.dataset_id;
+  rec.id.view_id = id.table_id;
+  rec.ddl_sql = info_or->ddl_sql;
+  rec.view_query = info_or->view_query;
+  auto schema_or = internal::ParseTableMetaJson(*contents_or);
+  if (schema_or.ok()) {
+    rec.schema = std::move(*schema_or);
+  }
+  return rec;
+}
+
 }  // namespace
 
 absl::Status DuckDBStorage::UpsertView(const ViewRecord& record) {
@@ -93,6 +167,9 @@ absl::Status DuckDBStorage::UpsertView(const ViewRecord& record) {
     return absl::InvalidArgumentError("UpsertView: ddl_sql is required");
   }
   absl::MutexLock lock(&mu_);
+  absl::Status sidecar = WriteViewSidecar(data_dir_, record);
+  if (!sidecar.ok()) return sidecar;
+
   absl::Status init = EnsureViewsTable(impl_.get());
   if (!init.ok()) return init;
 
@@ -116,6 +193,9 @@ absl::Status DuckDBStorage::DeleteView(const ViewId& id) {
   absl::Status id_status = ValidateViewId(id);
   if (!id_status.ok()) return id_status;
   absl::MutexLock lock(&mu_);
+  absl::Status removed = RemoveViewSidecar(data_dir_, id);
+  if (!removed.ok()) return removed;
+
   absl::Status init = EnsureViewsTable(impl_.get());
   if (!init.ok()) return init;
   const std::string sql =
@@ -136,7 +216,80 @@ absl::StatusOr<std::vector<ViewRecord>> DuckDBStorage::ListAllViews() const {
   if (impl_ == nullptr) {
     return absl::InternalError("DuckDBStorage::ListAllViews: not open");
   }
-  return QueryViews(impl_.get(), "");
+  absl::flat_hash_set<std::string> seen;
+  auto key = [](const ViewId& id) {
+    return absl::StrCat(
+        id.project_id, "\x1f", id.dataset_id, "\x1f", id.view_id);
+  };
+
+  absl::StatusOr<std::vector<ViewRecord>> from_db = QueryViews(impl_.get(), "");
+  if (!from_db.ok()) return from_db.status();
+  std::vector<ViewRecord> out = std::move(*from_db);
+  for (ViewRecord& rec : out) {
+    seen.insert(key(rec.id));
+    TableId tid{rec.id.project_id, rec.id.dataset_id, rec.id.view_id};
+    if (auto sidecar_or = ViewRecordFromSidecar(data_dir_, tid);
+        sidecar_or.ok()) {
+      if (rec.view_query.empty()) {
+        rec.view_query = sidecar_or->view_query;
+      }
+      if (rec.schema.columns.empty()) {
+        rec.schema = std::move(sidecar_or->schema);
+      }
+    }
+  }
+
+  const fs::path root(data_dir_);
+  std::error_code ec;
+  if (!fs::exists(root, ec)) {
+    return out;
+  }
+  for (const auto& project_entry : fs::directory_iterator(root, ec)) {
+    if (ec || !project_entry.is_directory(ec)) continue;
+    const std::string project_id = project_entry.path().filename().string();
+    for (const auto& dataset_entry :
+         fs::directory_iterator(project_entry.path(), ec)) {
+      if (ec || !dataset_entry.is_directory(ec)) continue;
+      const std::string dataset_id = dataset_entry.path().filename().string();
+      for (const auto& table_entry :
+           fs::directory_iterator(dataset_entry.path(), ec)) {
+        if (ec) break;
+        const std::string name = table_entry.path().filename().string();
+        if (name.size() <= internal::kTableMetaSuffix.size()) continue;
+        if (!absl::EndsWith(name, internal::kTableMetaSuffix)) continue;
+        const std::string table_id =
+            name.substr(0, name.size() - internal::kTableMetaSuffix.size());
+        ViewId vid{project_id, dataset_id, table_id};
+        if (!seen.insert(key(vid)).second) continue;
+        TableId tid{project_id, dataset_id, table_id};
+        auto rec_or = ViewRecordFromSidecar(data_dir_, tid);
+        if (!rec_or.ok()) continue;
+        out.push_back(std::move(*rec_or));
+      }
+    }
+  }
+  std::sort(
+      out.begin(), out.end(), [](const ViewRecord& a, const ViewRecord& b) {
+        if (a.id.project_id != b.id.project_id) {
+          return a.id.project_id < b.id.project_id;
+        }
+        if (a.id.dataset_id != b.id.dataset_id) {
+          return a.id.dataset_id < b.id.dataset_id;
+        }
+        return a.id.view_id < b.id.view_id;
+      });
+  return out;
+}
+
+absl::StatusOr<TableResourceInfo> DuckDBStorage::GetTableResourceInfo(
+    const TableId& id) const {
+  absl::MutexLock lock(&mu_);
+  const fs::path meta_path =
+      fs::path(data_dir_) / id.project_id / id.dataset_id /
+      absl::StrCat(id.table_id, internal::kTableMetaSuffix);
+  auto contents_or = internal::ReadFile(meta_path);
+  if (!contents_or.ok()) return contents_or.status();
+  return internal::ParseTableResourceInfo(*contents_or);
 }
 
 }  // namespace duckdb

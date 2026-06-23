@@ -380,6 +380,72 @@ TEST_F(DuckDBStorageTest, AppendRowsAppendsAcrossMultipleBatches) {
   EXPECT_EQ(scanned.size(), 3u);
 }
 
+TEST_F(DuckDBStorageTest, UpsertViewWritesSidecarAndListsInDataset) {
+  auto store_or = DuckDBStorage::Open(data_dir_.string());
+  ASSERT_TRUE(store_or.ok()) << store_or.status();
+  auto& store = **store_or;
+
+  const DatasetId ds{"proj-1", "ds_1"};
+  const ViewId view_id{"proj-1", "ds_1", "my_view"};
+  ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+
+  ViewRecord rec;
+  rec.id = view_id;
+  rec.ddl_sql = "CREATE OR REPLACE VIEW `proj-1.ds_1.my_view` AS SELECT 1 AS x";
+  rec.view_query = "SELECT 1 AS x";
+  ASSERT_TRUE(store.UpsertView(rec).ok());
+
+  const fs::path sidecar = data_dir_ / "proj-1" / "ds_1" / "my_view.meta.json";
+  EXPECT_TRUE(fs::exists(sidecar));
+
+  auto list_or = store.ListTables(ds);
+  ASSERT_TRUE(list_or.ok()) << list_or.status();
+  ASSERT_EQ(list_or->size(), 1u);
+  EXPECT_EQ((*list_or)[0].table_id, "my_view");
+
+  auto info_or =
+      store.GetTableResourceInfo(TableId{"proj-1", "ds_1", "my_view"});
+  ASSERT_TRUE(info_or.ok()) << info_or.status();
+  EXPECT_EQ(info_or->table_type, "VIEW");
+  EXPECT_EQ(info_or->view_query, "SELECT 1 AS x");
+
+  ASSERT_TRUE(store.DeleteView(view_id).ok());
+  EXPECT_FALSE(fs::exists(sidecar));
+  list_or = store.ListTables(ds);
+  ASSERT_TRUE(list_or.ok());
+  EXPECT_TRUE(list_or->empty());
+}
+
+TEST_F(DuckDBStorageTest, UpsertViewSurvivesReopenAndListAllViews) {
+  const DatasetId ds{"proj-1", "ds_1"};
+  const ViewId view_id{"proj-1", "ds_1", "persisted_view"};
+  ViewRecord rec;
+  rec.id = view_id;
+  rec.ddl_sql =
+      "CREATE OR REPLACE VIEW `proj-1.ds_1.persisted_view` AS SELECT 42 AS "
+      "answer";
+  rec.view_query = "SELECT 42 AS answer";
+
+  {
+    auto store_or = DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(store_or.ok()) << store_or.status();
+    auto& store = **store_or;
+    ASSERT_TRUE(store.CreateDataset(ds, "US").ok());
+    ASSERT_TRUE(store.UpsertView(rec).ok());
+  }
+
+  {
+    auto store_or = DuckDBStorage::Open(data_dir_.string());
+    ASSERT_TRUE(store_or.ok()) << store_or.status();
+    auto& store = **store_or;
+    auto views_or = store.ListAllViews();
+    ASSERT_TRUE(views_or.ok()) << views_or.status();
+    ASSERT_EQ(views_or->size(), 1u);
+    EXPECT_EQ((*views_or)[0].id.view_id, "persisted_view");
+    EXPECT_EQ((*views_or)[0].view_query, "SELECT 42 AS answer");
+  }
+}
+
 }  // namespace
 }  // namespace duckdb
 }  // namespace storage

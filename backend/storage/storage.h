@@ -102,6 +102,14 @@ struct ViewId {
 struct ViewRecord {
   ViewId id;
   std::string ddl_sql;
+  std::string view_query;
+  schema::TableSchema schema;
+};
+
+struct TableResourceInfo {
+  std::string table_type;
+  std::string view_query;
+  std::string ddl_sql;
 };
 
 // Engine-agnostic cell value. The variant covers the BigQuery scalar
@@ -437,6 +445,13 @@ class Storage {
   [[nodiscard]] virtual absl::Status DeleteView(const ViewId& id) = 0;
   [[nodiscard]] virtual absl::StatusOr<std::vector<ViewRecord>> ListAllViews()
       const = 0;
+
+  [[nodiscard]] virtual absl::StatusOr<TableResourceInfo> GetTableResourceInfo(
+      const TableId& id) const {
+    (void)id;
+    return absl::UnimplementedError(
+        "Storage backend does not expose table resource metadata");
+  }
 
   // Row-access policies and column-level security metadata.
   [[nodiscard]] virtual absl::StatusOr<TableGovernance> GetTableGovernance(

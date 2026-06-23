@@ -11,6 +11,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
@@ -295,12 +296,9 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   if (!tables_or.ok()) {
     return AbslToGrpcStatus(tables_or.status());
   }
-  // Physical storage tables plus the logical views registered for this
-  // dataset. Views live in the view registry (not storage), so a dataset
-  // whose only objects are views would otherwise list as empty. BigQuery
-  // surfaces views in tables.list alongside tables, and
-  // INFORMATION_SCHEMA.TABLES already folds them in via ListProjectViews;
-  // mirror that here so the REST tables.list stays consistent.
+  // Physical storage tables plus any in-memory views not yet written to
+  // a sidecar (CREATE VIEW always writes a sidecar; this merge covers
+  // races and legacy state).
   std::vector<std::string> table_ids;
   absl::flat_hash_set<std::string> seen;
   for (const auto& tid : *tables_or) {
@@ -321,6 +319,16 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     ref->set_project_id(id.project_id);
     ref->set_dataset_id(id.dataset_id);
     ref->set_table_id(table_id);
+    const backend::storage::TableId storage_id{
+        id.project_id, id.dataset_id, table_id};
+    if (absl::StatusOr<backend::storage::TableResourceInfo> info_or =
+            storage_->GetTableResourceInfo(storage_id);
+        info_or.ok() && !info_or->table_type.empty()) {
+      ref->set_table_type(info_or->table_type);
+    } else if (backend::catalog::FindProjectView(
+                   id.project_id, id.dataset_id, table_id) != nullptr) {
+      ref->set_table_type("VIEW");
+    }
   }
   return ::grpc::Status::OK;
 }
@@ -340,6 +348,15 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   auto schema_or = storage_->GetSchema(id);
   if (schema_or.ok()) {
     backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
+    if (absl::StatusOr<backend::storage::TableResourceInfo> info_or =
+            storage_->GetTableResourceInfo(id);
+        info_or.ok() && absl::EqualsIgnoreCase(info_or->table_type, "VIEW")) {
+      response->set_table_type("VIEW");
+      if (!info_or->view_query.empty()) {
+        response->set_view_query(info_or->view_query);
+      }
+      response->set_view_use_legacy_sql(false);
+    }
     return ::grpc::Status::OK;
   }
   if (!absl::IsNotFound(schema_or.status())) {

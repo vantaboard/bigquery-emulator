@@ -60,9 +60,21 @@ absl::StatusOr<std::string> ReadFile(const fs::path& path);
 absl::StatusOr<std::string> RenderTableMetaJson(
     const schema::TableSchema& schema);
 
+// Renders a view sidecar: same REST metadata envelope as tables plus
+// `tableType`, `viewQuery`, and `ddlSql` for rehydration.
+absl::StatusOr<std::string> RenderViewTableMetaJson(
+    const schema::TableSchema& schema,
+    absl::string_view view_query,
+    absl::string_view ddl_sql);
+
 std::string RenderDatasetMetaJson(absl::string_view location);
 
 absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json);
+
+// Reads view/catalog metadata from a table sidecar. `table_type` is
+// empty when the sidecar describes a physical table.
+absl::StatusOr<TableResourceInfo> ParseTableResourceInfo(
+    absl::string_view json);
 
 // Parquet files store only non-measure columns; measure metadata stays in the
 // sidecar schema returned by `GetSchema`.

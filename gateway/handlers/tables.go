@@ -136,6 +136,8 @@ func TableList(deps Dependencies) http.HandlerFunc {
 				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
 			); ok && overlay.Type != "" {
 				tableType = overlay.Type
+			} else if refType := ref.GetTableType(); refType != "" {
+				tableType = refType
 			}
 			items = append(items, map[string]any{
 				"kind": tableKind,
