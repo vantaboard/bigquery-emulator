@@ -350,6 +350,17 @@ absl::StatusOr<schema::TableSchema> DuckDBStorage::GetSchema(
   }
   auto contents_or = internal::ReadFile(meta_path);
   if (!contents_or.ok()) return contents_or.status();
+  auto info_or = internal::ParseTableResourceInfo(*contents_or);
+  if (info_or.ok() && absl::EqualsIgnoreCase(info_or->table_type, "VIEW")) {
+    return absl::NotFoundError(
+        absl::StrCat("logical view has no physical "
+                     "schema: ",
+                     id.project_id,
+                     ".",
+                     id.dataset_id,
+                     ".",
+                     id.table_id));
+  }
   return internal::ParseTableMetaJson(*contents_or);
 }
 

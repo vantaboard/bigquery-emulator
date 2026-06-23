@@ -303,19 +303,23 @@ absl::Status GoogleSqlCatalog::FindTable(
     }
   }
 
+  // Registered SQL views must win over persisted view sidecars. Sidecars
+  // exist for REST listing and restart rehydration but carry an empty
+  // schema; treating them as physical tables yields zero-column reads.
+  const ::googlesql::Table* registered_view =
+      FindProjectView(project_id, dataset_id, table_id);
+  if (registered_view != nullptr) {
+    registered_view_keys_.push_back(key);
+    registered_views_.push_back(registered_view);
+    *table = registered_view;
+    return absl::OkStatus();
+  }
+
   storage::TableId storage_id{
       std::string(project_id), std::string(dataset_id), std::string(table_id)};
   absl::StatusOr<schema::TableSchema> schema_or =
       storage_->GetSchema(storage_id);
   if (!schema_or.ok()) {
-    const ::googlesql::Table* registered_view =
-        FindProjectView(project_id, dataset_id, table_id);
-    if (registered_view != nullptr) {
-      registered_view_keys_.push_back(key);
-      registered_views_.push_back(registered_view);
-      *table = registered_view;
-      return absl::OkStatus();
-    }
     return schema_or.status();
   }
 

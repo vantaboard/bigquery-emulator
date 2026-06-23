@@ -409,6 +409,13 @@ TEST_F(DuckDBStorageTest, UpsertViewWritesSidecarAndListsInDataset) {
   EXPECT_EQ(info_or->table_type, "VIEW");
   EXPECT_EQ(info_or->view_query, "SELECT 1 AS x");
 
+  // View sidecars exist for REST listing and restart rehydration; they
+  // carry no physical column schema. Catalog resolution must consult the
+  // in-memory view registry instead of materializing an empty table.
+  auto schema_or = store.GetSchema(TableId{"proj-1", "ds_1", "my_view"});
+  EXPECT_FALSE(schema_or.ok());
+  EXPECT_TRUE(absl::IsNotFound(schema_or.status())) << schema_or.status();
+
   ASSERT_TRUE(store.DeleteView(view_id).ok());
   EXPECT_FALSE(fs::exists(sidecar));
   list_or = store.ListTables(ds);
