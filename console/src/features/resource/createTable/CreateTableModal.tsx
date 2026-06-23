@@ -100,13 +100,26 @@ export function CreateTableModal({
         if (form.source === 'gcs' && !form.gcsUri.trim()) {
             return 'Enter a GCS URI.';
         }
+        if (form.source === 'drive' && !form.driveUri.trim()) {
+            return 'Enter a Drive URI.';
+        }
+        if (form.source === 's3' && !form.s3Uri.trim()) {
+            return 'Enter an S3 URI.';
+        }
+        if (form.source === 'azure' && !form.azureUri.trim()) {
+            return 'Enter an Azure URI.';
+        }
+        if (form.source === 'bigtable' && !form.bigtableUri.trim()) {
+            return 'Enter a Bigtable URI.';
+        }
         const needsSchema =
             form.source === 'empty' ||
             form.source === 'upload' ||
             form.source === 'gcs' ||
             form.source === 'drive' ||
             form.source === 's3' ||
-            form.source === 'azure';
+            form.source === 'azure' ||
+            form.source === 'bigtable';
         if (needsSchema) {
             const schemaErrors = validateSchemaFields(form.schemaFields);
             if (schemaErrors.length > 0) {
@@ -131,7 +144,8 @@ export function CreateTableModal({
         form.source === 'gcs' ||
         form.source === 'drive' ||
         form.source === 's3' ||
-        form.source === 'azure';
+        form.source === 'azure' ||
+        form.source === 'bigtable';
 
     return (
         <Modal

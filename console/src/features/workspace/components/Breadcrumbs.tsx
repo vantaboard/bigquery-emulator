@@ -57,3 +57,20 @@ export function tableBreadcrumbs(
         { label: tableId },
     ];
 }
+
+export function routineBreadcrumbs(
+    projectId: string,
+    datasetId: string,
+    routineId: string,
+): BreadcrumbSegment[] {
+    return [
+        { label: projectId, to: '/' },
+        { label: 'Datasets' },
+        {
+            label: datasetId,
+            to: `/project/${encodeURIComponent(projectId)}/dataset/${encodeURIComponent(datasetId)}`,
+        },
+        { label: 'Routines' },
+        { label: routineId },
+    ];
+}

@@ -56,13 +56,10 @@ export function QueryTab({ tab }: QueryTabProps) {
         staleTime: Infinity,
     });
 
-    const useEmulatorParser = ui.useEmulatorParser && sqlToolsAvailable;
-    const needsCatalog = !useEmulatorParser && Boolean(tab.projectId);
-
     const { data: catalog = null } = useQuery({
         queryKey: ['sql-catalog', tab.projectId],
         queryFn: () => loadSqlCatalog(tab.projectId),
-        enabled: needsCatalog,
+        enabled: Boolean(tab.projectId),
         staleTime: 60_000,
     });
 
@@ -203,7 +200,7 @@ export function QueryTab({ tab }: QueryTabProps) {
         const ok = await validateSelectQuery();
         if (!ok) return;
 
-        const ddl = `CREATE OR REPLACE VIEW \`${projectId}.${datasetId}.${name}\` AS\n${tab.sql.trim()}`;
+        const ddl = `CREATE OR REPLACE VIEW \`${projectId}\`.\`${datasetId}\`.\`${name}\` AS\n${tab.sql.trim()}`;
         saveDdlMutation.mutate(
             { ddl, projectId },
             {

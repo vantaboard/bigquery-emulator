@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router';
 
 import { explorerQueries } from '@/features/explorer/api';
 
@@ -7,11 +8,32 @@ interface DatasetRoutinesSubTabProps {
     datasetId: string;
 }
 
+function routineRoute(projectId: string, datasetId: string, routineId: string): string {
+    return `/project/${encodeURIComponent(projectId)}/dataset/${encodeURIComponent(datasetId)}/routine/${encodeURIComponent(routineId)}`;
+}
+
+function formatRoutineType(routineType: string): string {
+    if (!routineType) return '—';
+    return routineType.replace(/_/g, ' ');
+}
+
 export function DatasetRoutinesSubTab({ projectId, datasetId }: DatasetRoutinesSubTabProps) {
-    const { data: routineIds = [], isLoading, isError, error } = useQuery({
+    const {
+        data: routineIds = [],
+        isLoading,
+        isError,
+        error,
+    } = useQuery({
         queryKey: ['explorer', 'routines', projectId, datasetId],
         queryFn: () => explorerQueries.routines(projectId, datasetId),
         retry: false,
+    });
+
+    const metaQueries = useQueries({
+        queries: routineIds.map((routineId) => ({
+            queryKey: ['explorer', 'routine', projectId, datasetId, routineId],
+            queryFn: () => explorerQueries.routine(projectId, datasetId, routineId),
+        })),
     });
 
     if (isLoading) {
@@ -43,19 +65,35 @@ export function DatasetRoutinesSubTab({ projectId, datasetId }: DatasetRoutinesS
                 <thead>
                     <tr className="border-b border-[var(--bq-border)] text-left text-[var(--bq-muted)]">
                         <th className="px-4 py-2 font-medium">Routine ID</th>
+                        <th className="px-4 py-2 font-medium">Type</th>
+                        <th className="px-4 py-2 font-medium">Language</th>
+                        <th className="px-4 py-2 font-medium">Return type</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {routineIds.map((routineId) => (
-                        <tr key={routineId} className="border-b border-[var(--bq-border)]/50">
-                            <td className="px-4 py-2 text-[var(--bq-muted)]">{routineId}</td>
-                        </tr>
-                    ))}
+                    {routineIds.map((routineId, index) => {
+                        const meta = metaQueries[index]?.data;
+                        return (
+                            <tr key={routineId} className="border-b border-[var(--bq-border)]/50 hover:bg-white/5">
+                                <td className="px-4 py-2">
+                                    <Link
+                                        to={routineRoute(projectId, datasetId, routineId)}
+                                        className="text-blue-400 hover:underline"
+                                        data-testid={`routine-link-${routineId}`}
+                                    >
+                                        {routineId}
+                                    </Link>
+                                </td>
+                                <td className="px-4 py-2 text-[var(--bq-muted)]">
+                                    {formatRoutineType(meta?.routineType ?? '')}
+                                </td>
+                                <td className="px-4 py-2 text-[var(--bq-muted)]">{meta?.language || '—'}</td>
+                                <td className="px-4 py-2 text-[var(--bq-muted)]">{meta?.returnType || '—'}</td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
-            <p className="px-4 py-2 text-xs text-[var(--bq-muted)]">
-                Routine detail view is planned for M5.
-            </p>
         </div>
     );
 }

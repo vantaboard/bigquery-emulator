@@ -5,6 +5,7 @@ import {
     ChevronRight,
     Folder,
     FolderOpen,
+    FunctionSquare,
     RefreshCw,
     Table2,
 } from 'lucide-react';
@@ -14,18 +15,19 @@ import { useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 
 import { explorerQueries } from '@/features/explorer/api';
-import { EXPLORER_DATASETS_CHANGED, EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
+import { EXPLORER_DATASETS_CHANGED, EXPLORER_ROUTINES_CHANGED, EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
 import { tabRoutePath, useWorkspace } from '@/features/workspace/store';
 import { resourceTabId } from '@/features/workspace/types';
 
 export function ResourceSidebar() {
     const navigate = useNavigate();
-    const { ui, updateUi, openDatasetTab, openTableTab, activeTab } = useWorkspace();
+    const { ui, updateUi, openDatasetTab, openTableTab, openRoutineTab, activeTab } = useWorkspace();
 
     const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
     const [expandedDatasets, setExpandedDatasets] = useState<string[]>([]);
     const [projectDatasets, setProjectDatasets] = useState<Record<string, string[]>>({});
     const [datasetTables, setDatasetTables] = useState<Record<string, string[]>>({});
+    const [datasetRoutines, setDatasetRoutines] = useState<Record<string, string[]>>({});
 
     const [newProjectId, setNewProjectId] = useState('');
     const [adminErr, setAdminErr] = useState<string | null>(null);
@@ -58,6 +60,14 @@ export function ResourceSidebar() {
                 const tb = await explorerQueries.tables(project, dataset);
                 setDatasetTables((m) => ({ ...m, [key]: tb }));
             }
+            if (!datasetRoutines[key]) {
+                try {
+                    const routines = await explorerQueries.routines(project, dataset);
+                    setDatasetRoutines((m) => ({ ...m, [key]: routines }));
+                } catch {
+                    setDatasetRoutines((m) => ({ ...m, [key]: [] }));
+                }
+            }
         }
     };
 
@@ -73,11 +83,20 @@ export function ResourceSidebar() {
         navigate(tabRoutePath({ type: 'table', id, projectId: project, datasetId: dataset, tableId: table }));
     };
 
+    const onSelectRoutine = (project: string, dataset: string, routine: string) => {
+        openRoutineTab(project, dataset, routine);
+        const id = resourceTabId('routine', project, dataset, routine);
+        navigate(
+            tabRoutePath({ type: 'routine', id, projectId: project, datasetId: dataset, routineId: routine }),
+        );
+    };
+
     const onRefreshResources = async () => {
         setExpandedProjects([]);
         setExpandedDatasets([]);
         setProjectDatasets({});
         setDatasetTables({});
+        setDatasetRoutines({});
         await refetchProjects();
     };
 
@@ -106,11 +125,28 @@ export function ResourceSidebar() {
                 setExpandedProjects((s) => (s.includes(detail.projectId) ? s : [...s, detail.projectId]));
             })();
         };
+        const onRoutinesChanged = (event: Event) => {
+            const detail = (event as CustomEvent<{ projectId: string; datasetId: string }>).detail;
+            if (!detail?.projectId || !detail?.datasetId) return;
+            const key = `${detail.projectId}-${detail.datasetId}`;
+            void (async () => {
+                try {
+                    const routines = await explorerQueries.routines(detail.projectId, detail.datasetId);
+                    setDatasetRoutines((m) => ({ ...m, [key]: routines }));
+                } catch {
+                    setDatasetRoutines((m) => ({ ...m, [key]: [] }));
+                }
+                setExpandedProjects((s) => (s.includes(detail.projectId) ? s : [...s, detail.projectId]));
+                setExpandedDatasets((s) => (s.includes(key) ? s : [...s, key]));
+            })();
+        };
         window.addEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
         window.addEventListener(EXPLORER_DATASETS_CHANGED, onDatasetsChanged);
+        window.addEventListener(EXPLORER_ROUTINES_CHANGED, onRoutinesChanged);
         return () => {
             window.removeEventListener(EXPLORER_TABLES_CHANGED, onTablesChanged);
             window.removeEventListener(EXPLORER_DATASETS_CHANGED, onDatasetsChanged);
+            window.removeEventListener(EXPLORER_ROUTINES_CHANGED, onRoutinesChanged);
         };
     }, []);
 
@@ -233,6 +269,29 @@ export function ResourceSidebar() {
                                                                         >
                                                                             <Table2 className="size-4 shrink-0" />
                                                                             <span className="truncate">{t}</span>
+                                                                        </button>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                            {(datasetRoutines[dk] ?? []).map((r) => {
+                                                                const active =
+                                                                    activeTab?.type === 'routine' &&
+                                                                    activeTab.projectId === p &&
+                                                                    activeTab.datasetId === d &&
+                                                                    activeTab.routineId === r;
+                                                                return (
+                                                                    <li key={r}>
+                                                                        <button
+                                                                            type="button"
+                                                                            data-testid={`routine-${r}`}
+                                                                            className={cn(
+                                                                                'flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5',
+                                                                                active && 'bg-blue-600/30',
+                                                                            )}
+                                                                            onClick={() => onSelectRoutine(p, d, r)}
+                                                                        >
+                                                                            <FunctionSquare className="size-4 shrink-0" />
+                                                                            <span className="truncate">{r}</span>
                                                                         </button>
                                                                     </li>
                                                                 );

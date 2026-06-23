@@ -66,6 +66,7 @@ export function CreateTableSourceSection({
                         className={inputClass}
                         placeholder="https://drive.google.com/..."
                         value={form.driveUri}
+                        data-testid="create-table-drive-uri"
                         onChange={(e) => onChange({ driveUri: e.target.value })}
                     />
                 </label>
@@ -78,6 +79,7 @@ export function CreateTableSourceSection({
                         className={inputClass}
                         placeholder="https://googleapis.com/bigtable/..."
                         value={form.bigtableUri}
+                        data-testid="create-table-bigtable-uri"
                         onChange={(e) => onChange({ bigtableUri: e.target.value })}
                     />
                 </label>
@@ -91,6 +93,7 @@ export function CreateTableSourceSection({
                             className={inputClass}
                             placeholder="s3://bucket/path"
                             value={form.s3Uri}
+                            data-testid="create-table-s3-uri"
                             onChange={(e) => onChange({ s3Uri: e.target.value })}
                         />
                     </label>
@@ -99,6 +102,7 @@ export function CreateTableSourceSection({
                         <input
                             className={inputClass}
                             value={form.s3Connection}
+                            data-testid="create-table-s3-connection"
                             onChange={(e) => onChange({ s3Connection: e.target.value })}
                         />
                     </label>
@@ -113,6 +117,7 @@ export function CreateTableSourceSection({
                             className={inputClass}
                             placeholder="azure://account/container/path"
                             value={form.azureUri}
+                            data-testid="create-table-azure-uri"
                             onChange={(e) => onChange({ azureUri: e.target.value })}
                         />
                     </label>
@@ -121,6 +126,7 @@ export function CreateTableSourceSection({
                         <input
                             className={inputClass}
                             value={form.azureConnection}
+                            data-testid="create-table-azure-connection"
                             onChange={(e) => onChange({ azureConnection: e.target.value })}
                         />
                     </label>

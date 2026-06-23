@@ -95,6 +95,11 @@ function buildLoadJobConfig(form: CreateTableFormState, sourceUris: string[]): R
         ignoreUnknownValues: fmt.ignoreUnknownValues,
     };
 
+    const connectionProperties = connectionPropertiesForForm(form);
+    if (connectionProperties?.length) {
+        load.connectionProperties = connectionProperties;
+    }
+
     const schemaFields = schemaFieldsToBqPayload(form.schemaFields);
     if (schemaFields.length > 0) {
         load.schema = { fields: schemaFields };
@@ -116,6 +121,55 @@ function buildLoadJobConfig(form: CreateTableFormState, sourceUris: string[]): R
     if (fmt.timestampFormat.trim()) load.timestampFormat = fmt.timestampFormat.trim();
 
     return { load };
+}
+
+function connectionPropertiesForForm(
+    form: CreateTableFormState,
+): Array<{ key: string; value: string }> | undefined {
+    const raw =
+        form.source === 's3'
+            ? form.s3Connection
+            : form.source === 'azure'
+              ? form.azureConnection
+              : '';
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    if (trimmed.includes('=')) {
+        return trimmed
+            .split(',')
+            .map((pair) => {
+                const eq = pair.indexOf('=');
+                if (eq <= 0) return null;
+                return {
+                    key: pair.slice(0, eq).trim(),
+                    value: pair.slice(eq + 1).trim(),
+                };
+            })
+            .filter((entry): entry is { key: string; value: string } => Boolean(entry?.key && entry.value));
+    }
+    return [{ key: 'connectionId', value: trimmed }];
+}
+
+export function buildBigtableExternalTableBody(form: CreateTableFormState): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+        tableReference: {
+            projectId: form.destinationProject.trim(),
+            datasetId: form.destinationDataset.trim(),
+            tableId: form.tableName.trim(),
+        },
+        externalDataConfiguration: {
+            sourceFormat: 'BIGTABLE',
+            sourceUris: [form.bigtableUri.trim()],
+            autodetect: true,
+        },
+    };
+
+    const schemaFields = schemaFieldsToBqPayload(form.schemaFields);
+    if (schemaFields.length > 0) {
+        body.schema = { fields: schemaFields };
+    }
+
+    return body;
 }
 
 function sourceUrisForForm(form: CreateTableFormState): string[] {
@@ -180,6 +234,15 @@ export async function submitCreateTable(form: CreateTableFormState): Promise<voi
         return;
     }
 
+    if (form.source === 'bigtable') {
+        await explorerQueries.insertTable(
+            projectId,
+            form.destinationDataset.trim(),
+            buildBigtableExternalTableBody(form),
+        );
+        return;
+    }
+
     const uris = sourceUrisForForm(form);
     const job = await explorerQueries.submitJob(projectId, {
         configuration: buildLoadJobConfig(form, uris),
@@ -188,7 +251,7 @@ export async function submitCreateTable(form: CreateTableFormState): Promise<voi
 }
 
 export function isFileSource(source: CreateTableFormState['source']): boolean {
-    return ['upload', 'gcs', 'drive', 's3', 'azure'].includes(source);
+    return ['upload', 'gcs', 'drive', 's3', 'azure', 'bigtable'].includes(source);
 }
 
 export function showUploadFormatOptions(source: CreateTableFormState['source']): boolean {

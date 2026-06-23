@@ -12,7 +12,8 @@ export function WorkspaceLayout() {
     const navigate = useNavigate();
     const params = useParams();
     const [searchParams] = useSearchParams();
-    const { tabs, session, activateTab, openTableTab, openDatasetTab, openQueryFromShare } = useWorkspace();
+    const { tabs, session, activateTab, openTableTab, openDatasetTab, openRoutineTab, openQueryFromShare } =
+        useWorkspace();
     const shareHandled = useRef(false);
     const initialRouteHandled = useRef(false);
 
@@ -47,15 +48,22 @@ export function WorkspaceLayout() {
             return;
         }
 
+        if (params.projectId && params.datasetId && params.routineId) {
+            openRoutineTab(params.projectId, params.datasetId, params.routineId);
+            return;
+        }
+
         if (params.projectId && params.datasetId) {
             openDatasetTab(params.projectId, params.datasetId);
         }
     }, [
         activateTab,
         openDatasetTab,
+        openRoutineTab,
         openTableTab,
         params.datasetId,
         params.projectId,
+        params.routineId,
         params.tabId,
         params.tableId,
         tabs,

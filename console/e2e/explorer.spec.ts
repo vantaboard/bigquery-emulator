@@ -43,9 +43,28 @@ async function openQueryFromTable(page: Page) {
     await expect(page.getByTestId('sql-editor')).toBeVisible();
 }
 
-async function openTableSchemaTab(page: Page) {
-    await selectTable(page);
-    await expect(page.getByTestId('table-tab-schema')).toBeVisible();
+async function openRoutinesTab(page: Page) {
+    await openDataset(page);
+    await Promise.all([
+        page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/routines') && r.ok()),
+        page.getByTestId('dataset-overview-tab-routines').click(),
+    ]);
+    await expect(
+        page
+            .getByTestId('dataset-overview-routines')
+            .or(page.getByTestId('dataset-overview-routines-empty'))
+            .or(page.getByTestId('dataset-overview-routines-error')),
+    ).toBeVisible({ timeout: 10_000 });
+}
+
+async function expandDatasetWithRoutines(page: Page) {
+    await expandProject(page);
+    const toggle = page.getByTestId('dataset-toggle-test-dataset');
+    await Promise.all([
+        page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
+        page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/routines') && r.ok()),
+        toggle.click(),
+    ]);
 }
 
 test.describe('BigQuery Explorer', () => {
@@ -248,10 +267,10 @@ test.describe('BigQuery Explorer', () => {
 
         await page.getByTestId('save-query-menu').click();
         await page.getByTestId('save-view').click();
-        await page.getByTestId('save-name-input').fill('e2e_saved_view');
+        await page.getByTestId('save-destination-name').fill('e2e_saved_view');
         const [response] = await Promise.all([
             page.waitForResponse((r) => r.url().includes('/queries') && r.ok()),
-            page.getByTestId('save-name-submit').click(),
+            page.getByTestId('save-destination-submit').click(),
         ]);
         const body = (await response.json()) as { jobComplete?: boolean; statistics?: { query?: { statementType?: string } } };
         expect(body.jobComplete).toBe(true);
@@ -378,5 +397,79 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByTestId('edit-schema-modal')).not.toBeVisible();
         await expect(page.getByTestId('schema-field-metric_id')).toContainText('NULLABLE');
         await expect(page.getByTestId('schema-field-recorded_at')).toBeVisible();
+    });
+
+    test('lists routines on dataset overview', async ({ page }) => {
+        await openRoutinesTab(page);
+        await expect(
+            page
+                .getByTestId('dataset-overview-routines')
+                .or(page.getByTestId('dataset-overview-routines-empty')),
+        ).toBeVisible();
+    });
+
+    test('creates a scalar UDF and opens routine detail', async ({ page }) => {
+        const routineName = `e2e_add_one_${Date.now()}`;
+        await openDataset(page);
+        await page.getByTestId('create-routine-button').click();
+        await expect(page.getByTestId('create-routine-modal')).toBeVisible();
+
+        await page.getByTestId('create-routine-name').fill(routineName);
+        await page.getByTestId('create-routine-body').fill('x + 1');
+
+        await Promise.all([
+            page.waitForResponse((r) => r.url().includes('/queries') && r.ok()),
+            page.getByTestId('create-routine-submit').click(),
+        ]);
+
+        await page.getByTestId('dataset-overview-tab-routines').click();
+        await expect(page.getByTestId(`routine-link-${routineName}`)).toBeVisible({ timeout: 10_000 });
+        await page.getByTestId(`routine-link-${routineName}`).click();
+
+        await expect(page.getByTestId('routine-tab-page')).toBeVisible();
+        await expect(page.getByTestId('routine-definition')).toContainText('x + 1');
+        await expect(page.getByTestId('routine-type')).toContainText(/function/i);
+    });
+
+    test('autocomplete suggests created routine names', async ({ page }) => {
+        const routineName = `e2e_ac_${Date.now()}`;
+        await openDataset(page);
+        await page.getByTestId('create-routine-button').click();
+        await page.getByTestId('create-routine-name').fill(routineName);
+        await Promise.all([
+            page.waitForResponse((r) => r.url().includes('/queries') && r.ok()),
+            page.getByTestId('create-routine-submit').click(),
+        ]);
+
+        await openQueryFromTable(page);
+        const editor = page.getByTestId('sql-editor').locator('.cm-content');
+        await editor.click();
+        await editor.fill(`SELECT ${routineName}(`);
+
+        await Promise.race([
+            page.waitForResponse((r) => r.url().includes('/api/emulator/sql/complete') && r.ok(), { timeout: 8000 }),
+            page.waitForResponse((r) => r.url().includes('/routines') && r.ok(), { timeout: 8000 }),
+        ]);
+
+        await editor.press('Control+Space');
+        const autocomplete = page.locator('.cm-tooltip-autocomplete');
+        await expect(autocomplete).toBeVisible({ timeout: 10_000 });
+        await expect(
+            autocomplete.locator('.cm-completionLabel', { hasText: new RegExp(routineName) }).first(),
+        ).toBeVisible();
+    });
+
+    test('shows routines in the sidebar tree', async ({ page }) => {
+        const routineName = `e2e_sidebar_${Date.now()}`;
+        await openDataset(page);
+        await page.getByTestId('create-routine-button').click();
+        await page.getByTestId('create-routine-name').fill(routineName);
+        await Promise.all([
+            page.waitForResponse((r) => r.url().includes('/queries') && r.ok()),
+            page.getByTestId('create-routine-submit').click(),
+        ]);
+
+        await expandDatasetWithRoutines(page);
+        await expect(page.getByTestId(`routine-${routineName}`)).toBeVisible({ timeout: 10_000 });
     });
 });

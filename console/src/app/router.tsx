@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router';
 
 import { QueryTabPage } from '@/features/query/QueryTabPage';
 import { DatasetTabPage } from '@/features/resource/DatasetTabPage';
+import { RoutineTabPage } from '@/features/resource/RoutineTabPage';
 import { TableTabPage } from '@/features/resource/TableTabPage';
 import { WorkspaceHomePage } from '@/features/workspace/WorkspaceHomePage';
 import { WorkspaceLayout } from '@/features/workspace/WorkspaceLayout';
@@ -18,6 +19,10 @@ export function AppRouter() {
                     <Route
                         path="/project/:projectId/dataset/:datasetId/table/:tableId"
                         element={<TableTabPage />}
+                    />
+                    <Route
+                        path="/project/:projectId/dataset/:datasetId/routine/:routineId"
+                        element={<RoutineTabPage />}
                     />
                 </Route>
             </Routes>

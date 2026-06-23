@@ -29,7 +29,15 @@ export interface TableTabState {
     tableId: string;
 }
 
-export type WorkspaceTab = QueryTabState | DatasetTabState | TableTabState;
+export interface RoutineTabState {
+    type: 'routine';
+    id: string;
+    projectId: string;
+    datasetId: string;
+    routineId: string;
+}
+
+export type WorkspaceTab = QueryTabState | DatasetTabState | TableTabState | RoutineTabState;
 
 export interface UiPrefs {
     sidebarWidth: number;
@@ -90,9 +98,15 @@ export const UI_DEFAULT: UiPrefs = {
 export const LEGACY_UI_KEY = 'bigqueryExplorerUILayout';
 export const SESSION_KEY = 'bigqueryWorkspaceSession';
 
-export function resourceTabId(kind: 'dataset' | 'table', projectId: string, datasetId: string, tableId?: string): string {
+export function resourceTabId(
+    kind: 'dataset' | 'table' | 'routine',
+    projectId: string,
+    datasetId: string,
+    resourceId?: string,
+): string {
     if (kind === 'dataset') return `dataset:${projectId}:${datasetId}`;
-    return `table:${projectId}:${datasetId}:${tableId}`;
+    if (kind === 'table') return `table:${projectId}:${datasetId}:${resourceId}`;
+    return `routine:${projectId}:${datasetId}:${resourceId}`;
 }
 
 export function defaultSql(project: string, dataset: string, table: string): string {
@@ -107,6 +121,8 @@ export function tabLabel(tab: WorkspaceTab): string {
             return tab.datasetId;
         case 'table':
             return tab.tableId;
+        case 'routine':
+            return tab.routineId;
     }
 }
 

@@ -84,6 +84,25 @@ function catalogCompletions(catalog: SqlCatalog, context: CompletionContext): Co
     return options;
 }
 
+function mergeCatalogRoutineCompletions(
+    options: Completion[],
+    catalog: SqlCatalog,
+    prefix: string,
+): Completion[] {
+    const labels = new Set(options.map((option) => option.label));
+    const normalized = prefix.toLowerCase();
+    const extras = catalog.routines
+        .filter((routine) => !labels.has(routine) && routine.toLowerCase().includes(normalized))
+        .map(
+            (routine): Completion => ({
+                label: routine,
+                type: 'method',
+                detail: 'routine',
+            }),
+        );
+    return extras.length ? [...options, ...extras] : options;
+}
+
 function createDebouncedComplete(
     opts: SqlEditorExtensionOptions,
     generationRef: { current: number },
@@ -109,17 +128,31 @@ function createDebouncedComplete(
                 });
 
                 if (gen !== generationRef.current) return null;
-                if (result.candidates.length === 0) return null;
+                if (result.candidates.length === 0) {
+                    const fallback = catalogCompletions(catalog, context);
+                    if (!fallback?.length) return null;
+                    const word = context.matchBefore(/[\w`.]*$/);
+                    if (!word) return null;
+                    return { from: word.from, to: word.to, options: fallback };
+                }
 
-                return {
-                    from: result.replacementStart,
-                    to: result.replacementEnd,
-                    options: result.candidates.map((c) => ({
+                const word = context.matchBefore(/[\w`.]*$/);
+                const prefix = word?.text ?? '';
+                const mergedOptions = mergeCatalogRoutineCompletions(
+                    result.candidates.map((c) => ({
                         label: c.label,
                         type: completionKindToType(c.kind),
                         detail: c.detail ?? c.kind,
                         apply: c.insertText,
                     })),
+                    catalog,
+                    prefix,
+                );
+
+                return {
+                    from: result.replacementStart,
+                    to: result.replacementEnd,
+                    options: mergedOptions,
                 };
             } catch {
                 /* fall through to catalog */

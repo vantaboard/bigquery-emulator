@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Copy, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Copy, FunctionSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
@@ -13,6 +13,7 @@ import { CreateTableModal } from './createTable/CreateTableModal';
 import { DeleteDatasetDialog } from './delete/DeleteResourceDialogs';
 import { DatasetDetailsTab } from './dataset/DatasetDetailsTab';
 import { DatasetOverviewTab } from './dataset/DatasetOverviewTab';
+import { CreateRoutineModal } from './routine/CreateRoutineModal';
 
 const RESOURCE_TABS = [
     { id: 'overview', label: 'Overview', testId: 'dataset-resource-tab-overview' },
@@ -27,6 +28,7 @@ export function DatasetTabPage() {
     const queryClient = useQueryClient();
     const [resourceTab, setResourceTab] = useState<ResourceTab>('overview');
     const [createTableOpen, setCreateTableOpen] = useState(false);
+    const [createRoutineOpen, setCreateRoutineOpen] = useState(false);
     const [copyOpen, setCopyOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -45,6 +47,12 @@ export function DatasetTabPage() {
                     variant="primary"
                     testId="create-table-button"
                     onClick={() => setCreateTableOpen(true)}
+                />
+                <ToolbarButton
+                    icon={FunctionSquare}
+                    label="Create Routine"
+                    testId="create-routine-button"
+                    onClick={() => setCreateRoutineOpen(true)}
                 />
                 <ToolbarButton
                     icon={Copy}
@@ -88,6 +96,12 @@ export function DatasetTabPage() {
                 projectId={projectId}
                 datasetId={datasetId}
                 onClose={() => setCreateTableOpen(false)}
+            />
+            <CreateRoutineModal
+                open={createRoutineOpen}
+                projectId={projectId}
+                datasetId={datasetId}
+                onClose={() => setCreateRoutineOpen(false)}
             />
             <CopyDatasetModal
                 open={copyOpen}

@@ -22,6 +22,7 @@ import {
     type DatasetTabState,
     type QuerySubTab,
     type QueryTabState,
+    type RoutineTabState,
     type SavedQueryClassic,
     type SavedQueryVersioned,
     type TableTabState,
@@ -35,6 +36,7 @@ type WorkspaceAction =
     | { type: 'OPEN_QUERY_TAB'; tab: QueryTabState; activate?: boolean }
     | { type: 'OPEN_DATASET_TAB'; projectId: string; datasetId: string; activate?: boolean }
     | { type: 'OPEN_TABLE_TAB'; projectId: string; datasetId: string; tableId: string; activate?: boolean }
+    | { type: 'OPEN_ROUTINE_TAB'; projectId: string; datasetId: string; routineId: string; activate?: boolean }
     | { type: 'ACTIVATE_TAB'; id: string }
     | { type: 'CLOSE_TAB'; id: string }
     | { type: 'REORDER_TAB'; id: string; toIndex: number }
@@ -191,6 +193,30 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
             };
         }
 
+        case 'OPEN_ROUTINE_TAB': {
+            const id = resourceTabId('routine', action.projectId, action.datasetId, action.routineId);
+            const existing = state.tabs.find((t) => t.id === id);
+            if (existing) {
+                return {
+                    ...state,
+                    activeTabId: action.activate === false ? state.activeTabId : id,
+                };
+            }
+            const tab: RoutineTabState = {
+                type: 'routine',
+                id,
+                projectId: action.projectId,
+                datasetId: action.datasetId,
+                routineId: action.routineId,
+            };
+            return {
+                ...state,
+                tabs: [...state.tabs, tab],
+                tabOrder: [...state.tabOrder, id],
+                activeTabId: action.activate === false ? state.activeTabId : id,
+            };
+        }
+
         case 'ACTIVATE_TAB':
             if (!state.tabs.some((t) => t.id === action.id)) return state;
             return { ...state, activeTabId: action.id };
@@ -275,6 +301,7 @@ export interface WorkspaceContextValue {
     openQueryForTable: (projectId: string, datasetId: string, tableId: string, sql?: string) => string;
     openDatasetTab: (projectId: string, datasetId: string) => void;
     openTableTab: (projectId: string, datasetId: string, tableId: string) => void;
+    openRoutineTab: (projectId: string, datasetId: string, routineId: string) => void;
     activateTab: (id: string) => void;
     closeTab: (id: string) => void;
     renameTab: (id: string, title: string) => void;
@@ -407,6 +434,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'OPEN_TABLE_TAB', projectId, datasetId, tableId });
     }, []);
 
+    const openRoutineTab = useCallback((projectId: string, datasetId: string, routineId: string) => {
+        dispatch({ type: 'OPEN_ROUTINE_TAB', projectId, datasetId, routineId });
+    }, []);
+
     const activateTab = useCallback((id: string) => {
         dispatch({ type: 'ACTIVATE_TAB', id });
     }, []);
@@ -490,6 +521,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             openQueryForTable,
             openDatasetTab,
             openTableTab,
+            openRoutineTab,
             activateTab,
             closeTab,
             renameTab,
@@ -508,6 +540,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             openQueryForTable,
             openDatasetTab,
             openTableTab,
+            openRoutineTab,
             activateTab,
             closeTab,
             renameTab,
@@ -537,15 +570,21 @@ export function tabRoutePath(tab: WorkspaceTab): string {
             return `/project/${encodeURIComponent(tab.projectId)}/dataset/${encodeURIComponent(tab.datasetId)}`;
         case 'table':
             return `/project/${encodeURIComponent(tab.projectId)}/dataset/${encodeURIComponent(tab.datasetId)}/table/${encodeURIComponent(tab.tableId)}`;
+        case 'routine':
+            return `/project/${encodeURIComponent(tab.projectId)}/dataset/${encodeURIComponent(tab.datasetId)}/routine/${encodeURIComponent(tab.routineId)}`;
     }
 }
 
 export function findTabForRoute(
     tabs: WorkspaceTab[],
-    params: { tabId?: string; projectId?: string; datasetId?: string; tableId?: string },
+    params: { tabId?: string; projectId?: string; datasetId?: string; tableId?: string; routineId?: string },
 ): WorkspaceTab | null {
     if (params.tabId) {
         return tabs.find((t) => t.type === 'query' && t.id === params.tabId) ?? null;
+    }
+    if (params.projectId && params.datasetId && params.routineId) {
+        const id = resourceTabId('routine', params.projectId, params.datasetId, params.routineId);
+        return tabs.find((t) => t.id === id) ?? null;
     }
     if (params.projectId && params.datasetId && params.tableId) {
         const id = resourceTabId('table', params.projectId, params.datasetId, params.tableId);
