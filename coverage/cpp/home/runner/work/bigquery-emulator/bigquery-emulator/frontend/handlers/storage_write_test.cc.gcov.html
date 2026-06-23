@@ -1,0 +1,273 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - home/runner/work/bigquery-emulator/bigquery-emulator/frontend/handlers/storage_write_test.cc</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../index.html">top level</a> - <a href="index.html">/home/runner/work/bigquery-emulator/bigquery-emulator/frontend/handlers</a> - storage_write_test.cc<span style="font-size: 80%;"> (source / <a href="storage_write_test.cc.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">119</td>
+            <td class="headerCovTableEntry">119</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">11</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : // Unit + in-process gRPC tests for `StorageWriteService`.</span>
+<span id="L2"><span class="lineNum">       2</span>              : //</span>
+<span id="L3"><span class="lineNum">       3</span>              : // The shape mirrors `storage_read_test.cc`: an in-memory DuckDB</span>
+<span id="L4"><span class="lineNum">       4</span>              : // storage instance is fabricated under SetUp, the service is</span>
+<span id="L5"><span class="lineNum">       5</span>              : // constructed against it, and each test pokes the handler with a</span>
+<span id="L6"><span class="lineNum">       6</span>              : // hand-built request proto. The bidirectional `AppendRows` RPC needs</span>
+<span id="L7"><span class="lineNum">       7</span>              : // a real `ServerReaderWriter`, so the streaming tests stand up an</span>
+<span id="L8"><span class="lineNum">       8</span>              : // in-process gRPC server (same `grpc::testing` transport</span>
+<span id="L9"><span class="lineNum">       9</span>              : // `storage_read_test.cc` uses for `ReadRows`) and drive the streaming</span>
+<span id="L10"><span class="lineNum">      10</span>              : // reply through a client stub.</span>
+<span id="L11"><span class="lineNum">      11</span>              : </span>
+<span id="L12"><span class="lineNum">      12</span>              : #include &quot;frontend/handlers/storage_write.h&quot;</span>
+<span id="L13"><span class="lineNum">      13</span>              : </span>
+<span id="L14"><span class="lineNum">      14</span>              : #include &lt;cstdint&gt;</span>
+<span id="L15"><span class="lineNum">      15</span>              : #include &lt;cstdlib&gt;</span>
+<span id="L16"><span class="lineNum">      16</span>              : #include &lt;filesystem&gt;</span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &lt;memory&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;random&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;string&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &lt;system_error&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &lt;utility&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &lt;vector&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span>              : #include &quot;absl/strings/str_cat.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>              : #include &quot;backend/schema/schema.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>              : #include &quot;backend/storage/duckdb/duckdb_storage.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>              : #include &quot;backend/storage/storage.h&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>              : #include &quot;grpcpp/grpcpp.h&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>              : #include &quot;gtest/gtest.h&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>              : #include &quot;proto/emulator.pb.h&quot;</span>
+<span id="L31"><span class="lineNum">      31</span>              : #include &quot;proto/storage_write.grpc.pb.h&quot;</span>
+<span id="L32"><span class="lineNum">      32</span>              : #include &quot;proto/storage_write.pb.h&quot;</span>
+<span id="L33"><span class="lineNum">      33</span>              : </span>
+<span id="L34"><span class="lineNum">      34</span>              : namespace bigquery_emulator {</span>
+<span id="L35"><span class="lineNum">      35</span>              : namespace frontend {</span>
+<span id="L36"><span class="lineNum">      36</span>              : namespace {</span>
+<span id="L37"><span class="lineNum">      37</span>              : </span>
+<span id="L38"><span class="lineNum">      38</span>              : namespace fs = std::filesystem;</span>
+<span id="L39"><span class="lineNum">      39</span>              : </span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC tlaBgGNC">           7 : fs::path MakeTempDataDir(absl::string_view prefix) {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           7 :   const char* tmpdir_env = std::getenv(&quot;TMPDIR&quot;);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           7 :   const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : &quot;/tmp&quot;;</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           7 :   std::random_device rd;</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           7 :   std::seed_seq seed{rd(), rd()};</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           7 :   std::mt19937_64 rng(seed);</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           7 :   fs::path out = fs::path(tmpdir) /</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           7 :                  absl::StrCat(&quot;bqemu-&quot;, std::string(prefix), &quot;-&quot;, rng());</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           7 :   std::error_code ec;</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           7 :   fs::remove_all(out, ec);</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           7 :   return out;</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           7 : }</span></span>
+<span id="L52"><span class="lineNum">      52</span>              : </span>
+<span id="L53"><span class="lineNum">      53</span>              : class StorageWriteServiceTest : public ::testing::Test {</span>
+<span id="L54"><span class="lineNum">      54</span>              :  protected:</span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           7 :   void SetUp() override {</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           7 :     data_dir_ = MakeTempDataDir(&quot;storage-write-test&quot;);</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           7 :     auto opened =</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           7 :         backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">          14 :     ASSERT_TRUE(opened.ok()) &lt;&lt; opened.status();</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           7 :     storage_ = std::move(opened).value();</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           7 :     service_ = std::make_unique&lt;StorageWriteService&gt;(storage_.get());</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           7 :   }</span></span>
+<span id="L63"><span class="lineNum">      63</span>              : </span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           7 :   void TearDown() override {</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           7 :     service_.reset();</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           7 :     storage_.reset();</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           7 :     std::error_code ec;</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           7 :     fs::remove_all(data_dir_, ec);</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           7 :   }</span></span>
+<span id="L70"><span class="lineNum">      70</span>              : </span>
+<span id="L71"><span class="lineNum">      71</span>              :   // Two-column toy schema (id + name). Mirrors the StorageWrite</span>
+<span id="L72"><span class="lineNum">      72</span>              :   // happy path; tests append rows against it and round-trip through</span>
+<span id="L73"><span class="lineNum">      73</span>              :   // `Storage::ScanRows` to confirm the rows landed.</span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           6 :   void CreatePeopleTable() {</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           6 :     backend::schema::TableSchema schema;</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           6 :     backend::schema::ColumnSchema id;</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           6 :     id.name = &quot;id&quot;;</span></span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           6 :     id.type = backend::schema::ColumnType::kInt64;</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           6 :     id.mode = backend::schema::ColumnMode::kRequired;</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           6 :     schema.columns.push_back(id);</span></span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">           6 :     backend::schema::ColumnSchema name;</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           6 :     name.name = &quot;name&quot;;</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">           6 :     name.type = backend::schema::ColumnType::kString;</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           6 :     name.mode = backend::schema::ColumnMode::kNullable;</span></span>
+<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">           6 :     schema.columns.push_back(name);</span></span>
+<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">           6 :     ASSERT_TRUE(storage_-&gt;CreateDataset({&quot;proj-test&quot;, &quot;ds&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L87"><span class="lineNum">      87</span> <span class="tlaGNC">           6 :     ASSERT_TRUE(storage_-&gt;CreateTable({&quot;proj-test&quot;, &quot;ds&quot;, &quot;t&quot;}, schema).ok());</span></span>
+<span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">           6 :   }</span></span>
+<span id="L89"><span class="lineNum">      89</span>              : </span>
+<span id="L90"><span class="lineNum">      90</span>              :   fs::path data_dir_{};</span>
+<span id="L91"><span class="lineNum">      91</span>              :   std::unique_ptr&lt;backend::storage::duckdb::DuckDBStorage&gt; storage_{};</span>
+<span id="L92"><span class="lineNum">      92</span>              :   std::unique_ptr&lt;StorageWriteService&gt; service_{};</span>
+<span id="L93"><span class="lineNum">      93</span>              : };</span>
+<span id="L94"><span class="lineNum">      94</span>              : </span>
+<span id="L95"><span class="lineNum">      95</span>              : // ---------------------------------------------------------------------------</span>
+<span id="L96"><span class="lineNum">      96</span>              : // CreateWriteStream: validation + happy path</span>
+<span id="L97"><span class="lineNum">      97</span>              : // ---------------------------------------------------------------------------</span>
+<span id="L98"><span class="lineNum">      98</span>              : </span>
+<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsCommittedStream) {</span></span>
+<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L101"><span class="lineNum">     101</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L102"><span class="lineNum">     102</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">           1 :   req.mutable_write_stream()-&gt;set_type(v1::WriteStream::COMMITTED);</span></span>
+<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L105"><span class="lineNum">     105</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(status.ok()) &lt;&lt; status.error_message();</span></span>
+<span id="L107"><span class="lineNum">     107</span>              : </span>
+<span id="L108"><span class="lineNum">     108</span>              :   // Stream id nests under the table path with a server-assigned</span>
+<span id="L109"><span class="lineNum">     109</span>              :   // suffix; the helper mints `s1` for the first call.</span>
+<span id="L110"><span class="lineNum">     110</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.name(), &quot;projects/proj-test/datasets/ds/tables/t/streams/s1&quot;);</span></span>
+<span id="L111"><span class="lineNum">     111</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);</span></span>
+<span id="L112"><span class="lineNum">     112</span> <span class="tlaGNC">           1 :   ASSERT_EQ(resp.schema().fields_size(), 2);</span></span>
+<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.schema().fields(0).name(), &quot;id&quot;);</span></span>
+<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.schema().fields(1).name(), &quot;name&quot;);</span></span>
+<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(resp.create_time().empty());</span></span>
+<span id="L116"><span class="lineNum">     116</span> <span class="tlaGNC">           1 :   EXPECT_EQ(service_-&gt;StreamsForTesting(), 1u);</span></span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L118"><span class="lineNum">     118</span>              : </span>
+<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamDefaultsToCommitted) {</span></span>
+<span id="L120"><span class="lineNum">     120</span>              :   // BigQuery's documented default for an unspecified stream type is</span>
+<span id="L121"><span class="lineNum">     121</span>              :   // COMMITTED. The emulator follows that.</span>
+<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(status.ok()) &lt;&lt; status.error_message();</span></span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.type(), v1::WriteStream::COMMITTED);</span></span>
+<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L130"><span class="lineNum">     130</span>              : </span>
+<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsPendingStream) {</span></span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :   req.mutable_write_stream()-&gt;set_type(v1::WriteStream::PENDING);</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(status.ok()) &lt;&lt; status.error_message();</span></span>
+<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.type(), v1::WriteStream::PENDING);</span></span>
+<span id="L140"><span class="lineNum">     140</span> <span class="tlaGNC">           1 :   EXPECT_EQ(service_-&gt;StreamsForTesting(), 1u);</span></span>
+<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L142"><span class="lineNum">     142</span>              : </span>
+<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamMintsBufferedStream) {</span></span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           1 :   req.mutable_write_stream()-&gt;set_type(v1::WriteStream::BUFFERED);</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(status.ok()) &lt;&lt; status.error_message();</span></span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC">           1 :   EXPECT_EQ(resp.type(), v1::WriteStream::BUFFERED);</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(resp.name().empty());</span></span>
+<span id="L153"><span class="lineNum">     153</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L154"><span class="lineNum">     154</span>              : </span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamRejectsMalformedParent) {</span></span>
+<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L158"><span class="lineNum">     158</span>              :   // Drops the `tables/` segment; the parser refuses anything that</span>
+<span id="L159"><span class="lineNum">     159</span>              :   // does not match `projects/{p}/datasets/{d}/tables/{t}`.</span>
+<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/t&quot;);</span></span>
+<span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">           1 :   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::INVALID_ARGUMENT);</span></span>
+<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L165"><span class="lineNum">     165</span>              : </span>
+<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, CreateWriteStreamMissingTableIsNotFound) {</span></span>
+<span id="L167"><span class="lineNum">     167</span>              :   // Dataset exists but the table does not. Storage::GetSchema returns</span>
+<span id="L168"><span class="lineNum">     168</span>              :   // NotFound and the handler maps that onto gRPC NOT_FOUND so a</span>
+<span id="L169"><span class="lineNum">     169</span>              :   // BigQuery REST 404 envelope can be synthesized at the gateway.</span>
+<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({&quot;proj-test&quot;, &quot;ds&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest req;</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :   req.set_parent(&quot;projects/proj-test/datasets/ds/tables/missing&quot;);</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :   v1::WriteStream resp;</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :   ::grpc::Status status = service_-&gt;CreateWriteStream(nullptr, &amp;req, &amp;resp);</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::NOT_FOUND);</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L177"><span class="lineNum">     177</span>              : </span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 : TEST_F(StorageWriteServiceTest, BatchCommitRequiresFinalizedPendingStream) {</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 :   CreatePeopleTable();</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 :   v1::CreateWriteStreamRequest create_req;</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 :   create_req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 :   create_req.mutable_write_stream()-&gt;set_type(v1::WriteStream::PENDING);</span></span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :   v1::WriteStream stream;</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(service_-&gt;CreateWriteStream(nullptr, &amp;create_req, &amp;stream).ok());</span></span>
+<span id="L185"><span class="lineNum">     185</span>              : </span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :   v1::BatchCommitWriteStreamsRequest commit_req;</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :   commit_req.set_parent(&quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :   commit_req.add_write_streams(stream.name());</span></span>
+<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :   v1::BatchCommitWriteStreamsResponse commit_resp;</span></span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           1 :   ::grpc::Status status =</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           1 :       service_-&gt;BatchCommitWriteStreams(nullptr, &amp;commit_req, &amp;commit_resp);</span></span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 :   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION);</span></span>
+<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L194"><span class="lineNum">     194</span>              : </span>
+<span id="L195"><span class="lineNum">     195</span>              : }  // namespace</span>
+<span id="L196"><span class="lineNum">     196</span>              : }  // namespace frontend</span>
+<span id="L197"><span class="lineNum">     197</span>              : }  // namespace bigquery_emulator</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

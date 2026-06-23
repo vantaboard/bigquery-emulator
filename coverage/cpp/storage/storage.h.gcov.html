@@ -1,0 +1,573 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - storage/storage.h</title>
+  <link rel="stylesheet" type="text/css" href="../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../index.html">top level</a> - <a href="index.html">storage</a> - storage.h<span style="font-size: 80%;"> (source / <a href="storage.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">12.9&nbsp;%</td>
+            <td class="headerCovTableEntry">62</td>
+            <td class="headerCovTableEntry">8</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">25.0&nbsp;%</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">4</td>
+          </tr>
+                  <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #ifndef BIGQUERY_EMULATOR_BACKEND_STORAGE_STORAGE_H_</span>
+<span id="L2"><span class="lineNum">       2</span>              : #define BIGQUERY_EMULATOR_BACKEND_STORAGE_STORAGE_H_</span>
+<span id="L3"><span class="lineNum">       3</span>              : </span>
+<span id="L4"><span class="lineNum">       4</span>              : // Storage is the C++ engine's row store interface.</span>
+<span id="L5"><span class="lineNum">       5</span>              : //</span>
+<span id="L6"><span class="lineNum">       6</span>              : // `Storage` lives below the gRPC service boundary: the gateway never</span>
+<span id="L7"><span class="lineNum">       7</span>              : // touches it directly, the catalog handler does. The only concrete</span>
+<span id="L8"><span class="lineNum">       8</span>              : // implementation is `backend/storage/duckdb/duckdb_storage.{h,cc}`,</span>
+<span id="L9"><span class="lineNum">       9</span>              : // the persistent Parquet/Arrow-on-disk store backed by DuckDB.</span>
+<span id="L10"><span class="lineNum">      10</span>              : //</span>
+<span id="L11"><span class="lineNum">      11</span>              : // **Engine-agnostic types only**: this header MUST NOT mention</span>
+<span id="L12"><span class="lineNum">      12</span>              : // `googlesql::Value` or any other engine-specific type. The DuckDB</span>
+<span id="L13"><span class="lineNum">      13</span>              : // engine translates to its own representations at the call sites in</span>
+<span id="L14"><span class="lineNum">      14</span>              : // `backend/engine/`. See ROADMAP &quot;Pluggable engine and storage&quot; for</span>
+<span id="L15"><span class="lineNum">      15</span>              : // the rationale.</span>
+<span id="L16"><span class="lineNum">      16</span>              : </span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &lt;cstdint&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;memory&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;optional&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &lt;string&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &lt;utility&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &lt;variant&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>              : #include &lt;vector&gt;</span>
+<span id="L24"><span class="lineNum">      24</span>              : </span>
+<span id="L25"><span class="lineNum">      25</span>              : #include &quot;absl/status/status.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>              : #include &quot;absl/status/statusor.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
+<span id="L28"><span class="lineNum">      28</span>              : #include &quot;absl/types/span.h&quot;</span>
+<span id="L29"><span class="lineNum">      29</span>              : #include &quot;backend/schema/schema.h&quot;</span>
+<span id="L30"><span class="lineNum">      30</span>              : #include &quot;backend/storage/row_restriction.h&quot;</span>
+<span id="L31"><span class="lineNum">      31</span>              : #include &quot;backend/storage/table_governance.h&quot;</span>
+<span id="L32"><span class="lineNum">      32</span>              : </span>
+<span id="L33"><span class="lineNum">      33</span>              : namespace bigquery_emulator {</span>
+<span id="L34"><span class="lineNum">      34</span>              : namespace backend {</span>
+<span id="L35"><span class="lineNum">      35</span>              : namespace storage {</span>
+<span id="L36"><span class="lineNum">      36</span>              : </span>
+<span id="L37"><span class="lineNum">      37</span>              : // Stable identifiers for catalog entries. These mirror the proto</span>
+<span id="L38"><span class="lineNum">      38</span>              : // `DatasetRef` / `TableRef` shape (proto/emulator.proto) but the</span>
+<span id="L39"><span class="lineNum">      39</span>              : // storage layer does not depend on the proto runtime.</span>
+<span id="L40"><span class="lineNum">      40</span>              : struct DatasetId {</span>
+<span id="L41"><span class="lineNum">      41</span>              :   std::string project_id;</span>
+<span id="L42"><span class="lineNum">      42</span>              :   std::string dataset_id;</span>
+<span id="L43"><span class="lineNum">      43</span>              : };</span>
+<span id="L44"><span class="lineNum">      44</span>              : </span>
+<span id="L45"><span class="lineNum">      45</span>              : struct TableId {</span>
+<span id="L46"><span class="lineNum">      46</span>              :   std::string project_id;</span>
+<span id="L47"><span class="lineNum">      47</span>              :   std::string dataset_id;</span>
+<span id="L48"><span class="lineNum">      48</span>              :   std::string table_id;</span>
+<span id="L49"><span class="lineNum">      49</span>              : };</span>
+<span id="L50"><span class="lineNum">      50</span>              : </span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaUNC tlaBgUNC">           0 : inline bool operator==(const DatasetId&amp; a, const DatasetId&amp; b) {</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC">           0 :   return a.project_id == b.project_id &amp;&amp; a.dataset_id == b.dataset_id;</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaUNC">           0 : inline bool operator==(const TableId&amp; a, const TableId&amp; b) {</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaUNC">           0 :   return a.project_id == b.project_id &amp;&amp; a.dataset_id == b.dataset_id &amp;&amp;</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaUNC">           0 :          a.table_id == b.table_id;</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L58"><span class="lineNum">      58</span>              : </span>
+<span id="L59"><span class="lineNum">      59</span>              : // Stable identifiers for persisted routines (UDF / UDAF / TVF /</span>
+<span id="L60"><span class="lineNum">      60</span>              : // procedure). Mirrors the BigQuery `RoutineReference` REST shape.</span>
+<span id="L61"><span class="lineNum">      61</span>              : struct RoutineId {</span>
+<span id="L62"><span class="lineNum">      62</span>              :   std::string project_id;</span>
+<span id="L63"><span class="lineNum">      63</span>              :   std::string dataset_id;</span>
+<span id="L64"><span class="lineNum">      64</span>              :   std::string routine_id;</span>
+<span id="L65"><span class="lineNum">      65</span>              : };</span>
+<span id="L66"><span class="lineNum">      66</span>              : </span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaUNC">           0 : inline bool operator==(const RoutineId&amp; a, const RoutineId&amp; b) {</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaUNC">           0 :   return a.project_id == b.project_id &amp;&amp; a.dataset_id == b.dataset_id &amp;&amp;</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaUNC">           0 :          a.routine_id == b.routine_id;</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L71"><span class="lineNum">      71</span>              : </span>
+<span id="L72"><span class="lineNum">      72</span>              : // Kind of routine stored in `catalog.duckdb`. Values are persisted as</span>
+<span id="L73"><span class="lineNum">      73</span>              : // the lowercase snake strings below (see duckdb_storage_routines.cc).</span>
+<span id="L74"><span class="lineNum">      74</span>              : enum class RoutineKind {</span>
+<span id="L75"><span class="lineNum">      75</span>              :   kScalarFunction = 0,</span>
+<span id="L76"><span class="lineNum">      76</span>              :   kAggregateFunction,</span>
+<span id="L77"><span class="lineNum">      77</span>              :   kTableValuedFunction,</span>
+<span id="L78"><span class="lineNum">      78</span>              :   kProcedure,</span>
+<span id="L79"><span class="lineNum">      79</span>              : };</span>
+<span id="L80"><span class="lineNum">      80</span>              : </span>
+<span id="L81"><span class="lineNum">      81</span>              : // Durable routine metadata. `ddl_sql` carries the original CREATE</span>
+<span id="L82"><span class="lineNum">      82</span>              : // statement (the source of truth for re-analysis at rehydrate time);</span>
+<span id="L83"><span class="lineNum">      83</span>              : // `signature_json` stores argument metadata (including ANY TYPE</span>
+<span id="L84"><span class="lineNum">      84</span>              : // markers) for REST round-trip without re-parsing the DDL body.</span>
+<span id="L85"><span class="lineNum">      85</span>              : struct RoutineRecord {</span>
+<span id="L86"><span class="lineNum">      86</span>              :   RoutineId id;</span>
+<span id="L87"><span class="lineNum">      87</span>              :   RoutineKind kind = RoutineKind::kScalarFunction;</span>
+<span id="L88"><span class="lineNum">      88</span>              :   std::string language;</span>
+<span id="L89"><span class="lineNum">      89</span>              :   std::string ddl_sql;</span>
+<span id="L90"><span class="lineNum">      90</span>              :   bool is_temp = false;</span>
+<span id="L91"><span class="lineNum">      91</span>              :   std::string signature_json;</span>
+<span id="L92"><span class="lineNum">      92</span>              : };</span>
+<span id="L93"><span class="lineNum">      93</span>              : </span>
+<span id="L94"><span class="lineNum">      94</span>              : // Durable logical-view metadata. `ddl_sql` is the original CREATE VIEW</span>
+<span id="L95"><span class="lineNum">      95</span>              : // statement (re-analyzed at rehydrate time into the view registry).</span>
+<span id="L96"><span class="lineNum">      96</span>              : struct ViewId {</span>
+<span id="L97"><span class="lineNum">      97</span>              :   std::string project_id;</span>
+<span id="L98"><span class="lineNum">      98</span>              :   std::string dataset_id;</span>
+<span id="L99"><span class="lineNum">      99</span>              :   std::string view_id;</span>
+<span id="L100"><span class="lineNum">     100</span>              : };</span>
+<span id="L101"><span class="lineNum">     101</span>              : </span>
+<span id="L102"><span class="lineNum">     102</span>              : struct ViewRecord {</span>
+<span id="L103"><span class="lineNum">     103</span>              :   ViewId id;</span>
+<span id="L104"><span class="lineNum">     104</span>              :   std::string ddl_sql;</span>
+<span id="L105"><span class="lineNum">     105</span>              :   std::string view_query;</span>
+<span id="L106"><span class="lineNum">     106</span>              :   schema::TableSchema schema;</span>
+<span id="L107"><span class="lineNum">     107</span>              : };</span>
+<span id="L108"><span class="lineNum">     108</span>              : </span>
+<span id="L109"><span class="lineNum">     109</span>              : struct TableResourceInfo {</span>
+<span id="L110"><span class="lineNum">     110</span>              :   std::string table_type;</span>
+<span id="L111"><span class="lineNum">     111</span>              :   std::string view_query;</span>
+<span id="L112"><span class="lineNum">     112</span>              :   std::string ddl_sql;</span>
+<span id="L113"><span class="lineNum">     113</span>              : };</span>
+<span id="L114"><span class="lineNum">     114</span>              : </span>
+<span id="L115"><span class="lineNum">     115</span>              : // Engine-agnostic cell value. The variant covers the BigQuery scalar</span>
+<span id="L116"><span class="lineNum">     116</span>              : // types plus ARRAY and STRUCT containers.</span>
+<span id="L117"><span class="lineNum">     117</span>              : //</span>
+<span id="L118"><span class="lineNum">     118</span>              : // We deliberately do not reuse `googlesql::Value` here; the DuckDB</span>
+<span id="L119"><span class="lineNum">     119</span>              : // engine marshals to and from `Value` at its own boundary. NULL is</span>
+<span id="L120"><span class="lineNum">     120</span>              : // an explicit kind so callers do not have to thread</span>
+<span id="L121"><span class="lineNum">     121</span>              : // `std::optional&lt;Value&gt;` through every API.</span>
+<span id="L122"><span class="lineNum">     122</span>              : class Value {</span>
+<span id="L123"><span class="lineNum">     123</span>              :  public:</span>
+<span id="L124"><span class="lineNum">     124</span>              :   enum class Kind {</span>
+<span id="L125"><span class="lineNum">     125</span>              :     kNull = 0,</span>
+<span id="L126"><span class="lineNum">     126</span>              :     kBool,</span>
+<span id="L127"><span class="lineNum">     127</span>              :     kInt64,</span>
+<span id="L128"><span class="lineNum">     128</span>              :     kFloat64,</span>
+<span id="L129"><span class="lineNum">     129</span>              :     // Both BigQuery STRING and BYTES land in `string_value()`. The</span>
+<span id="L130"><span class="lineNum">     130</span>              :     // Cell-level type is carried out-of-band on the matching</span>
+<span id="L131"><span class="lineNum">     131</span>              :     // `ColumnSchema`; we avoid duplicating that info per row.</span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaUNC">           0 :     kString,</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaUNC">           0 :     kBytes,</span></span>
+<span id="L134"><span class="lineNum">     134</span> <span class="tlaUNC">           0 :     kArray,</span></span>
+<span id="L135"><span class="lineNum">     135</span>              :     kStruct,</span>
+<span id="L136"><span class="lineNum">     136</span>              :   };</span>
+<span id="L137"><span class="lineNum">     137</span>              : </span>
+<span id="L138"><span class="lineNum">     138</span>              :   Value() = default;</span>
+<span id="L139"><span class="lineNum">     139</span>              : </span>
+<span id="L140"><span class="lineNum">     140</span>              :   static Value Null() {</span>
+<span id="L141"><span class="lineNum">     141</span>              :     return Value();</span>
+<span id="L142"><span class="lineNum">     142</span>              :   }</span>
+<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC tlaBgGNC">         389 :   static Value Bool(bool v);</span></span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">         389 :   static Value Int64(int64_t v);</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">         389 :   static Value Float64(double v);</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">         137 :   static Value String(std::string v);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         137 :   static Value Bytes(std::string v);</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">         137 :   static Value Array(std::vector&lt;Value&gt; elements);</span></span>
+<span id="L149"><span class="lineNum">     149</span>              :   static Value Struct(std::vector&lt;Value&gt; fields);</span>
+<span id="L150"><span class="lineNum">     150</span>              : </span>
+<span id="L151"><span class="lineNum">     151</span>              :   Kind kind() const {</span>
+<span id="L152"><span class="lineNum">     152</span>              :     return kind_;</span>
+<span id="L153"><span class="lineNum">     153</span>              :   }</span>
+<span id="L154"><span class="lineNum">     154</span>              :   bool is_null() const {</span>
+<span id="L155"><span class="lineNum">     155</span>              :     return kind_ == Kind::kNull;</span>
+<span id="L156"><span class="lineNum">     156</span>              :   }</span>
+<span id="L157"><span class="lineNum">     157</span>              : </span>
+<span id="L158"><span class="lineNum">     158</span>              :   // Accessors. Each returns a default value (false / 0 / empty) when</span>
+<span id="L159"><span class="lineNum">     159</span>              :   // the active kind does not match, so callers can use these to fold</span>
+<span id="L160"><span class="lineNum">     160</span>              :   // values into wire encoders without an inspection cascade. Use</span>
+<span id="L161"><span class="lineNum">     161</span>              :   // `kind()` to disambiguate when correctness matters.</span>
+<span id="L162"><span class="lineNum">     162</span>              :   bool bool_value() const;</span>
+<span id="L163"><span class="lineNum">     163</span>              :   int64_t int64_value() const;</span>
+<span id="L164"><span class="lineNum">     164</span>              :   double float64_value() const;</span>
+<span id="L165"><span class="lineNum">     165</span>              :   const std::string&amp; string_value() const;</span>
+<span id="L166"><span class="lineNum">     166</span>              :   const std::vector&lt;Value&gt;&amp; array_value() const;</span>
+<span id="L167"><span class="lineNum">     167</span>              :   const std::vector&lt;Value&gt;&amp; struct_value() const;</span>
+<span id="L168"><span class="lineNum">     168</span>              : </span>
+<span id="L169"><span class="lineNum">     169</span>              :  private:</span>
+<span id="L170"><span class="lineNum">     170</span>              :   // The kString and kBytes kinds share the std::string slot in</span>
+<span id="L171"><span class="lineNum">     171</span>              :   // `data_`; the active kind discriminates which BigQuery type the</span>
+<span id="L172"><span class="lineNum">     172</span>              :   // bytes were parsed as.</span>
+<span id="L173"><span class="lineNum">     173</span>              :   using Variant = std::variant&lt;std::monostate,</span>
+<span id="L174"><span class="lineNum">     174</span>              :                                bool,</span>
+<span id="L175"><span class="lineNum">     175</span>              :                                int64_t,</span>
+<span id="L176"><span class="lineNum">     176</span>              :                                double,</span>
+<span id="L177"><span class="lineNum">     177</span>              :                                std::string,</span>
+<span id="L178"><span class="lineNum">     178</span>              :                                std::vector&lt;Value&gt;&gt;;</span>
+<span id="L179"><span class="lineNum">     179</span>              : </span>
+<span id="L180"><span class="lineNum">     180</span>              :   Kind kind_ = Kind::kNull;</span>
+<span id="L181"><span class="lineNum">     181</span>              :   Variant data_{};</span>
+<span id="L182"><span class="lineNum">     182</span>              : };</span>
+<span id="L183"><span class="lineNum">     183</span>              : </span>
+<span id="L184"><span class="lineNum">     184</span>              : // One row in a table: cells are ordered by the column list of the</span>
+<span id="L185"><span class="lineNum">     185</span>              : // table's `schema::TableSchema`. A NULL cell is represented as</span>
+<span id="L186"><span class="lineNum">     186</span>              : // `Value::Null()`, never as a missing entry.</span>
+<span id="L187"><span class="lineNum">     187</span>              : struct Row {</span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           5 :   std::vector&lt;Value&gt; cells{};</span></span>
+<span id="L189"><span class="lineNum">     189</span>              : };</span>
+<span id="L190"><span class="lineNum">     190</span>              : </span>
+<span id="L191"><span class="lineNum">     191</span>              : // Forward iterator over a single scan of a table's rows. Storage</span>
+<span id="L192"><span class="lineNum">     192</span>              : // implementations may stream rows lazily; a single `RowIterator`</span>
+<span id="L193"><span class="lineNum">     193</span>              : // instance is owned by the caller and is **not** thread-safe.</span>
+<span id="L194"><span class="lineNum">     194</span>              : class RowIterator {</span>
+<span id="L195"><span class="lineNum">     195</span>              :  public:</span>
+<span id="L196"><span class="lineNum">     196</span>              :   virtual ~RowIterator() = default;</span>
+<span id="L197"><span class="lineNum">     197</span>              : </span>
+<span id="L198"><span class="lineNum">     198</span>              :   // Pulls the next row into `*row`. Returns:</span>
+<span id="L199"><span class="lineNum">     199</span>              :   //   * `true`  - a row was written.</span>
+<span id="L200"><span class="lineNum">     200</span>              :   //   * `false` - end of stream; `*row` is unchanged.</span>
+<span id="L201"><span class="lineNum">     201</span>              :   // A non-OK status indicates a backend error mid-iteration; further</span>
+<span id="L202"><span class="lineNum">     202</span>              :   // calls are undefined.</span>
+<span id="L203"><span class="lineNum">     203</span>              :   //</span>
+<span id="L204"><span class="lineNum">     204</span>              :   // `[[nodiscard]]`: the StatusOr carries the iteration error; a</span>
+<span id="L205"><span class="lineNum">     205</span>              :   // caller that drops the result is silently swallowing a backend</span>
+<span id="L206"><span class="lineNum">     206</span>              :   // failure that would otherwise surface to the gateway as a 5xx.</span>
+<span id="L207"><span class="lineNum">     207</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;bool&gt; Next(Row* row) = 0;</span>
+<span id="L208"><span class="lineNum">     208</span>              : };</span>
+<span id="L209"><span class="lineNum">     209</span>              : </span>
+<span id="L210"><span class="lineNum">     210</span>              : // ReadFilter constrains the rows a `CreateReadStream` iterator yields.</span>
+<span id="L211"><span class="lineNum">     211</span>              : //</span>
+<span id="L212"><span class="lineNum">     212</span>              : // The StorageRead gRPC surface (`ReadRows`) is wired on top of</span>
+<span id="L213"><span class="lineNum">     213</span>              : // `CreateReadStream`, so the filter shape mirrors what the public</span>
+<span id="L214"><span class="lineNum">     214</span>              : // `bigquery_emulator.v1.ReadOptions` proto can ask for. The DuckDB</span>
+<span id="L215"><span class="lineNum">     215</span>              : // backend pushes the knobs down natively (a SQL `LIMIT` / `WHERE`)</span>
+<span id="L216"><span class="lineNum">     216</span>              : // and the iterator surfaces them on the wire so the handler does</span>
+<span id="L217"><span class="lineNum">     217</span>              : // not have to re-apply them.</span>
+<span id="L218"><span class="lineNum">     218</span>              : //</span>
+<span id="L219"><span class="lineNum">     219</span>              : // `equality_predicate` carries the typed parse of</span>
+<span id="L220"><span class="lineNum">     220</span>              : // `&lt;column&gt; = &lt;literal&gt;` from `ReadOptions.row_restriction`. The raw</span>
+<span id="L221"><span class="lineNum">     221</span>              : // `row_restriction` string is left in for debugging / introspection</span>
+<span id="L222"><span class="lineNum">     222</span>              : // but the backends consume the parsed `equality_predicate` slot so</span>
+<span id="L223"><span class="lineNum">     223</span>              : // the parse happens exactly once per session. `selected_fields`</span>
+<span id="L224"><span class="lineNum">     224</span>              : // carries the per-column projection; see the field comments below.</span>
+<span id="L225"><span class="lineNum">     225</span>              : struct ReadFilter {</span>
+<span id="L226"><span class="lineNum">     226</span>              :   // Maximum number of rows the iterator will yield before signaling</span>
+<span id="L227"><span class="lineNum">     227</span>              :   // end-of-stream. &lt;= 0 means &quot;no limit&quot; (return every row in the</span>
+<span id="L228"><span class="lineNum">     228</span>              :   // table snapshot). Both backends enforce this knob so</span>
+<span id="L229"><span class="lineNum">     229</span>              :   // ReadRows can honor caller-supplied caps without re-counting at</span>
+<span id="L230"><span class="lineNum">     230</span>              :   // the handler layer.</span>
+<span id="L231"><span class="lineNum">     231</span>              :   std::int64_t row_limit = 0;</span>
+<span id="L232"><span class="lineNum">     232</span>              : </span>
+<span id="L233"><span class="lineNum">     233</span>              :   // Number of rows to skip from the head of the stream before the</span>
+<span id="L234"><span class="lineNum">     234</span>              :   // first emitted row. ReadRows uses this to honor</span>
+<span id="L235"><span class="lineNum">     235</span>              :   // `ReadRowsRequest.offset` so a caller resuming a stream after a</span>
+<span id="L236"><span class="lineNum">     236</span>              :   // transient failure does not re-receive rows it already processed.</span>
+<span id="L237"><span class="lineNum">     237</span>              :   // &lt;= 0 means &quot;start at the first row&quot;.</span>
+<span id="L238"><span class="lineNum">     238</span>              :   std::int64_t offset = 0;</span>
+<span id="L239"><span class="lineNum">     239</span>              : </span>
+<span id="L240"><span class="lineNum">     240</span>              :   // Subset of column names the caller wants returned. Empty means</span>
+<span id="L241"><span class="lineNum">     241</span>              :   // &quot;all columns&quot;. The DuckDB backend wires this</span>
+<span id="L242"><span class="lineNum">     242</span>              :   // natively: the backend builds a projected schema from the</span>
+<span id="L243"><span class="lineNum">     243</span>              :   // listed names and the `RowIterator` yields rows in that order.</span>
+<span id="L244"><span class="lineNum">     244</span>              :   // The handler validates the names exist at session-create time, so</span>
+<span id="L245"><span class="lineNum">     245</span>              :   // an unknown column surfaces as INVALID_ARGUMENT before the stream</span>
+<span id="L246"><span class="lineNum">     246</span>              :   // opens; the backend does the same defensive check (re-validating</span>
+<span id="L247"><span class="lineNum">     247</span>              :   // here would be redundant, but the helper is shared with the</span>
+<span id="L248"><span class="lineNum">     248</span>              :   // CreateReadSession parse path so an unknown column never reaches</span>
+<span id="L249"><span class="lineNum">     249</span>              :   // a real SELECT).</span>
+<span id="L250"><span class="lineNum">     250</span>              :   std::vector&lt;std::string&gt; selected_fields;</span>
+<span id="L251"><span class="lineNum">     251</span>              : </span>
+<span id="L252"><span class="lineNum">     252</span>              :   // Raw SQL-shaped predicate the caller supplied. Retained on the</span>
+<span id="L253"><span class="lineNum">     253</span>              :   // filter for debugging / log lines.</span>
+<span id="L254"><span class="lineNum">     254</span>              :   std::string row_restriction;</span>
+<span id="L255"><span class="lineNum">     255</span>              : </span>
+<span id="L256"><span class="lineNum">     256</span>              :   // DuckDB `WHERE` body produced by `TranspileRowRestriction` (analyzer</span>
+<span id="L257"><span class="lineNum">     257</span>              :   // + transpiler). Empty when no restriction was supplied.</span>
+<span id="L258"><span class="lineNum">     258</span>              :   std::optional&lt;std::string&gt; where_sql;</span>
+<span id="L259"><span class="lineNum">     259</span>              : </span>
+<span id="L260"><span class="lineNum">     260</span>              :   // Legacy typed parse of single-equality restrictions. Prefer</span>
+<span id="L261"><span class="lineNum">     261</span>              :   // `where_sql`; kept so existing unit tests can exercise the narrow</span>
+<span id="L262"><span class="lineNum">     262</span>              :   // parser without pulling in the analyzer.</span>
+<span id="L263"><span class="lineNum">     263</span>              :   std::optional&lt;EqualityPredicate&gt; equality_predicate;</span>
+<span id="L264"><span class="lineNum">     264</span>              : </span>
+<span id="L265"><span class="lineNum">     265</span>              :   // Inclusive lower bound on DuckDB `file_row_number` for this stream</span>
+<span id="L266"><span class="lineNum">     266</span>              :   // partition. Defaults to 0 (table head).</span>
+<span id="L267"><span class="lineNum">     267</span>              :   std::int64_t row_start = 0;</span>
+<span id="L268"><span class="lineNum">     268</span>              : </span>
+<span id="L269"><span class="lineNum">     269</span>              :   // Exclusive upper bound on `file_row_number`. Negative means</span>
+<span id="L270"><span class="lineNum">     270</span>              :   // unbounded (read through table tail).</span>
+<span id="L271"><span class="lineNum">     271</span>              :   std::int64_t row_end = -1;</span>
+<span id="L272"><span class="lineNum">     272</span>              : };</span>
+<span id="L273"><span class="lineNum">     273</span>              : </span>
+<span id="L274"><span class="lineNum">     274</span>              : // Storage is the abstract interface every backend implements.</span>
+<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">          12 : //</span></span>
+<span id="L276"><span class="lineNum">     276</span>              : // All methods are **thread-safe**. The DuckDB-backed store relies on</span>
+<span id="L277"><span class="lineNum">     277</span>              : // DuckDB's own concurrency model.</span>
+<span id="L278"><span class="lineNum">     278</span>              : //</span>
+<span id="L279"><span class="lineNum">     279</span>              : // Lifetime: a `Storage` instance is created once at engine startup and</span>
+<span id="L280"><span class="lineNum">     280</span>              : // shared by every gRPC request handler.</span>
+<span id="L281"><span class="lineNum">     281</span>              : class Storage {</span>
+<span id="L282"><span class="lineNum">     282</span>              :  public:</span>
+<span id="L283"><span class="lineNum">     283</span>              :   virtual ~Storage() = default;</span>
+<span id="L284"><span class="lineNum">     284</span>              : </span>
+<span id="L285"><span class="lineNum">     285</span>              :   // ------------------------------------------------------------------</span>
+<span id="L286"><span class="lineNum">     286</span>              :   // Dataset CRUD. `location` is the BigQuery region the dataset is</span>
+<span id="L287"><span class="lineNum">     287</span>              :   // pinned to (e.g. &quot;US&quot;, &quot;EU&quot;); the DuckDB store stashes it for</span>
+<span id="L288"><span class="lineNum">     288</span>              :   // round-tripping but otherwise ignores it. `delete_contents=true`</span>
+<span id="L289"><span class="lineNum">     289</span>              :   // mirrors the BigQuery REST `deleteContents` query parameter on</span>
+<span id="L290"><span class="lineNum">     290</span>              :   // `datasets.delete`.</span>
+<span id="L291"><span class="lineNum">     291</span>              :   //</span>
+<span id="L292"><span class="lineNum">     292</span>              :   // The `absl::Status` returns are `[[nodiscard]]` so a caller that</span>
+<span id="L293"><span class="lineNum">     293</span>              :   // drops the result is caught by the compiler — the gateway has no</span>
+<span id="L294"><span class="lineNum">     294</span>              :   // other way to surface dataset CRUD failures, and silent drops</span>
+<span id="L295"><span class="lineNum">     295</span>              :   // were the motivating example for the rollout's status-discarded</span>
+<span id="L296"><span class="lineNum">     296</span>              :   // rule. The same rationale applies to every other Status-returning</span>
+<span id="L297"><span class="lineNum">     297</span>              :   // method on this interface.</span>
+<span id="L298"><span class="lineNum">     298</span>              :   // ------------------------------------------------------------------</span>
+<span id="L299"><span class="lineNum">     299</span>              :   [[nodiscard]] virtual absl::Status CreateDataset(</span>
+<span id="L300"><span class="lineNum">     300</span>              :       const DatasetId&amp; id, absl::string_view location) = 0;</span>
+<span id="L301"><span class="lineNum">     301</span>              :   [[nodiscard]] virtual absl::Status DropDataset(const DatasetId&amp; id,</span>
+<span id="L302"><span class="lineNum">     302</span>              :                                                  bool delete_contents) = 0;</span>
+<span id="L303"><span class="lineNum">     303</span>              : </span>
+<span id="L304"><span class="lineNum">     304</span>              :   // Lists the datasets registered under `project_id`. Returns an empty</span>
+<span id="L305"><span class="lineNum">     305</span>              :   // vector when the project has no datasets (i.e. never registered any</span>
+<span id="L306"><span class="lineNum">     306</span>              :   // or all have been dropped). Implementations MUST return ids in</span>
+<span id="L307"><span class="lineNum">     307</span>              :   // deterministic order so list pagination / callers that diff against</span>
+<span id="L308"><span class="lineNum">     308</span>              :   // a prior listing are stable; the DuckDB backend orders</span>
+<span id="L309"><span class="lineNum">     309</span>              :   // lexicographically by `dataset_id`. INVALID_ARGUMENT when</span>
+<span id="L310"><span class="lineNum">     310</span>              :   // `project_id` is empty.</span>
+<span id="L311"><span class="lineNum">     311</span>              :   //</span>
+<span id="L312"><span class="lineNum">     312</span>              :   // Used by the gateway's `datasets.list` REST handler to enumerate</span>
+<span id="L313"><span class="lineNum">     313</span>              :   // the catalog after `RegisterDataset` calls; the</span>
+<span id="L314"><span class="lineNum">     314</span>              :   // `frontend/handlers/catalog.cc` gRPC wrapper exposes this through</span>
+<span id="L315"><span class="lineNum">     315</span>              :   // the `Catalog.ListDatasets` RPC.</span>
+<span id="L316"><span class="lineNum">     316</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;DatasetId&gt;&gt; ListDatasets(</span>
+<span id="L317"><span class="lineNum">     317</span>              :       absl::string_view project_id) const = 0;</span>
+<span id="L318"><span class="lineNum">     318</span>              : </span>
+<span id="L319"><span class="lineNum">     319</span>              :   // ------------------------------------------------------------------</span>
+<span id="L320"><span class="lineNum">     320</span>              :   // Table CRUD. `CreateTable` is idempotent at the dataset level only:</span>
+<span id="L321"><span class="lineNum">     321</span>              :   // creating a table that already exists is an error</span>
+<span id="L322"><span class="lineNum">     322</span>              :   // (ALREADY_EXISTS). `DropTable` is the inverse and is NOT_FOUND on</span>
+<span id="L323"><span class="lineNum">     323</span>              :   // missing tables; callers that want &quot;drop if exists&quot; semantics</span>
+<span id="L324"><span class="lineNum">     324</span>              :   // should swallow that status.</span>
+<span id="L325"><span class="lineNum">     325</span> <span class="tlaUNC tlaBgUNC">           0 :   // ------------------------------------------------------------------</span></span>
+<span id="L326"><span class="lineNum">     326</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status CreateTable(</span></span>
+<span id="L327"><span class="lineNum">     327</span> <span class="tlaUNC">           0 :       const TableId&amp; id, const schema::TableSchema&amp; schema) = 0;</span></span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DropTable(const TableId&amp; id) = 0;</span></span>
+<span id="L329"><span class="lineNum">     329</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaUNC">           0 :   // Restores a table previously soft-deleted by `DropTable`. When</span></span>
+<span id="L331"><span class="lineNum">     331</span>              :   // `deleted_ms` is zero, restores the newest tombstone for the table.</span>
+<span id="L332"><span class="lineNum">     332</span>              :   [[nodiscard]] virtual absl::Status RestoreTable(const TableId&amp; id,</span>
+<span id="L333"><span class="lineNum">     333</span>              :                                                   std::int64_t deleted_ms = 0) {</span>
+<span id="L334"><span class="lineNum">     334</span>              :     (void)id;</span>
+<span id="L335"><span class="lineNum">     335</span>              :     (void)deleted_ms;</span>
+<span id="L336"><span class="lineNum">     336</span>              :     return absl::UnimplementedError(</span>
+<span id="L337"><span class="lineNum">     337</span>              :         &quot;Storage::RestoreTable is not implemented for this backend&quot;);</span>
+<span id="L338"><span class="lineNum">     338</span>              :   }</span>
+<span id="L339"><span class="lineNum">     339</span>              : </span>
+<span id="L340"><span class="lineNum">     340</span>              :   // Lists the tables registered under `dataset_id`. Returns an empty</span>
+<span id="L341"><span class="lineNum">     341</span>              :   // vector when the dataset is empty. NOT_FOUND when the dataset does</span>
+<span id="L342"><span class="lineNum">     342</span>              :   // not exist; INVALID_ARGUMENT when `project_id` / `dataset_id` is</span>
+<span id="L343"><span class="lineNum">     343</span>              :   // empty. Like ListDatasets, implementations MUST return ids in</span>
+<span id="L344"><span class="lineNum">     344</span>              :   // deterministic (lexicographic) order. Used by the gateway's</span>
+<span id="L345"><span class="lineNum">     345</span>              :   // `tables.list` REST handler.</span>
+<span id="L346"><span class="lineNum">     346</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;TableId&gt;&gt; ListTables(</span>
+<span id="L347"><span class="lineNum">     347</span>              :       const DatasetId&amp; dataset_id) const = 0;</span>
+<span id="L348"><span class="lineNum">     348</span>              : </span>
+<span id="L349"><span class="lineNum">     349</span>              :   // Returns the schema the table was created with. NOT_FOUND if the</span>
+<span id="L350"><span class="lineNum">     350</span>              :   // dataset or table does not exist.</span>
+<span id="L351"><span class="lineNum">     351</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;schema::TableSchema&gt; GetSchema(</span>
+<span id="L352"><span class="lineNum">     352</span>              :       const TableId&amp; id) const = 0;</span>
+<span id="L353"><span class="lineNum">     353</span>              : </span>
+<span id="L354"><span class="lineNum">     354</span>              :   // Appends `rows` to `id` as a single batch. Implementations may</span>
+<span id="L355"><span class="lineNum">     355</span>              :   // require all rows in the batch to share the table's schema shape</span>
+<span id="L356"><span class="lineNum">     356</span>              :   // (cell count == column count); validation lives in the impl, not</span>
+<span id="L357"><span class="lineNum">     357</span>              :   // here.</span>
+<span id="L358"><span class="lineNum">     358</span>              :   [[nodiscard]] virtual absl::Status AppendRows(const TableId&amp; id,</span>
+<span id="L359"><span class="lineNum">     359</span>              :                                                 absl::Span&lt;const Row&gt; rows) = 0;</span>
+<span id="L360"><span class="lineNum">     360</span>              : </span>
+<span id="L361"><span class="lineNum">     361</span>              :   // Atomically replaces every row in `id` with `rows`. Used by the</span>
+<span id="L362"><span class="lineNum">     362</span>              :   // DML engine's scan-and-rewrite path for UPDATE / DELETE / MERGE:</span>
+<span id="L363"><span class="lineNum">     363</span>              :   // the engine pulls the existing rows, computes the post-mutation</span>
+<span id="L364"><span class="lineNum">     364</span>              :   // shape, and hands the result back through this method so the</span>
+<span id="L365"><span class="lineNum">     365</span>              :   // store can swap the row vector / parquet file in one shot.</span>
+<span id="L366"><span class="lineNum">     366</span>              :   //</span>
+<span id="L367"><span class="lineNum">     367</span>              :   // Same shape-check contract as `AppendRows`: row cell count must</span>
+<span id="L368"><span class="lineNum">     368</span>              :   // equal the table's top-level column count, otherwise</span>
+<span id="L369"><span class="lineNum">     369</span>              :   // INVALID_ARGUMENT. NOT_FOUND if the dataset / table does not</span>
+<span id="L370"><span class="lineNum">     370</span>              :   // exist. The new row vector replaces the existing one in full,</span>
+<span id="L371"><span class="lineNum">     371</span>              :   // including the empty-vector case (`rows.empty()` truncates the</span>
+<span id="L372"><span class="lineNum">     372</span>              :   // table).</span>
+<span id="L373"><span class="lineNum">     373</span>              :   [[nodiscard]] virtual absl::Status OverwriteRows(</span>
+<span id="L374"><span class="lineNum">     374</span>              :       const TableId&amp; id, absl::Span&lt;const Row&gt; rows) = 0;</span>
+<span id="L375"><span class="lineNum">     375</span>              : </span>
+<span id="L376"><span class="lineNum">     376</span>              :   // Begins a fresh scan of `id`'s rows. The returned iterator captures</span>
+<span id="L377"><span class="lineNum">     377</span>              :   // a snapshot at call time; rows appended afterward may or may not be</span>
+<span id="L378"><span class="lineNum">     378</span>              :   // visible depending on the impl. NOT_FOUND if the table does not</span>
+<span id="L379"><span class="lineNum">     379</span>              :   // exist.</span>
+<span id="L380"><span class="lineNum">     380</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt; ScanRows(</span>
+<span id="L381"><span class="lineNum">     381</span>              :       const TableId&amp; id) const = 0;</span>
+<span id="L382"><span class="lineNum">     382</span>              : </span>
+<span id="L383"><span class="lineNum">     383</span>              :   // CreateReadStream is the StorageRead.ReadRows-shaped scan: same</span>
+<span id="L384"><span class="lineNum">     384</span>              :   // snapshot semantics as `ScanRows`, but the returned iterator is</span>
+<span id="L385"><span class="lineNum">     385</span>              :   // constrained by `filter` (see `ReadFilter` above). The DuckDB</span>
+<span id="L386"><span class="lineNum">     386</span>              :   // backend pushes the limit / offset into the underlying SELECT so</span>
+<span id="L387"><span class="lineNum">     387</span>              :   // we don't materialize rows we will never emit. The iterator is a</span>
+<span id="L388"><span class="lineNum">     388</span>              :   // `RowIterator` so the `StorageReadService` handler does not</span>
+<span id="L389"><span class="lineNum">     389</span>              :   // branch on backend type.</span>
+<span id="L390"><span class="lineNum">     390</span>              :   //</span>
+<span id="L391"><span class="lineNum">     391</span>              :   // `row_limit`, `offset`, `row_restriction` (via its typed</span>
+<span id="L392"><span class="lineNum">     392</span>              :   // `equality_predicate` parse), and `selected_fields` are all</span>
+<span id="L393"><span class="lineNum">     393</span>              :   // honored. See the field comments on `ReadFilter`</span>
+<span id="L394"><span class="lineNum">     394</span>              :   // for the per-knob contract. NOT_FOUND if the table does not</span>
+<span id="L395"><span class="lineNum">     395</span>              :   // exist.</span>
+<span id="L396"><span class="lineNum">     396</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt;</span>
+<span id="L397"><span class="lineNum">     397</span>              :   CreateReadStream(const TableId&amp; id, const ReadFilter&amp; filter) const = 0;</span>
+<span id="L398"><span class="lineNum">     398</span>              : </span>
+<span id="L399"><span class="lineNum">     399</span>              :   // Returns the row count of `id`'s on-disk snapshot at call time</span>
+<span id="L400"><span class="lineNum">     400</span>              :   // (DuckDB: `COUNT(*)` over `read_parquet(..., file_row_number=true)`).</span>
+<span id="L401"><span class="lineNum">     401</span> <span class="tlaUNC">           0 :   // Used by Storage Read session minting to partition streams.</span></span>
+<span id="L402"><span class="lineNum">     402</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;std::int64_t&gt; CountRows(</span></span>
+<span id="L403"><span class="lineNum">     403</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const = 0;</span></span>
+<span id="L404"><span class="lineNum">     404</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L405"><span class="lineNum">     405</span>              :   // When the backend persists table data as a Parquet snapshot, returns</span>
+<span id="L406"><span class="lineNum">     406</span>              :   // the absolute path to that file so the DuckDB executor can attach it</span>
+<span id="L407"><span class="lineNum">     407</span>              :   // via `read_parquet` without a row round-trip. Default: no snapshot.</span>
+<span id="L408"><span class="lineNum">     408</span>              :   [[nodiscard]] virtual std::optional&lt;std::string&gt; ParquetSnapshotPath(</span>
+<span id="L409"><span class="lineNum">     409</span>              :       const TableId&amp; id) const {</span>
+<span id="L410"><span class="lineNum">     410</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L411"><span class="lineNum">     411</span> <span class="tlaUNC">           0 :     return std::nullopt;</span></span>
+<span id="L412"><span class="lineNum">     412</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L413"><span class="lineNum">     413</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L414"><span class="lineNum">     414</span>              :   // When the backend supports historical Parquet snapshots, returns the</span>
+<span id="L415"><span class="lineNum">     415</span>              :   // absolute path to the snapshot that was current at `as_of_ms` (Unix epoch</span>
+<span id="L416"><span class="lineNum">     416</span>              :   // milliseconds). Default: same as `ParquetSnapshotPath` (ignores as-of).</span>
+<span id="L417"><span class="lineNum">     417</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::optional&lt;std::string&gt;&gt;</span>
+<span id="L418"><span class="lineNum">     418</span>              :   ParquetSnapshotPathAt(const TableId&amp; id, std::int64_t as_of_ms) const {</span>
+<span id="L419"><span class="lineNum">     419</span>              :     (void)as_of_ms;</span>
+<span id="L420"><span class="lineNum">     420</span>              :     return ParquetSnapshotPath(id);</span>
+<span id="L421"><span class="lineNum">     421</span>              :   }</span>
+<span id="L422"><span class="lineNum">     422</span>              : </span>
+<span id="L423"><span class="lineNum">     423</span>              :   // ------------------------------------------------------------------</span>
+<span id="L424"><span class="lineNum">     424</span>              :   // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the</span>
+<span id="L425"><span class="lineNum">     425</span>              :   // per-project registries can rehydrate across engine restarts.</span>
+<span id="L426"><span class="lineNum">     426</span>              :   // `UpsertRoutine` replaces an existing row keyed by</span>
+<span id="L427"><span class="lineNum">     427</span>              :   // (project_id, dataset_id, routine_id). Temp routines (`is_temp`)</span>
+<span id="L428"><span class="lineNum">     428</span>              :   // are accepted for API symmetry but rehydration skips them.</span>
+<span id="L429"><span class="lineNum">     429</span>              :   // ------------------------------------------------------------------</span>
+<span id="L430"><span class="lineNum">     430</span>              :   [[nodiscard]] virtual absl::Status UpsertRoutine(</span>
+<span id="L431"><span class="lineNum">     431</span>              :       const RoutineRecord&amp; record) = 0;</span>
+<span id="L432"><span class="lineNum">     432</span>              :   [[nodiscard]] virtual absl::Status DeleteRoutine(const RoutineId&amp; id) = 0;</span>
+<span id="L433"><span class="lineNum">     433</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;RoutineRecord&gt; GetRoutine(</span>
+<span id="L434"><span class="lineNum">     434</span>              :       const RoutineId&amp; id) const = 0;</span>
+<span id="L435"><span class="lineNum">     435</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt; ListRoutines(</span>
+<span id="L436"><span class="lineNum">     436</span>              :       const DatasetId&amp; dataset_id) const = 0;</span>
+<span id="L437"><span class="lineNum">     437</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt;</span>
+<span id="L438"><span class="lineNum">     438</span>              :   ListAllRoutines() const = 0;</span>
+<span id="L439"><span class="lineNum">     439</span>              : </span>
+<span id="L440"><span class="lineNum">     440</span>              :   // ------------------------------------------------------------------</span>
+<span id="L441"><span class="lineNum">     441</span>              :   // Logical view DDL persistence (CREATE VIEW only; materialized views</span>
+<span id="L442"><span class="lineNum">     442</span>              :   // are storage-backed and do not use this table).</span>
+<span id="L443"><span class="lineNum">     443</span> <span class="tlaUNC">           0 :   // ------------------------------------------------------------------</span></span>
+<span id="L444"><span class="lineNum">     444</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status UpsertView(const ViewRecord&amp; record) = 0;</span></span>
+<span id="L445"><span class="lineNum">     445</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DeleteView(const ViewId&amp; id) = 0;</span></span>
+<span id="L446"><span class="lineNum">     446</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;ViewRecord&gt;&gt; ListAllViews()</span></span>
+<span id="L447"><span class="lineNum">     447</span>              :       const = 0;</span>
+<span id="L448"><span class="lineNum">     448</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L449"><span class="lineNum">     449</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;TableResourceInfo&gt; GetTableResourceInfo(</span></span>
+<span id="L450"><span class="lineNum">     450</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const {</span></span>
+<span id="L451"><span class="lineNum">     451</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L452"><span class="lineNum">     452</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
+<span id="L453"><span class="lineNum">     453</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not expose table resource metadata&quot;);</span></span>
+<span id="L454"><span class="lineNum">     454</span>              :   }</span>
+<span id="L455"><span class="lineNum">     455</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L456"><span class="lineNum">     456</span> <span class="tlaUNC">           0 :   // Row-access policies and column-level security metadata.</span></span>
+<span id="L457"><span class="lineNum">     457</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;TableGovernance&gt; GetTableGovernance(</span></span>
+<span id="L458"><span class="lineNum">     458</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const {</span></span>
+<span id="L459"><span class="lineNum">     459</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L460"><span class="lineNum">     460</span> <span class="tlaUNC">           0 :     return TableGovernance{};</span></span>
+<span id="L461"><span class="lineNum">     461</span>              :   }</span>
+<span id="L462"><span class="lineNum">     462</span>              :   [[nodiscard]] virtual absl::Status UpsertRowAccessPolicy(</span>
+<span id="L463"><span class="lineNum">     463</span>              :       const TableId&amp; id, const RowAccessPolicyRecord&amp; policy) {</span>
+<span id="L464"><span class="lineNum">     464</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L465"><span class="lineNum">     465</span> <span class="tlaUNC">           0 :     (void)policy;</span></span>
+<span id="L466"><span class="lineNum">     466</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
+<span id="L467"><span class="lineNum">     467</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not persist row access policies&quot;);</span></span>
+<span id="L468"><span class="lineNum">     468</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L469"><span class="lineNum">     469</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DeleteRowAccessPolicy(</span></span>
+<span id="L470"><span class="lineNum">     470</span> <span class="tlaUNC">           0 :       const TableId&amp; id, absl::string_view policy_id) {</span></span>
+<span id="L471"><span class="lineNum">     471</span>              :     (void)id;</span>
+<span id="L472"><span class="lineNum">     472</span>              :     (void)policy_id;</span>
+<span id="L473"><span class="lineNum">     473</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
+<span id="L474"><span class="lineNum">     474</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not persist row access policies&quot;);</span></span>
+<span id="L475"><span class="lineNum">     475</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L476"><span class="lineNum">     476</span>              :   [[nodiscard]] virtual absl::Status SetColumnGovernance(</span>
+<span id="L477"><span class="lineNum">     477</span>              :       const TableId&amp; id,</span>
+<span id="L478"><span class="lineNum">     478</span>              :       absl::string_view column_name,</span>
+<span id="L479"><span class="lineNum">     479</span>              :       const ColumnGovernanceRecord&amp; column) {</span>
+<span id="L480"><span class="lineNum">     480</span>              :     (void)id;</span>
+<span id="L481"><span class="lineNum">     481</span>              :     (void)column_name;</span>
+<span id="L482"><span class="lineNum">     482</span>              :     (void)column;</span>
+<span id="L483"><span class="lineNum">     483</span>              :     return absl::UnimplementedError(</span>
+<span id="L484"><span class="lineNum">     484</span>              :         &quot;Storage backend does not persist column governance&quot;);</span>
+<span id="L485"><span class="lineNum">     485</span>              :   }</span>
+<span id="L486"><span class="lineNum">     486</span>              : </span>
+<span id="L487"><span class="lineNum">     487</span>              :   // Persistent-store root (DuckDB catalog + external-source snapshots).</span>
+<span id="L488"><span class="lineNum">     488</span>              :   [[nodiscard]] virtual absl::string_view data_dir() const {</span>
+<span id="L489"><span class="lineNum">     489</span>              :     return &quot;&quot;;</span>
+<span id="L490"><span class="lineNum">     490</span>              :   }</span>
+<span id="L491"><span class="lineNum">     491</span>              : };</span>
+<span id="L492"><span class="lineNum">     492</span>              : </span>
+<span id="L493"><span class="lineNum">     493</span>              : }  // namespace storage</span>
+<span id="L494"><span class="lineNum">     494</span>              : }  // namespace backend</span>
+<span id="L495"><span class="lineNum">     495</span>              : }  // namespace bigquery_emulator</span>
+<span id="L496"><span class="lineNum">     496</span>              : </span>
+<span id="L497"><span class="lineNum">     497</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_STORAGE_STORAGE_H_</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

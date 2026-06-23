@@ -1,0 +1,398 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - engine/coordinator/route_classifier_advanced_test.cc</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">engine/coordinator</a> - route_classifier_advanced_test.cc<span style="font-size: 80%;"> (source / <a href="route_classifier_advanced_test.cc.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">184</td>
+            <td class="headerCovTableEntry">184</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">16</td>
+          </tr>
+                  <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : // Route classifier tests: subqueries, hand-built nodes, and edge cases.</span>
+<span id="L2"><span class="lineNum">       2</span>              : </span>
+<span id="L3"><span class="lineNum">       3</span>              : #include &quot;backend/engine/coordinator/route_classifier_test_fixture.h&quot;</span>
+<span id="L4"><span class="lineNum">       4</span>              : #include &quot;backend/engine/disposition.h&quot;</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &quot;googlesql/public/id_string.h&quot;</span>
+<span id="L6"><span class="lineNum">       6</span>              : #include &quot;googlesql/public/value.h&quot;</span>
+<span id="L7"><span class="lineNum">       7</span>              : #include &quot;googlesql/resolved_ast/resolved_column.h&quot;</span>
+<span id="L8"><span class="lineNum">       8</span>              : </span>
+<span id="L9"><span class="lineNum">       9</span>              : namespace bigquery_emulator {</span>
+<span id="L10"><span class="lineNum">      10</span>              : namespace backend {</span>
+<span id="L11"><span class="lineNum">      11</span>              : namespace engine {</span>
+<span id="L12"><span class="lineNum">      12</span>              : namespace coordinator {</span>
+<span id="L13"><span class="lineNum">      13</span>              : namespace {</span>
+<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_F(RouteClassifierTest, UncorrelatedSubqueryExprStaysOnFastPath) {</span></span>
+<span id="L15"><span class="lineNum">      15</span>              :   // `WHERE id IN (SELECT n FROM UNNEST([1, 2, 3]) AS n)` is a</span>
+<span id="L16"><span class="lineNum">      16</span>              :   // non-correlated IN subquery: the inner SELECT does not</span>
+<span id="L17"><span class="lineNum">      17</span>              :   // reference any column from the outer scan. The analyzer marks</span>
+<span id="L18"><span class="lineNum">      18</span>              :   // this by leaving `parameter_list()` empty. The transpiler's</span>
+<span id="L19"><span class="lineNum">      19</span>              :   // `EmitSubqueryExpr` lowers it directly to DuckDB's</span>
+<span id="L20"><span class="lineNum">      20</span>              :   // `(&lt;lhs&gt; IN (&lt;sub&gt;))` shape, so the classifier MUST keep the</span>
+<span id="L21"><span class="lineNum">      21</span>              :   // query on `kDuckdbNative` -- a false promotion would force the</span>
+<span id="L22"><span class="lineNum">      22</span>              :   // semantic executor to run a shape the fast path handles</span>
+<span id="L23"><span class="lineNum">      23</span>              :   // correctly. See `docs/ENGINE_POLICY.md` Family 3.</span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people &quot;</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :       &quot;WHERE id IN (SELECT n FROM UNNEST([1, 2, 3]) AS n)&quot;);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kDuckdbNative);</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           2 :   EXPECT_TRUE(d.offending_node.empty()) &lt;&lt; d.offending_node;</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L32"><span class="lineNum">      32</span>              : </span>
+<span id="L33"><span class="lineNum">      33</span>              : TEST_F(RouteClassifierTest,</span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :        CorrelatedScalarSubqueryExprPromotesToSemanticExecutor) {</span></span>
+<span id="L35"><span class="lineNum">      35</span>              :   // `(SELECT COUNT(*) FROM &lt;inner&gt; WHERE &lt;inner&gt;.k = outer.k)` is</span>
+<span id="L36"><span class="lineNum">      36</span>              :   // a correlated scalar subquery: the inner WHERE clause</span>
+<span id="L37"><span class="lineNum">      37</span>              :   // references the outer scan's column. The analyzer marks the</span>
+<span id="L38"><span class="lineNum">      38</span>              :   // referenced outer columns in `ResolvedSubqueryExpr::parameter_list()`,</span>
+<span id="L39"><span class="lineNum">      39</span>              :   // which the classifier inspects via `VisitResolvedSubqueryExpr`.</span>
+<span id="L40"><span class="lineNum">      40</span>              :   // Promotion to `kSemanticExecutor` is mandatory: DuckDB's</span>
+<span id="L41"><span class="lineNum">      41</span>              :   // correlated-subquery decorrelation does not guarantee BigQuery</span>
+<span id="L42"><span class="lineNum">      42</span>              :   // per-outer-row evaluation order for every shape, and the only</span>
+<span id="L43"><span class="lineNum">      43</span>              :   // way to avoid silent approximation is to evaluate the inner</span>
+<span id="L44"><span class="lineNum">      44</span>              :   // subquery once per outer row in the local interpreter.</span>
+<span id="L45"><span class="lineNum">      45</span>              :   //</span>
+<span id="L46"><span class="lineNum">      46</span>              :   // The semantic executor's correlated-subquery evaluator is</span>
+<span id="L47"><span class="lineNum">      47</span>              :   // `docs/ENGINE_POLICY.md` Family 4 (deferred to a</span>
+<span id="L48"><span class="lineNum">      48</span>              :   // follow-up subagent); until it lands the gateway surfaces</span>
+<span id="L49"><span class="lineNum">      49</span>              :   // UNIMPLEMENTED via the executor stub. That is the same</span>
+<span id="L50"><span class="lineNum">      50</span>              :   // end-user-visible outcome the fast path's empty-string</span>
+<span id="L51"><span class="lineNum">      51</span>              :   // contract would produce, but going through the classifier</span>
+<span id="L52"><span class="lineNum">      52</span>              :   // means the disposition is a deliberate route choice, not a</span>
+<span id="L53"><span class="lineNum">      53</span>              :   // surprise transpiler bailout.</span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           1 :       &quot;SELECT (SELECT COUNT(*) FROM people AS p WHERE p.id = people.id) AS c &quot;</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 :       &quot;FROM people&quot;);</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedSubqueryExpr(correlated)&quot;);</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L62"><span class="lineNum">      62</span>              : </span>
+<span id="L63"><span class="lineNum">      63</span>              : TEST_F(RouteClassifierTest,</span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 :        CorrelatedExistsSubqueryExprPromotesToSemanticExecutor) {</span></span>
+<span id="L65"><span class="lineNum">      65</span>              :   // `EXISTS (SELECT 1 FROM &lt;inner&gt; WHERE &lt;inner&gt;.k = outer.k)` is</span>
+<span id="L66"><span class="lineNum">      66</span>              :   // the most common correlated subquery shape (semi-join</span>
+<span id="L67"><span class="lineNum">      67</span>              :   // expression). The classifier promotes it for the same reason</span>
+<span id="L68"><span class="lineNum">      68</span>              :   // as the scalar case: per-outer-row evaluation order is</span>
+<span id="L69"><span class="lineNum">      69</span>              :   // BigQuery-defined, not DuckDB's call. Self-join the only</span>
+<span id="L70"><span class="lineNum">      70</span>              :   // available table (`people`) so the test does not depend on a</span>
+<span id="L71"><span class="lineNum">      71</span>              :   // second catalog table. The semantic executor evaluator is</span>
+<span id="L72"><span class="lineNum">      72</span>              :   // Family 4.</span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           1 :       &quot;SELECT id FROM people &quot;</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           1 :       &quot;WHERE EXISTS (SELECT 1 FROM people AS p WHERE p.id = people.id)&quot;);</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedSubqueryExpr(correlated)&quot;);</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L81"><span class="lineNum">      81</span>              : </span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, BarrierScanPromotesToSemanticExecutor) {</span></span>
+<span id="L83"><span class="lineNum">      83</span>              :   // `docs/ENGINE_POLICY.md` Family 2. A</span>
+<span id="L84"><span class="lineNum">      84</span>              :   // `ResolvedBarrierScan` is a pipe-operator optimizer marker that</span>
+<span id="L85"><span class="lineNum">      85</span>              :   // blocks fusion across its boundary. DuckDB has no analog</span>
+<span id="L86"><span class="lineNum">      86</span>              :   // contract, so the classifier MUST promote any query containing</span>
+<span id="L87"><span class="lineNum">      87</span>              :   // one to `kSemanticExecutor` (the row's YAML disposition).</span>
+<span id="L88"><span class="lineNum">      88</span>              :   //</span>
+<span id="L89"><span class="lineNum">      89</span>              :   // We exercise the YAML row directly via a hand-built statement</span>
+<span id="L90"><span class="lineNum">      90</span>              :   // because the analyzer does not emit `ResolvedBarrierScan` for</span>
+<span id="L91"><span class="lineNum">      91</span>              :   // surface SQL today (pipe operators are an analyzer feature flag).</span>
+<span id="L92"><span class="lineNum">      92</span>              :   // The hand-built shape mirrors what the analyzer emits for</span>
+<span id="L93"><span class="lineNum">      93</span>              :   // `&lt;expr&gt; |&gt; BARRIER` once the flag flips.</span>
+<span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">           1 :   auto single = ::googlesql::MakeResolvedSingleRowScan();</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">           1 :   auto barrier = ::googlesql::MakeResolvedBarrierScan(</span></span>
+<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">           1 :       /*column_list=*/{}, std::move(single));</span></span>
+<span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">           1 :   ::googlesql::ResolvedColumn out_col(</span></span>
+<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">           1 :       /*column_id=*/200,</span></span>
+<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">           1 :       /*table_name=*/::googlesql::IdString::MakeGlobal(&quot;$query&quot;),</span></span>
+<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">           1 :       /*name=*/::googlesql::IdString::MakeGlobal(&quot;c&quot;),</span></span>
+<span id="L101"><span class="lineNum">     101</span> <span class="tlaGNC">           1 :       type_factory_-&gt;get_int64());</span></span>
+<span id="L102"><span class="lineNum">     102</span> <span class="tlaGNC">           1 :   std::vector&lt;std::unique_ptr&lt;const ::googlesql::ResolvedComputedColumn&gt;&gt; exprs;</span></span>
+<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">           1 :   exprs.push_back(::googlesql::MakeResolvedComputedColumn(</span></span>
+<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">           1 :       out_col, ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(7))));</span></span>
+<span id="L105"><span class="lineNum">     105</span> <span class="tlaGNC">           1 :   auto project = ::googlesql::MakeResolvedProjectScan(</span></span>
+<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC">           1 :       /*column_list=*/{out_col}, std::move(exprs), std::move(barrier));</span></span>
+<span id="L107"><span class="lineNum">     107</span> <span class="tlaGNC">           1 :   std::vector&lt;std::unique_ptr&lt;const ::googlesql::ResolvedOutputColumn&gt;&gt; outputs;</span></span>
+<span id="L108"><span class="lineNum">     108</span> <span class="tlaGNC">           1 :   outputs.push_back(::googlesql::MakeResolvedOutputColumn(&quot;c&quot;, out_col));</span></span>
+<span id="L109"><span class="lineNum">     109</span> <span class="tlaGNC">           1 :   auto query_stmt = ::googlesql::MakeResolvedQueryStmt(</span></span>
+<span id="L110"><span class="lineNum">     110</span> <span class="tlaGNC">           1 :       std::move(outputs), /*is_value_table=*/false, std::move(project));</span></span>
+<span id="L111"><span class="lineNum">     111</span>              : </span>
+<span id="L112"><span class="lineNum">     112</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*query_stmt);</span></span>
+<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);</span></span>
+<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedBarrierScan&quot;);</span></span>
+<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L116"><span class="lineNum">     116</span>              : </span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, PivotScanRoutesToDuckdbRewrite) {</span></span>
+<span id="L118"><span class="lineNum">     118</span>              :   // `docs/ENGINE_POLICY.md` Family 3. The engine</span>
+<span id="L119"><span class="lineNum">     119</span>              :   // disables `REWRITE_PIVOT` so the analyzer hands us a raw</span>
+<span id="L120"><span class="lineNum">     120</span>              :   // `ResolvedPivotScan`; the disposition table routes it through</span>
+<span id="L121"><span class="lineNum">     121</span>              :   // `kDuckdbRewrite`, and the transpiler's `EmitPivotScan` lowers</span>
+<span id="L122"><span class="lineNum">     122</span>              :   // it to DuckDB conditional aggregation (FILTER).</span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT * FROM people PIVOT(COUNT(*) FOR name IN ('a', 'b'))&quot;);</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);</span></span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L129"><span class="lineNum">     129</span>              : </span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, UnpivotScanRoutesToDuckdbRewrite) {</span></span>
+<span id="L131"><span class="lineNum">     131</span>              :   // Same as the PIVOT test above but for `ResolvedUnpivotScan`.</span>
+<span id="L132"><span class="lineNum">     132</span>              :   // The engine disables `REWRITE_UNPIVOT`; the disposition table</span>
+<span id="L133"><span class="lineNum">     133</span>              :   // routes it through `kDuckdbRewrite`; the transpiler's</span>
+<span id="L134"><span class="lineNum">     134</span>              :   // `EmitUnpivotScan` lowers it to UNION ALL.</span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT * FROM people UNPIVOT(value FOR label IN (id))&quot;);</span></span>
+<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);</span></span>
+<span id="L140"><span class="lineNum">     140</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L141"><span class="lineNum">     141</span>              : </span>
+<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {</span></span>
+<span id="L143"><span class="lineNum">     143</span>              :   // `docs/ENGINE_POLICY.md` Family 4. The disposition</span>
+<span id="L144"><span class="lineNum">     144</span>              :   // table routes `ResolvedRecursiveScan` (and its</span>
+<span id="L145"><span class="lineNum">     145</span>              :   // `ResolvedRecursiveRefScan` reference) through `kDuckdbRewrite`;</span>
+<span id="L146"><span class="lineNum">     146</span>              :   // the transpiler's `EmitRecursiveScan` lowers it to DuckDB's</span>
+<span id="L147"><span class="lineNum">     147</span>              :   // `WITH RECURSIVE`.</span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           1 :       &quot;WITH RECURSIVE r AS (&quot;</span></span>
+<span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           1 :       &quot;  SELECT 1 AS n&quot;</span></span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC">           1 :       &quot;  UNION ALL&quot;</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">           1 :       &quot;  SELECT n FROM r&quot;</span></span>
+<span id="L153"><span class="lineNum">     153</span> <span class="tlaGNC">           1 :       &quot;)&quot;</span></span>
+<span id="L154"><span class="lineNum">     154</span> <span class="tlaGNC">           1 :       &quot;SELECT n FROM r&quot;);</span></span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L159"><span class="lineNum">     159</span>              : </span>
+<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {</span></span>
+<span id="L161"><span class="lineNum">     161</span>              :   // `docs/ENGINE_POLICY.md` Family 5. A</span>
+<span id="L162"><span class="lineNum">     162</span>              :   // `ResolvedDeferredComputedColumn` is the side-effect-aware</span>
+<span id="L163"><span class="lineNum">     163</span>              :   // form of a computed column the analyzer emits when conditional</span>
+<span id="L164"><span class="lineNum">     164</span>              :   // / pipe-evaluation features capture errors in a companion</span>
+<span id="L165"><span class="lineNum">     165</span>              :   // BYTES `side_effect_column`. DuckDB has no native model for the</span>
+<span id="L166"><span class="lineNum">     166</span>              :   // deferred-error semantic; the disposition table routes any</span>
+<span id="L167"><span class="lineNum">     167</span>              :   // query containing one to the semantic executor.</span>
+<span id="L168"><span class="lineNum">     168</span>              :   //</span>
+<span id="L169"><span class="lineNum">     169</span>              :   // The analyzer only emits this shape under specific feature</span>
+<span id="L170"><span class="lineNum">     170</span>              :   // flags that the engine does not enable today, so we exercise</span>
+<span id="L171"><span class="lineNum">     171</span>              :   // the YAML row by hand-building a `ResolvedAggregateScan` whose</span>
+<span id="L172"><span class="lineNum">     172</span>              :   // `aggregate_list` (typed as `ResolvedComputedColumnBase`) holds</span>
+<span id="L173"><span class="lineNum">     173</span>              :   // a `ResolvedDeferredComputedColumn`. The classifier walks the</span>
+<span id="L174"><span class="lineNum">     174</span>              :   // statement tree and promotes the route via the YAML lookup the</span>
+<span id="L175"><span class="lineNum">     175</span>              :   // moment it sees the deferred node.</span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :   ::googlesql::ResolvedColumn out_col(</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 :       /*column_id=*/300,</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 :       /*table_name=*/::googlesql::IdString::MakeGlobal(&quot;$query&quot;),</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 :       /*name=*/::googlesql::IdString::MakeGlobal(&quot;v&quot;),</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 :       type_factory_-&gt;get_int64());</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 :   ::googlesql::ResolvedColumn side_col(</span></span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 :       /*column_id=*/301,</span></span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :       /*table_name=*/::googlesql::IdString::MakeGlobal(&quot;$query&quot;),</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           1 :       /*name=*/::googlesql::IdString::MakeGlobal(&quot;_se&quot;),</span></span>
+<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           1 :       type_factory_-&gt;get_bytes());</span></span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :   std::vector&lt;std::unique_ptr&lt;const ::googlesql::ResolvedComputedColumnBase&gt;&gt;</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :       aggregate_list;</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :   aggregate_list.push_back(::googlesql::MakeResolvedDeferredComputedColumn(</span></span>
+<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :       out_col,</span></span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           1 :       ::googlesql::MakeResolvedLiteral(::googlesql::Value::Int64(0)),</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           1 :       side_col));</span></span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 :   auto agg_scan = ::googlesql::MakeResolvedAggregateScan(</span></span>
+<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 :       /*column_list=*/{out_col},</span></span>
+<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">           1 :       ::googlesql::MakeResolvedSingleRowScan(),</span></span>
+<span id="L195"><span class="lineNum">     195</span> <span class="tlaGNC">           1 :       /*group_by_list=*/{},</span></span>
+<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           1 :       std::move(aggregate_list),</span></span>
+<span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           1 :       /*grouping_set_list=*/{},</span></span>
+<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">           1 :       /*rollup_column_list=*/{});</span></span>
+<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">           1 :   std::vector&lt;std::unique_ptr&lt;const ::googlesql::ResolvedOutputColumn&gt;&gt; outputs;</span></span>
+<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           1 :   outputs.push_back(::googlesql::MakeResolvedOutputColumn(&quot;v&quot;, out_col));</span></span>
+<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           1 :   auto query_stmt = ::googlesql::MakeResolvedQueryStmt(</span></span>
+<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">           1 :       std::move(outputs), /*is_value_table=*/false, std::move(agg_scan));</span></span>
+<span id="L203"><span class="lineNum">     203</span>              : </span>
+<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*query_stmt);</span></span>
+<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);</span></span>
+<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedDeferredComputedColumn&quot;);</span></span>
+<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L208"><span class="lineNum">     208</span>              : </span>
+<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, DifferentialPrivacyAggregateScanRoutesToLocalStub) {</span></span>
+<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">           1 :       &quot;SELECT WITH DIFFERENTIAL_PRIVACY &quot;</span></span>
+<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">           1 :       &quot;OPTIONS(epsilon=10, delta=0.01, privacy_unit_column=id) &quot;</span></span>
+<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">           1 :       &quot;name, COUNT(*) AS c FROM people GROUP BY name&quot;);</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L215"><span class="lineNum">     215</span>              : </span>
+<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedDifferentialPrivacyAggregateScan&quot;);</span></span>
+<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           2 :   EXPECT_NE(d.reason.find(&quot;local-stub&quot;), std::string::npos)</span></span>
+<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;reason should mention the local-stub route; got: &quot; &lt;&lt; d.reason;</span></span>
+<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L222"><span class="lineNum">     222</span>              : </span>
+<span id="L223"><span class="lineNum">     223</span>              : TEST_F(RouteClassifierTest,</span>
+<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           1 :        AggregationThresholdAggregateScanRoutesToLocalStub) {</span></span>
+<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           1 :       &quot;SELECT WITH AGGREGATION_THRESHOLD &quot;</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           1 :       &quot;OPTIONS(threshold=1, privacy_unit_column=id) &quot;</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           1 :       &quot;name, COUNT(*) AS c FROM people GROUP BY name&quot;);</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L230"><span class="lineNum">     230</span>              : </span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedAggregationThresholdAggregateScan&quot;);</span></span>
+<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L235"><span class="lineNum">     235</span>              : </span>
+<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, AnonymizedAggregateScanRoutesToLocalStub) {</span></span>
+<span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           1 :       &quot;SELECT WITH ANONYMIZATION &quot;</span></span>
+<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           1 :       &quot;OPTIONS(k_threshold=1, epsilon=10) &quot;</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           1 :       &quot;name, COUNT(*) AS c FROM people GROUP BY name&quot;);</span></span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L242"><span class="lineNum">     242</span>              : </span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedAnonymizedAggregateScan&quot;);</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L247"><span class="lineNum">     247</span>              : </span>
+<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, MlPredictRoutesToLocalStub) {</span></span>
+<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">           1 :       &quot;SELECT * FROM ML.PREDICT(MODEL `ds.unregistered_model`, &quot;</span></span>
+<span id="L251"><span class="lineNum">     251</span> <span class="tlaGNC">           1 :       &quot;(SELECT 1.0 AS f1))&quot;);</span></span>
+<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L253"><span class="lineNum">     253</span>              : </span>
+<span id="L254"><span class="lineNum">     254</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L255"><span class="lineNum">     255</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L256"><span class="lineNum">     256</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;function:ml.predict&quot;);</span></span>
+<span id="L257"><span class="lineNum">     257</span> <span class="tlaGNC">           2 :   EXPECT_NE(d.reason.find(&quot;local-stub&quot;), std::string::npos)</span></span>
+<span id="L258"><span class="lineNum">     258</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;reason should mention the local-stub route; got: &quot; &lt;&lt; d.reason;</span></span>
+<span id="L259"><span class="lineNum">     259</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L260"><span class="lineNum">     260</span>              : </span>
+<span id="L261"><span class="lineNum">     261</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, KeysFunctionRoutesToLocalStub) {</span></span>
+<span id="L262"><span class="lineNum">     262</span>              :   // `KEYS.NEW_KEYSET('AEAD_AES_GCM_256')` is a `local_stub` row in</span>
+<span id="L263"><span class="lineNum">     263</span>              :   // `functions.yaml` per `docs/ENGINE_POLICY.md`. A</span>
+<span id="L264"><span class="lineNum">     264</span>              :   // SELECT referencing it must promote the route to `kLocalStub`</span>
+<span id="L265"><span class="lineNum">     265</span>              :   // (above `kSemanticExecutor`, below `kUnsupported`) so the</span>
+<span id="L266"><span class="lineNum">     266</span>              :   // coordinator dispatches into the semantic executor's per-family</span>
+<span id="L267"><span class="lineNum">     267</span>              :   // stub handler (`backend/engine/semantic/stubs/keys.cc`). The</span>
+<span id="L268"><span class="lineNum">     268</span>              :   // offending node carries the function name so a future</span>
+<span id="L269"><span class="lineNum">     269</span>              :   // gateway-side error envelope can attribute the stub to the</span>
+<span id="L270"><span class="lineNum">     270</span>              :   // right family.</span>
+<span id="L271"><span class="lineNum">     271</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(&quot;SELECT KEYS.NEW_KEYSET('AEAD_AES_GCM_256')&quot;);</span></span>
+<span id="L272"><span class="lineNum">     272</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L273"><span class="lineNum">     273</span>              : </span>
+<span id="L274"><span class="lineNum">     274</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L276"><span class="lineNum">     276</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;function:keys.new_keyset&quot;);</span></span>
+<span id="L277"><span class="lineNum">     277</span> <span class="tlaGNC">           2 :   EXPECT_NE(d.reason.find(&quot;local-stub&quot;), std::string::npos)</span></span>
+<span id="L278"><span class="lineNum">     278</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;reason should mention the local-stub route; got: &quot; &lt;&lt; d.reason;</span></span>
+<span id="L279"><span class="lineNum">     279</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L280"><span class="lineNum">     280</span>              : </span>
+<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, LocalStubOutranksSemanticExecutorInSameQuery) {</span></span>
+<span id="L282"><span class="lineNum">     282</span>              :   // When a `local_stub` function (`KEYS.NEW_KEYSET`) and a</span>
+<span id="L283"><span class="lineNum">     283</span>              :   // `semantic_executor` function (`APPROX_QUANTILES`) appear together,</span>
+<span id="L284"><span class="lineNum">     284</span>              :   // the local-stub promotion wins (priority 5 &gt; 4).</span>
+<span id="L285"><span class="lineNum">     285</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">           1 :       &quot;SELECT APPROX_QUANTILES(id, 4) AS q, &quot;</span></span>
+<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">           1 :       &quot;KEYS.NEW_KEYSET('AEAD_AES_GCM_256') AS k FROM people&quot;);</span></span>
+<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L289"><span class="lineNum">     289</span>              : </span>
+<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kLocalStub);</span></span>
+<span id="L292"><span class="lineNum">     292</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;function:keys.new_keyset&quot;);</span></span>
+<span id="L293"><span class="lineNum">     293</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L294"><span class="lineNum">     294</span>              : </span>
+<span id="L295"><span class="lineNum">     295</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, MatchRecognizeScanPromotesToSemanticExecutor) {</span></span>
+<span id="L296"><span class="lineNum">     296</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(</span></span>
+<span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">           1 :       &quot;SELECT m FROM people MATCH_RECOGNIZE(&quot;</span></span>
+<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">           1 :       &quot;ORDER BY id MEASURES COUNT(*) AS m PATTERN (A) DEFINE A AS id &gt; 0)&quot;);</span></span>
+<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L300"><span class="lineNum">     300</span>              : </span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);</span></span>
+<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedMatchRecognizeScan&quot;);</span></span>
+<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L305"><span class="lineNum">     305</span>              : </span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">           1 : TEST_F(RouteClassifierTest, ExplainStatementRoutesToUnsupported) {</span></span>
+<span id="L307"><span class="lineNum">     307</span>              :   // EXPLAIN is not a BigQuery statement (bq dry-run: &quot;Statement not</span>
+<span id="L308"><span class="lineNum">     308</span>              :   // supported: ExplainStatement&quot;); the analyzer here still parses it</span>
+<span id="L309"><span class="lineNum">     309</span>              :   // because the test fixture enables all statement kinds, but the</span>
+<span id="L310"><span class="lineNum">     310</span>              :   // classifier must route it to the deliberate `unsupported` envelope.</span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 :   const auto* stmt = Analyze(&quot;EXPLAIN SELECT * FROM people&quot;);</span></span>
+<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L313"><span class="lineNum">     313</span>              : </span>
+<span id="L314"><span class="lineNum">     314</span> <span class="tlaGNC">           1 :   RouteDecision d = classifier_.Classify(*stmt);</span></span>
+<span id="L315"><span class="lineNum">     315</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.disposition, Disposition::kUnsupported);</span></span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">           1 :   EXPECT_EQ(d.offending_node, &quot;ResolvedExplainStmt&quot;);</span></span>
+<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L318"><span class="lineNum">     318</span>              : }  // namespace</span>
+<span id="L319"><span class="lineNum">     319</span>              : }  // namespace coordinator</span>
+<span id="L320"><span class="lineNum">     320</span>              : }  // namespace engine</span>
+<span id="L321"><span class="lineNum">     321</span>              : }  // namespace backend</span>
+<span id="L322"><span class="lineNum">     322</span>              : }  // namespace bigquery_emulator</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

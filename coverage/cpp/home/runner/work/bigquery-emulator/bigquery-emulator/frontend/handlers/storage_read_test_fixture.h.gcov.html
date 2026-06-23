@@ -1,0 +1,171 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - home/runner/work/bigquery-emulator/bigquery-emulator/frontend/handlers/storage_read_test_fixture.h</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../../../index.html">top level</a> - <a href="index.html">/home/runner/work/bigquery-emulator/bigquery-emulator/frontend/handlers</a> - storage_read_test_fixture.h<span style="font-size: 80%;"> (source / <a href="storage_read_test_fixture.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">53</td>
+            <td class="headerCovTableEntry">53</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">5</td>
+          </tr>
+                  <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #ifndef BIGQUERY_EMULATOR_FRONTEND_HANDLERS_STORAGE_READ_TEST_FIXTURE_H_</span>
+<span id="L2"><span class="lineNum">       2</span>              : #define BIGQUERY_EMULATOR_FRONTEND_HANDLERS_STORAGE_READ_TEST_FIXTURE_H_</span>
+<span id="L3"><span class="lineNum">       3</span>              : </span>
+<span id="L4"><span class="lineNum">       4</span>              : #include &lt;cstdint&gt;</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &lt;cstdlib&gt;</span>
+<span id="L6"><span class="lineNum">       6</span>              : #include &lt;filesystem&gt;</span>
+<span id="L7"><span class="lineNum">       7</span>              : #include &lt;memory&gt;</span>
+<span id="L8"><span class="lineNum">       8</span>              : #include &lt;random&gt;</span>
+<span id="L9"><span class="lineNum">       9</span>              : #include &lt;string&gt;</span>
+<span id="L10"><span class="lineNum">      10</span>              : #include &lt;system_error&gt;</span>
+<span id="L11"><span class="lineNum">      11</span>              : #include &lt;utility&gt;</span>
+<span id="L12"><span class="lineNum">      12</span>              : #include &lt;vector&gt;</span>
+<span id="L13"><span class="lineNum">      13</span>              : </span>
+<span id="L14"><span class="lineNum">      14</span>              : #include &quot;absl/strings/str_cat.h&quot;</span>
+<span id="L15"><span class="lineNum">      15</span>              : #include &quot;backend/schema/schema.h&quot;</span>
+<span id="L16"><span class="lineNum">      16</span>              : #include &quot;backend/storage/duckdb/duckdb_storage.h&quot;</span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &quot;backend/storage/storage.h&quot;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &quot;frontend/handlers/storage_read.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &quot;gtest/gtest.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &quot;proto/storage_read.pb.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>              : </span>
+<span id="L22"><span class="lineNum">      22</span>              : namespace bigquery_emulator {</span>
+<span id="L23"><span class="lineNum">      23</span>              : namespace frontend {</span>
+<span id="L24"><span class="lineNum">      24</span>              : </span>
+<span id="L25"><span class="lineNum">      25</span>              : namespace fs = std::filesystem;</span>
+<span id="L26"><span class="lineNum">      26</span>              : </span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">          27 : inline fs::path MakeTempDataDir(absl::string_view prefix) {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          27 :   const char* tmpdir_env = std::getenv(&quot;TMPDIR&quot;);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          27 :   const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : &quot;/tmp&quot;;</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          27 :   std::random_device rd;</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          27 :   std::seed_seq seed{rd(), rd()};</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          27 :   std::mt19937_64 rng(seed);</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          27 :   fs::path out = fs::path(tmpdir) /</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          27 :                  absl::StrCat(&quot;bqemu-&quot;, std::string(prefix), &quot;-&quot;, rng());</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          27 :   std::error_code ec;</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          27 :   fs::remove_all(out, ec);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          27 :   return out;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          27 : }</span></span>
+<span id="L39"><span class="lineNum">      39</span>              : </span>
+<span id="L40"><span class="lineNum">      40</span>              : class StorageReadServiceTest : public ::testing::Test {</span>
+<span id="L41"><span class="lineNum">      41</span>              :  protected:</span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">          17 :   void SetUp() override {</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          17 :     data_dir_ = MakeTempDataDir(&quot;storage-read-test&quot;);</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          17 :     auto opened =</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          17 :         backend::storage::duckdb::DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          34 :     ASSERT_TRUE(opened.ok()) &lt;&lt; opened.status();</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          17 :     storage_ = std::move(opened).value();</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          17 :     service_ = std::make_unique&lt;StorageReadService&gt;(storage_.get());</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          17 :   }</span></span>
+<span id="L50"><span class="lineNum">      50</span>              : </span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          17 :   void TearDown() override {</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">          17 :     service_.reset();</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">          17 :     storage_.reset();</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          17 :     std::error_code ec;</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          17 :     fs::remove_all(data_dir_, ec);</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">          17 :   }</span></span>
+<span id="L57"><span class="lineNum">      57</span>              : </span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          12 :   void CreatePeopleTable() {</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">          12 :     backend::schema::TableSchema schema;</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">          12 :     backend::schema::ColumnSchema id;</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          12 :     id.name = &quot;id&quot;;</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">          12 :     id.type = backend::schema::ColumnType::kInt64;</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">          12 :     id.mode = backend::schema::ColumnMode::kRequired;</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">          12 :     schema.columns.push_back(id);</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">          12 :     backend::schema::ColumnSchema name;</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          12 :     name.name = &quot;name&quot;;</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          12 :     name.type = backend::schema::ColumnType::kString;</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">          12 :     name.mode = backend::schema::ColumnMode::kNullable;</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">          12 :     schema.columns.push_back(name);</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">          12 :     backend::schema::ColumnSchema tags;</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">          12 :     tags.name = &quot;tags&quot;;</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          12 :     tags.type = backend::schema::ColumnType::kString;</span></span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">          12 :     tags.mode = backend::schema::ColumnMode::kRepeated;</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">          12 :     schema.columns.push_back(tags);</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">          12 :     ASSERT_TRUE(storage_-&gt;CreateDataset({&quot;proj-test&quot;, &quot;ds&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">          12 :     ASSERT_TRUE(storage_-&gt;CreateTable({&quot;proj-test&quot;, &quot;ds&quot;, &quot;t&quot;}, schema).ok());</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">          12 :   }</span></span>
+<span id="L78"><span class="lineNum">      78</span>              : </span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">          14 :   v1::CreateReadSessionRequest MakePeopleRequest() {</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">          14 :     v1::CreateReadSessionRequest req;</span></span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">          14 :     req.set_parent(&quot;projects/proj-test&quot;);</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">          14 :     req.mutable_read_session()-&gt;set_table(</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">          14 :         &quot;projects/proj-test/datasets/ds/tables/t&quot;);</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">          14 :     return req;</span></span>
+<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">          14 :   }</span></span>
+<span id="L86"><span class="lineNum">      86</span>              : </span>
+<span id="L87"><span class="lineNum">      87</span>              :   fs::path data_dir_{};</span>
+<span id="L88"><span class="lineNum">      88</span>              :   std::unique_ptr&lt;backend::storage::duckdb::DuckDBStorage&gt; storage_{};</span>
+<span id="L89"><span class="lineNum">      89</span>              :   std::unique_ptr&lt;StorageReadService&gt; service_{};</span>
+<span id="L90"><span class="lineNum">      90</span>              : };</span>
+<span id="L91"><span class="lineNum">      91</span>              : </span>
+<span id="L92"><span class="lineNum">      92</span>              : }  // namespace frontend</span>
+<span id="L93"><span class="lineNum">      93</span>              : }  // namespace bigquery_emulator</span>
+<span id="L94"><span class="lineNum">      94</span>              : </span>
+<span id="L95"><span class="lineNum">      95</span>              : #endif  // BIGQUERY_EMULATOR_FRONTEND_HANDLERS_STORAGE_READ_TEST_FIXTURE_H_</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>

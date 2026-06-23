@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - engine/semantic/error.h</title>
+  <link rel="stylesheet" type="text/css" href="../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">engine/semantic</a> - error.h<span style="font-size: 80%;"> (source / <a href="error.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : #ifndef BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_ERROR_H_</span>
+<span id="L2"><span class="lineNum">       2</span>              : #define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_ERROR_H_</span>
+<span id="L3"><span class="lineNum">       3</span>              : </span>
+<span id="L4"><span class="lineNum">       4</span>              : // Semantic-executor structured errors.</span>
+<span id="L5"><span class="lineNum">       5</span>              : //</span>
+<span id="L6"><span class="lineNum">       6</span>              : // Every evaluation failure surfaces an `absl::Status` whose code is</span>
+<span id="L7"><span class="lineNum">       7</span>              : // `absl::StatusCode::kInvalidArgument` (the BigQuery REST envelope</span>
+<span id="L8"><span class="lineNum">       8</span>              : // for an in-query runtime error) carrying a `SemanticErrorReason`</span>
+<span id="L9"><span class="lineNum">       9</span>              : // payload. The gateway maps the payload onto the BigQuery REST</span>
+<span id="L10"><span class="lineNum">      10</span>              : // `error.errors[0].reason` token; see</span>
+<span id="L11"><span class="lineNum">      11</span>              : // `docs/ENGINE_POLICY.md` &quot;Step 7&quot;.</span>
+<span id="L12"><span class="lineNum">      12</span>              : //</span>
+<span id="L13"><span class="lineNum">      13</span>              : // The plan rule is &quot;no silent approximation&quot;: the semantic executor</span>
+<span id="L14"><span class="lineNum">      14</span>              : // owns the BigQuery-exact error surface. Every reason in the enum</span>
+<span id="L15"><span class="lineNum">      15</span>              : // below corresponds to a distinct BigQuery REST `reason` value the</span>
+<span id="L16"><span class="lineNum">      16</span>              : // real product returns for the matching failure class.</span>
+<span id="L17"><span class="lineNum">      17</span>              : </span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;ostream&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;string&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &quot;absl/status/status.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span>              : namespace bigquery_emulator {</span>
+<span id="L25"><span class="lineNum">      25</span>              : namespace backend {</span>
+<span id="L26"><span class="lineNum">      26</span>              : namespace engine {</span>
+<span id="L27"><span class="lineNum">      27</span>              : namespace semantic {</span>
+<span id="L28"><span class="lineNum">      28</span>              : </span>
+<span id="L29"><span class="lineNum">      29</span>              : // Classification for an evaluation-time failure. Each value lines up</span>
+<span id="L30"><span class="lineNum">      30</span>              : // 1:1 with a BigQuery REST `error.errors[0].reason` token so the</span>
+<span id="L31"><span class="lineNum">      31</span>              : // gateway can translate a `SemanticError` payload into the wire</span>
+<span id="L32"><span class="lineNum">      32</span>              : // error envelope without losing fidelity. Adding a new value here</span>
+<span id="L33"><span class="lineNum">      33</span>              : // MUST be paired with a matching gateway-side mapping update.</span>
+<span id="L34"><span class="lineNum">      34</span>              : enum class SemanticErrorReason {</span>
+<span id="L35"><span class="lineNum">      35</span>              :   // Generic INVALID_ARGUMENT (BigQuery REST `invalidQuery`). Use</span>
+<span id="L36"><span class="lineNum">      36</span>              :   // sparingly; reach for one of the more specific reasons below</span>
+<span id="L37"><span class="lineNum">      37</span>              :   // whenever possible.</span>
+<span id="L38"><span class="lineNum">      38</span>              :   kInvalidArgument = 0,</span>
+<span id="L39"><span class="lineNum">      39</span>              :   // Division (or modulo) by zero. BigQuery surfaces this as</span>
+<span id="L40"><span class="lineNum">      40</span>              :   // `divisionByZero` in the REST error envelope.</span>
+<span id="L41"><span class="lineNum">      41</span>              :   kDivisionByZero = 1,</span>
+<span id="L42"><span class="lineNum">      42</span>              :   // Arithmetic overflow on the current numeric type. BigQuery</span>
+<span id="L43"><span class="lineNum">      43</span>              :   // surfaces this as `overflow`.</span>
+<span id="L44"><span class="lineNum">      44</span>              :   kOverflow = 2,</span>
+<span id="L45"><span class="lineNum">      45</span>              :   // A function / shape the semantic executor recognizes but has</span>
+<span id="L46"><span class="lineNum">      46</span>              :   // not yet implemented. BigQuery surfaces this as `notImplemented`;</span>
+<span id="L47"><span class="lineNum">      47</span>              :   // the coordinator may translate it to gRPC UNIMPLEMENTED so the</span>
+<span id="L48"><span class="lineNum">      48</span>              :   // gateway folds it into the standard `notImplemented` reason.</span>
+<span id="L49"><span class="lineNum">      49</span>              :   kNotImplemented = 3,</span>
+<span id="L50"><span class="lineNum">      50</span>              : };</span>
+<span id="L51"><span class="lineNum">      51</span>              : </span>
+<span id="L52"><span class="lineNum">      52</span>              : // String form of `reason` used in log lines / debug output. The</span>
+<span id="L53"><span class="lineNum">      53</span>              : // returned `string_view` references a static literal; callers do</span>
+<span id="L54"><span class="lineNum">      54</span>              : // not own it.</span>
+<span id="L55"><span class="lineNum">      55</span>              : absl::string_view SemanticErrorReasonName(SemanticErrorReason reason);</span>
+<span id="L56"><span class="lineNum">      56</span>              : </span>
+<span id="L57"><span class="lineNum">      57</span>              : // BigQuery REST `error.errors[0].reason` token for `reason`. The</span>
+<span id="L58"><span class="lineNum">      58</span>              : // returned `string_view` references a static literal.</span>
+<span id="L59"><span class="lineNum">      59</span>              : absl::string_view BigQueryReasonToken(SemanticErrorReason reason);</span>
+<span id="L60"><span class="lineNum">      60</span>              : </span>
+<span id="L61"><span class="lineNum">      61</span>              : // Build the `absl::Status` payload that carries the structured</span>
+<span id="L62"><span class="lineNum">      62</span>              : // error. The status code is INVALID_ARGUMENT for every reason</span>
+<span id="L63"><span class="lineNum">      63</span>              : // except `kNotImplemented`, which uses UNIMPLEMENTED so the gateway</span>
+<span id="L64"><span class="lineNum">      64</span>              : // maps it onto BigQuery's `notImplemented` reason without an</span>
+<span id="L65"><span class="lineNum">      65</span>              : // explicit payload lookup. The `message` is rendered verbatim onto</span>
+<span id="L66"><span class="lineNum">      66</span>              : // the status message.</span>
+<span id="L67"><span class="lineNum">      67</span>              : absl::Status MakeSemanticError(SemanticErrorReason reason,</span>
+<span id="L68"><span class="lineNum">      68</span>              :                                absl::string_view message);</span>
+<span id="L69"><span class="lineNum">      69</span>              : </span>
+<span id="L70"><span class="lineNum">      70</span>              : // Extract the `SemanticErrorReason` payload from `status`. Returns</span>
+<span id="L71"><span class="lineNum">      71</span>              : // `kInvalidArgument` when `status` is OK or carries no semantic</span>
+<span id="L72"><span class="lineNum">      72</span>              : // payload, so callers do not have to guard the call.</span>
+<span id="L73"><span class="lineNum">      73</span>              : SemanticErrorReason GetSemanticErrorReason(const absl::Status&amp; status);</span>
+<span id="L74"><span class="lineNum">      74</span>              : </span>
+<span id="L75"><span class="lineNum">      75</span>              : // String key used to attach the reason on the absl::Status payload</span>
+<span id="L76"><span class="lineNum">      76</span>              : // map. Exported so the coordinator / gateway can read the payload</span>
+<span id="L77"><span class="lineNum">      77</span>              : // off a status that crossed an executor boundary.</span>
+<span id="L78"><span class="lineNum">      78</span>              : inline constexpr absl::string_view kSemanticErrorReasonPayloadUrl =</span>
+<span id="L79"><span class="lineNum">      79</span>              :     &quot;type.googleapis.com/bigquery_emulator.semantic.ErrorReason&quot;;</span>
+<span id="L80"><span class="lineNum">      80</span>              : </span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaUNC tlaBgUNC">           0 : inline std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, SemanticErrorReason reason) {</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaUNC">           0 :   return os &lt;&lt; SemanticErrorReasonName(reason);</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L84"><span class="lineNum">      84</span>              : </span>
+<span id="L85"><span class="lineNum">      85</span>              : }  // namespace semantic</span>
+<span id="L86"><span class="lineNum">      86</span>              : }  // namespace engine</span>
+<span id="L87"><span class="lineNum">      87</span>              : }  // namespace backend</span>
+<span id="L88"><span class="lineNum">      88</span>              : }  // namespace bigquery_emulator</span>
+<span id="L89"><span class="lineNum">      89</span>              : </span>
+<span id="L90"><span class="lineNum">      90</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_ERROR_H_</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
