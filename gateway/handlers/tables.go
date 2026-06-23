@@ -441,7 +441,7 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 			if merged, ok := deps.Metadata.GetTable(projectID, datasetID, tableID); ok {
 				out = merged
 			}
-			if out.LabelsPatchPresent() && len(out.Labels) == 0 {
+			if t.LabelsPatchPresent() && len(out.Labels) == 0 {
 				out.SetOmitEmptyLabelsOnWire(true)
 			}
 			writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, out))
@@ -458,7 +458,7 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		out := catalogTable(r.Context(), deps, projectID, datasetID, tableID, desc)
-		if out.LabelsPatchPresent() && len(out.Labels) == 0 {
+		if t.LabelsPatchPresent() && len(out.Labels) == 0 {
 			out.SetOmitEmptyLabelsOnWire(true)
 		}
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, out))

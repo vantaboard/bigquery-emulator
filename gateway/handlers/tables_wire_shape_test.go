@@ -69,13 +69,12 @@ func TestTablePatchDeleteLabelResponseShape(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("decode patch response: %v", err)
 	}
+	// node-bigquery-tests `deleteLabelTable` logs `apiResponse.labels`
+	// and asserts the output includes `undefined`; live BigQuery omits
+	// the `labels` field entirely once the last label is deleted, so the
+	// emulator must omit it (not return an empty `{}`) on the delete-PATCH
+	// response.
 	if labels, present := doc["labels"]; present {
-		obj, ok := labels.(map[string]any)
-		if !ok {
-			t.Fatalf("labels is %T, want map[string]any", labels)
-		}
-		if len(obj) != 0 {
-			t.Errorf("labels = %v, want empty or omitted", obj)
-		}
+		t.Errorf("labels = %v, want omitted after deleting the last label", labels)
 	}
 }
