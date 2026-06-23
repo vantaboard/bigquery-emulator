@@ -21,6 +21,7 @@ See [`.cursor/rules/pin-reported-bugs.mdc`](../.cursor/rules/pin-reported-bugs.m
 | R7 | `UNION DISTINCT` → "SetOperationScan op is not UNION ALL" | setops fixture + differential | `6bf52da6` semantic UNION DISTINCT |
 | R8 | CTE in subquery → "WithRefScan without active WithScan bindings" | cte_subquery + differential | `a7e968ff` materialized WITH bindings |
 | R9 | Anti-join over QUALIFY-deduped views → DuckDB "column id not found" | differential + transpiler test | `e123bec5`, `0f7f054a` join binding fix |
+| R10 | Correlated / cross-product UNNEST → DuckDB "column id not found" (only `__bq_input_rn`) | conformance + transpiler test | UNNEST id-alias output mapping fix |
 
 ## Paths by tag
 
@@ -71,6 +72,15 @@ See [`.cursor/rules/pin-reported-bugs.mdc`](../.cursor/rules/pin-reported-bugs.m
 - `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`OrphanOrdersQualifyDedupAntiJoinBinds`)
 - `third_party/scenarios/python/test_orphan_orders.py`
 
+### R10 — UNNEST correlated / cross-product binding
+
+- `conformance/fixtures/array_struct/cross_join_unnest.yaml`
+- `conformance/fixtures/core_usage/everyday_sql/unnest_array.yaml`
+- `conformance/fixtures/dml/update_delete_array_offset.yaml`
+- `conformance/fixtures/fastpath/scan_array_unnest_cross_join.yaml`
+- `conformance/fixtures/fastpath/scan_array_unnest_cross_join_three.yaml`
+- `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`CorrelatedUnnestFromTableBinds`, `CoreUsageUnnestArrayShapeBinds`, `NestedUnnestCrossProductBinds`)
+
 ## Machine-readable index
 
 Parsed by `go test ./conformance/ -run TestRegressionsIndexPathsExist`.
@@ -105,4 +115,11 @@ R9:
   - conformance/differential/corpus/orphan_orders_antijoin.yaml
   - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
   - third_party/scenarios/python/test_orphan_orders.py
+R10:
+  - conformance/fixtures/array_struct/cross_join_unnest.yaml
+  - conformance/fixtures/core_usage/everyday_sql/unnest_array.yaml
+  - conformance/fixtures/dml/update_delete_array_offset.yaml
+  - conformance/fixtures/fastpath/scan_array_unnest_cross_join.yaml
+  - conformance/fixtures/fastpath/scan_array_unnest_cross_join_three.yaml
+  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
 ```
