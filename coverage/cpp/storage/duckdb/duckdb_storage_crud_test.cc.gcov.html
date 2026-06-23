@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">280</td>
-            <td class="headerCovTableEntry">280</td>
+            <td class="headerCovTableEntry">339</td>
+            <td class="headerCovTableEntry">339</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td class="headerValue">2026-06-23 09:01:03</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">12</td>
-            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">14</td>
           </tr>
                   <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -442,77 +442,84 @@
 <span id="L380"><span class="lineNum">     380</span> <span class="tlaGNC">           1 :   EXPECT_EQ(scanned.size(), 3u);</span></span>
 <span id="L381"><span class="lineNum">     381</span> <span class="tlaGNC">           1 : }</span></span>
 <span id="L382"><span class="lineNum">     382</span>              : </span>
-<span id="L383"><span class="lineNum">     383</span>              : TEST_F(DuckDBStorageTest, UpsertViewWritesSidecarAndListsInDataset) {</span>
-<span id="L384"><span class="lineNum">     384</span>              :   auto store_or = DuckDBStorage::Open(data_dir_.string());</span>
-<span id="L385"><span class="lineNum">     385</span>              :   ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span>
-<span id="L386"><span class="lineNum">     386</span>              :   auto&amp; store = **store_or;</span>
+<span id="L383"><span class="lineNum">     383</span> <span class="tlaGNC">           1 : TEST_F(DuckDBStorageTest, UpsertViewWritesSidecarAndListsInDataset) {</span></span>
+<span id="L384"><span class="lineNum">     384</span> <span class="tlaGNC">           1 :   auto store_or = DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L385"><span class="lineNum">     385</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span></span>
+<span id="L386"><span class="lineNum">     386</span> <span class="tlaGNC">           1 :   auto&amp; store = **store_or;</span></span>
 <span id="L387"><span class="lineNum">     387</span>              : </span>
-<span id="L388"><span class="lineNum">     388</span>              :   const DatasetId ds{&quot;proj-1&quot;, &quot;ds_1&quot;};</span>
-<span id="L389"><span class="lineNum">     389</span>              :   const ViewId view_id{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;my_view&quot;};</span>
-<span id="L390"><span class="lineNum">     390</span>              :   ASSERT_TRUE(store.CreateDataset(ds, &quot;US&quot;).ok());</span>
+<span id="L388"><span class="lineNum">     388</span> <span class="tlaGNC">           1 :   const DatasetId ds{&quot;proj-1&quot;, &quot;ds_1&quot;};</span></span>
+<span id="L389"><span class="lineNum">     389</span> <span class="tlaGNC">           1 :   const ViewId view_id{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;my_view&quot;};</span></span>
+<span id="L390"><span class="lineNum">     390</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.CreateDataset(ds, &quot;US&quot;).ok());</span></span>
 <span id="L391"><span class="lineNum">     391</span>              : </span>
-<span id="L392"><span class="lineNum">     392</span>              :   ViewRecord rec;</span>
-<span id="L393"><span class="lineNum">     393</span>              :   rec.id = view_id;</span>
-<span id="L394"><span class="lineNum">     394</span>              :   rec.ddl_sql = &quot;CREATE OR REPLACE VIEW `proj-1.ds_1.my_view` AS SELECT 1 AS x&quot;;</span>
-<span id="L395"><span class="lineNum">     395</span>              :   rec.view_query = &quot;SELECT 1 AS x&quot;;</span>
-<span id="L396"><span class="lineNum">     396</span>              :   ASSERT_TRUE(store.UpsertView(rec).ok());</span>
+<span id="L392"><span class="lineNum">     392</span> <span class="tlaGNC">           1 :   ViewRecord rec;</span></span>
+<span id="L393"><span class="lineNum">     393</span> <span class="tlaGNC">           1 :   rec.id = view_id;</span></span>
+<span id="L394"><span class="lineNum">     394</span> <span class="tlaGNC">           1 :   rec.ddl_sql = &quot;CREATE OR REPLACE VIEW `proj-1.ds_1.my_view` AS SELECT 1 AS x&quot;;</span></span>
+<span id="L395"><span class="lineNum">     395</span> <span class="tlaGNC">           1 :   rec.view_query = &quot;SELECT 1 AS x&quot;;</span></span>
+<span id="L396"><span class="lineNum">     396</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.UpsertView(rec).ok());</span></span>
 <span id="L397"><span class="lineNum">     397</span>              : </span>
-<span id="L398"><span class="lineNum">     398</span>              :   const fs::path sidecar = data_dir_ / &quot;proj-1&quot; / &quot;ds_1&quot; / &quot;my_view.meta.json&quot;;</span>
-<span id="L399"><span class="lineNum">     399</span>              :   EXPECT_TRUE(fs::exists(sidecar));</span>
+<span id="L398"><span class="lineNum">     398</span> <span class="tlaGNC">           1 :   const fs::path sidecar = data_dir_ / &quot;proj-1&quot; / &quot;ds_1&quot; / &quot;my_view.meta.json&quot;;</span></span>
+<span id="L399"><span class="lineNum">     399</span> <span class="tlaGNC">           1 :   EXPECT_TRUE(fs::exists(sidecar));</span></span>
 <span id="L400"><span class="lineNum">     400</span>              : </span>
-<span id="L401"><span class="lineNum">     401</span>              :   auto list_or = store.ListTables(ds);</span>
-<span id="L402"><span class="lineNum">     402</span>              :   ASSERT_TRUE(list_or.ok()) &lt;&lt; list_or.status();</span>
-<span id="L403"><span class="lineNum">     403</span>              :   ASSERT_EQ(list_or-&gt;size(), 1u);</span>
-<span id="L404"><span class="lineNum">     404</span>              :   EXPECT_EQ((*list_or)[0].table_id, &quot;my_view&quot;);</span>
+<span id="L401"><span class="lineNum">     401</span> <span class="tlaGNC">           1 :   auto list_or = store.ListTables(ds);</span></span>
+<span id="L402"><span class="lineNum">     402</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(list_or.ok()) &lt;&lt; list_or.status();</span></span>
+<span id="L403"><span class="lineNum">     403</span> <span class="tlaGNC">           1 :   ASSERT_EQ(list_or-&gt;size(), 1u);</span></span>
+<span id="L404"><span class="lineNum">     404</span> <span class="tlaGNC">           1 :   EXPECT_EQ((*list_or)[0].table_id, &quot;my_view&quot;);</span></span>
 <span id="L405"><span class="lineNum">     405</span>              : </span>
-<span id="L406"><span class="lineNum">     406</span>              :   auto info_or =</span>
-<span id="L407"><span class="lineNum">     407</span>              :       store.GetTableResourceInfo(TableId{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;my_view&quot;});</span>
-<span id="L408"><span class="lineNum">     408</span>              :   ASSERT_TRUE(info_or.ok()) &lt;&lt; info_or.status();</span>
-<span id="L409"><span class="lineNum">     409</span>              :   EXPECT_EQ(info_or-&gt;table_type, &quot;VIEW&quot;);</span>
-<span id="L410"><span class="lineNum">     410</span>              :   EXPECT_EQ(info_or-&gt;view_query, &quot;SELECT 1 AS x&quot;);</span>
+<span id="L406"><span class="lineNum">     406</span> <span class="tlaGNC">           1 :   auto info_or =</span></span>
+<span id="L407"><span class="lineNum">     407</span> <span class="tlaGNC">           1 :       store.GetTableResourceInfo(TableId{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;my_view&quot;});</span></span>
+<span id="L408"><span class="lineNum">     408</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(info_or.ok()) &lt;&lt; info_or.status();</span></span>
+<span id="L409"><span class="lineNum">     409</span> <span class="tlaGNC">           1 :   EXPECT_EQ(info_or-&gt;table_type, &quot;VIEW&quot;);</span></span>
+<span id="L410"><span class="lineNum">     410</span> <span class="tlaGNC">           1 :   EXPECT_EQ(info_or-&gt;view_query, &quot;SELECT 1 AS x&quot;);</span></span>
 <span id="L411"><span class="lineNum">     411</span>              : </span>
-<span id="L412"><span class="lineNum">     412</span>              :   ASSERT_TRUE(store.DeleteView(view_id).ok());</span>
-<span id="L413"><span class="lineNum">     413</span>              :   EXPECT_FALSE(fs::exists(sidecar));</span>
-<span id="L414"><span class="lineNum">     414</span>              :   list_or = store.ListTables(ds);</span>
-<span id="L415"><span class="lineNum">     415</span>              :   ASSERT_TRUE(list_or.ok());</span>
-<span id="L416"><span class="lineNum">     416</span>              :   EXPECT_TRUE(list_or-&gt;empty());</span>
-<span id="L417"><span class="lineNum">     417</span>              : }</span>
+<span id="L412"><span class="lineNum">     412</span>              :   // View sidecars exist for REST listing and restart rehydration; they</span>
+<span id="L413"><span class="lineNum">     413</span>              :   // carry no physical column schema. Catalog resolution must consult the</span>
+<span id="L414"><span class="lineNum">     414</span>              :   // in-memory view registry instead of materializing an empty table.</span>
+<span id="L415"><span class="lineNum">     415</span> <span class="tlaGNC">           1 :   auto schema_or = store.GetSchema(TableId{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;my_view&quot;});</span></span>
+<span id="L416"><span class="lineNum">     416</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(schema_or.ok());</span></span>
+<span id="L417"><span class="lineNum">     417</span> <span class="tlaGNC">           2 :   EXPECT_TRUE(absl::IsNotFound(schema_or.status())) &lt;&lt; schema_or.status();</span></span>
 <span id="L418"><span class="lineNum">     418</span>              : </span>
-<span id="L419"><span class="lineNum">     419</span>              : TEST_F(DuckDBStorageTest, UpsertViewSurvivesReopenAndListAllViews) {</span>
-<span id="L420"><span class="lineNum">     420</span>              :   const DatasetId ds{&quot;proj-1&quot;, &quot;ds_1&quot;};</span>
-<span id="L421"><span class="lineNum">     421</span>              :   const ViewId view_id{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;persisted_view&quot;};</span>
-<span id="L422"><span class="lineNum">     422</span>              :   ViewRecord rec;</span>
-<span id="L423"><span class="lineNum">     423</span>              :   rec.id = view_id;</span>
-<span id="L424"><span class="lineNum">     424</span>              :   rec.ddl_sql =</span>
-<span id="L425"><span class="lineNum">     425</span>              :       &quot;CREATE OR REPLACE VIEW `proj-1.ds_1.persisted_view` AS SELECT 42 AS &quot;</span>
-<span id="L426"><span class="lineNum">     426</span>              :       &quot;answer&quot;;</span>
-<span id="L427"><span class="lineNum">     427</span>              :   rec.view_query = &quot;SELECT 42 AS answer&quot;;</span>
-<span id="L428"><span class="lineNum">     428</span>              : </span>
-<span id="L429"><span class="lineNum">     429</span>              :   {</span>
-<span id="L430"><span class="lineNum">     430</span>              :     auto store_or = DuckDBStorage::Open(data_dir_.string());</span>
-<span id="L431"><span class="lineNum">     431</span>              :     ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span>
-<span id="L432"><span class="lineNum">     432</span>              :     auto&amp; store = **store_or;</span>
-<span id="L433"><span class="lineNum">     433</span>              :     ASSERT_TRUE(store.CreateDataset(ds, &quot;US&quot;).ok());</span>
-<span id="L434"><span class="lineNum">     434</span>              :     ASSERT_TRUE(store.UpsertView(rec).ok());</span>
-<span id="L435"><span class="lineNum">     435</span>              :   }</span>
-<span id="L436"><span class="lineNum">     436</span>              : </span>
-<span id="L437"><span class="lineNum">     437</span>              :   {</span>
-<span id="L438"><span class="lineNum">     438</span>              :     auto store_or = DuckDBStorage::Open(data_dir_.string());</span>
-<span id="L439"><span class="lineNum">     439</span>              :     ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span>
-<span id="L440"><span class="lineNum">     440</span>              :     auto&amp; store = **store_or;</span>
-<span id="L441"><span class="lineNum">     441</span>              :     auto views_or = store.ListAllViews();</span>
-<span id="L442"><span class="lineNum">     442</span>              :     ASSERT_TRUE(views_or.ok()) &lt;&lt; views_or.status();</span>
-<span id="L443"><span class="lineNum">     443</span>              :     ASSERT_EQ(views_or-&gt;size(), 1u);</span>
-<span id="L444"><span class="lineNum">     444</span>              :     EXPECT_EQ((*views_or)[0].id.view_id, &quot;persisted_view&quot;);</span>
-<span id="L445"><span class="lineNum">     445</span>              :     EXPECT_EQ((*views_or)[0].view_query, &quot;SELECT 42 AS answer&quot;);</span>
-<span id="L446"><span class="lineNum">     446</span>              :   }</span>
-<span id="L447"><span class="lineNum">     447</span>              : }</span>
-<span id="L448"><span class="lineNum">     448</span>              : </span>
-<span id="L449"><span class="lineNum">     449</span>              : }  // namespace</span>
-<span id="L450"><span class="lineNum">     450</span>              : }  // namespace duckdb</span>
-<span id="L451"><span class="lineNum">     451</span>              : }  // namespace storage</span>
-<span id="L452"><span class="lineNum">     452</span>              : }  // namespace backend</span>
-<span id="L453"><span class="lineNum">     453</span>              : }  // namespace bigquery_emulator</span>
+<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.DeleteView(view_id).ok());</span></span>
+<span id="L420"><span class="lineNum">     420</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(fs::exists(sidecar));</span></span>
+<span id="L421"><span class="lineNum">     421</span> <span class="tlaGNC">           1 :   list_or = store.ListTables(ds);</span></span>
+<span id="L422"><span class="lineNum">     422</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(list_or.ok());</span></span>
+<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">           1 :   EXPECT_TRUE(list_or-&gt;empty());</span></span>
+<span id="L424"><span class="lineNum">     424</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L425"><span class="lineNum">     425</span>              : </span>
+<span id="L426"><span class="lineNum">     426</span> <span class="tlaGNC">           1 : TEST_F(DuckDBStorageTest, UpsertViewSurvivesReopenAndListAllViews) {</span></span>
+<span id="L427"><span class="lineNum">     427</span> <span class="tlaGNC">           1 :   const DatasetId ds{&quot;proj-1&quot;, &quot;ds_1&quot;};</span></span>
+<span id="L428"><span class="lineNum">     428</span> <span class="tlaGNC">           1 :   const ViewId view_id{&quot;proj-1&quot;, &quot;ds_1&quot;, &quot;persisted_view&quot;};</span></span>
+<span id="L429"><span class="lineNum">     429</span> <span class="tlaGNC">           1 :   ViewRecord rec;</span></span>
+<span id="L430"><span class="lineNum">     430</span> <span class="tlaGNC">           1 :   rec.id = view_id;</span></span>
+<span id="L431"><span class="lineNum">     431</span> <span class="tlaGNC">           1 :   rec.ddl_sql =</span></span>
+<span id="L432"><span class="lineNum">     432</span> <span class="tlaGNC">           1 :       &quot;CREATE OR REPLACE VIEW `proj-1.ds_1.persisted_view` AS SELECT 42 AS &quot;</span></span>
+<span id="L433"><span class="lineNum">     433</span> <span class="tlaGNC">           1 :       &quot;answer&quot;;</span></span>
+<span id="L434"><span class="lineNum">     434</span> <span class="tlaGNC">           1 :   rec.view_query = &quot;SELECT 42 AS answer&quot;;</span></span>
+<span id="L435"><span class="lineNum">     435</span>              : </span>
+<span id="L436"><span class="lineNum">     436</span> <span class="tlaGNC">           1 :   {</span></span>
+<span id="L437"><span class="lineNum">     437</span> <span class="tlaGNC">           1 :     auto store_or = DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L438"><span class="lineNum">     438</span> <span class="tlaGNC">           2 :     ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span></span>
+<span id="L439"><span class="lineNum">     439</span> <span class="tlaGNC">           1 :     auto&amp; store = **store_or;</span></span>
+<span id="L440"><span class="lineNum">     440</span> <span class="tlaGNC">           1 :     ASSERT_TRUE(store.CreateDataset(ds, &quot;US&quot;).ok());</span></span>
+<span id="L441"><span class="lineNum">     441</span> <span class="tlaGNC">           1 :     ASSERT_TRUE(store.UpsertView(rec).ok());</span></span>
+<span id="L442"><span class="lineNum">     442</span> <span class="tlaGNC">           1 :   }</span></span>
+<span id="L443"><span class="lineNum">     443</span>              : </span>
+<span id="L444"><span class="lineNum">     444</span> <span class="tlaGNC">           1 :   {</span></span>
+<span id="L445"><span class="lineNum">     445</span> <span class="tlaGNC">           1 :     auto store_or = DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L446"><span class="lineNum">     446</span> <span class="tlaGNC">           2 :     ASSERT_TRUE(store_or.ok()) &lt;&lt; store_or.status();</span></span>
+<span id="L447"><span class="lineNum">     447</span> <span class="tlaGNC">           1 :     auto&amp; store = **store_or;</span></span>
+<span id="L448"><span class="lineNum">     448</span> <span class="tlaGNC">           1 :     auto views_or = store.ListAllViews();</span></span>
+<span id="L449"><span class="lineNum">     449</span> <span class="tlaGNC">           2 :     ASSERT_TRUE(views_or.ok()) &lt;&lt; views_or.status();</span></span>
+<span id="L450"><span class="lineNum">     450</span> <span class="tlaGNC">           1 :     ASSERT_EQ(views_or-&gt;size(), 1u);</span></span>
+<span id="L451"><span class="lineNum">     451</span> <span class="tlaGNC">           1 :     EXPECT_EQ((*views_or)[0].id.view_id, &quot;persisted_view&quot;);</span></span>
+<span id="L452"><span class="lineNum">     452</span> <span class="tlaGNC">           1 :     EXPECT_EQ((*views_or)[0].view_query, &quot;SELECT 42 AS answer&quot;);</span></span>
+<span id="L453"><span class="lineNum">     453</span> <span class="tlaGNC">           1 :   }</span></span>
+<span id="L454"><span class="lineNum">     454</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L455"><span class="lineNum">     455</span>              : </span>
+<span id="L456"><span class="lineNum">     456</span>              : }  // namespace</span>
+<span id="L457"><span class="lineNum">     457</span>              : }  // namespace duckdb</span>
+<span id="L458"><span class="lineNum">     458</span>              : }  // namespace storage</span>
+<span id="L459"><span class="lineNum">     459</span>              : }  // namespace backend</span>
+<span id="L460"><span class="lineNum">     460</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

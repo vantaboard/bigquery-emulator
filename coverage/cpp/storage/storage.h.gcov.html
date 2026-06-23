@@ -31,17 +31,17 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">12.9&nbsp;%</td>
-            <td class="headerCovTableEntry">62</td>
+            <td class="headerCovTableEntryLo">11.9&nbsp;%</td>
+            <td class="headerCovTableEntry">67</td>
             <td class="headerCovTableEntry">8</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td class="headerValue">2026-06-23 09:01:03</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">25.0&nbsp;%</td>
-            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntryLo">23.5&nbsp;%</td>
+            <td class="headerCovTableEntry">17</td>
             <td class="headerCovTableEntry">4</td>
           </tr>
                   <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
@@ -191,31 +191,31 @@
 <span id="L129"><span class="lineNum">     129</span>              :     // Both BigQuery STRING and BYTES land in `string_value()`. The</span>
 <span id="L130"><span class="lineNum">     130</span>              :     // Cell-level type is carried out-of-band on the matching</span>
 <span id="L131"><span class="lineNum">     131</span>              :     // `ColumnSchema`; we avoid duplicating that info per row.</span>
-<span id="L132"><span class="lineNum">     132</span> <span class="tlaUNC">           0 :     kString,</span></span>
-<span id="L133"><span class="lineNum">     133</span> <span class="tlaUNC">           0 :     kBytes,</span></span>
-<span id="L134"><span class="lineNum">     134</span> <span class="tlaUNC">           0 :     kArray,</span></span>
+<span id="L132"><span class="lineNum">     132</span>              :     kString,</span>
+<span id="L133"><span class="lineNum">     133</span>              :     kBytes,</span>
+<span id="L134"><span class="lineNum">     134</span>              :     kArray,</span>
 <span id="L135"><span class="lineNum">     135</span>              :     kStruct,</span>
 <span id="L136"><span class="lineNum">     136</span>              :   };</span>
 <span id="L137"><span class="lineNum">     137</span>              : </span>
 <span id="L138"><span class="lineNum">     138</span>              :   Value() = default;</span>
 <span id="L139"><span class="lineNum">     139</span>              : </span>
-<span id="L140"><span class="lineNum">     140</span>              :   static Value Null() {</span>
-<span id="L141"><span class="lineNum">     141</span>              :     return Value();</span>
-<span id="L142"><span class="lineNum">     142</span>              :   }</span>
-<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC tlaBgGNC">         389 :   static Value Bool(bool v);</span></span>
-<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">         389 :   static Value Int64(int64_t v);</span></span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">         389 :   static Value Float64(double v);</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">         137 :   static Value String(std::string v);</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         137 :   static Value Bytes(std::string v);</span></span>
-<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">         137 :   static Value Array(std::vector&lt;Value&gt; elements);</span></span>
+<span id="L140"><span class="lineNum">     140</span> <span class="tlaUNC">           0 :   static Value Null() {</span></span>
+<span id="L141"><span class="lineNum">     141</span> <span class="tlaUNC">           0 :     return Value();</span></span>
+<span id="L142"><span class="lineNum">     142</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L143"><span class="lineNum">     143</span>              :   static Value Bool(bool v);</span>
+<span id="L144"><span class="lineNum">     144</span>              :   static Value Int64(int64_t v);</span>
+<span id="L145"><span class="lineNum">     145</span>              :   static Value Float64(double v);</span>
+<span id="L146"><span class="lineNum">     146</span>              :   static Value String(std::string v);</span>
+<span id="L147"><span class="lineNum">     147</span>              :   static Value Bytes(std::string v);</span>
+<span id="L148"><span class="lineNum">     148</span>              :   static Value Array(std::vector&lt;Value&gt; elements);</span>
 <span id="L149"><span class="lineNum">     149</span>              :   static Value Struct(std::vector&lt;Value&gt; fields);</span>
 <span id="L150"><span class="lineNum">     150</span>              : </span>
-<span id="L151"><span class="lineNum">     151</span>              :   Kind kind() const {</span>
-<span id="L152"><span class="lineNum">     152</span>              :     return kind_;</span>
-<span id="L153"><span class="lineNum">     153</span>              :   }</span>
-<span id="L154"><span class="lineNum">     154</span>              :   bool is_null() const {</span>
-<span id="L155"><span class="lineNum">     155</span>              :     return kind_ == Kind::kNull;</span>
-<span id="L156"><span class="lineNum">     156</span>              :   }</span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC tlaBgGNC">         389 :   Kind kind() const {</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">         389 :     return kind_;</span></span>
+<span id="L153"><span class="lineNum">     153</span> <span class="tlaGNC">         389 :   }</span></span>
+<span id="L154"><span class="lineNum">     154</span> <span class="tlaGNC">         137 :   bool is_null() const {</span></span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">         137 :     return kind_ == Kind::kNull;</span></span>
+<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">         137 :   }</span></span>
 <span id="L157"><span class="lineNum">     157</span>              : </span>
 <span id="L158"><span class="lineNum">     158</span>              :   // Accessors. Each returns a default value (false / 0 / empty) when</span>
 <span id="L159"><span class="lineNum">     159</span>              :   // the active kind does not match, so callers can use these to fold</span>
@@ -247,7 +247,7 @@
 <span id="L185"><span class="lineNum">     185</span>              : // table's `schema::TableSchema`. A NULL cell is represented as</span>
 <span id="L186"><span class="lineNum">     186</span>              : // `Value::Null()`, never as a missing entry.</span>
 <span id="L187"><span class="lineNum">     187</span>              : struct Row {</span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           5 :   std::vector&lt;Value&gt; cells{};</span></span>
+<span id="L188"><span class="lineNum">     188</span>              :   std::vector&lt;Value&gt; cells{};</span>
 <span id="L189"><span class="lineNum">     189</span>              : };</span>
 <span id="L190"><span class="lineNum">     190</span>              : </span>
 <span id="L191"><span class="lineNum">     191</span>              : // Forward iterator over a single scan of a table's rows. Storage</span>
@@ -255,7 +255,7 @@
 <span id="L193"><span class="lineNum">     193</span>              : // instance is owned by the caller and is **not** thread-safe.</span>
 <span id="L194"><span class="lineNum">     194</span>              : class RowIterator {</span>
 <span id="L195"><span class="lineNum">     195</span>              :  public:</span>
-<span id="L196"><span class="lineNum">     196</span>              :   virtual ~RowIterator() = default;</span>
+<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           5 :   virtual ~RowIterator() = default;</span></span>
 <span id="L197"><span class="lineNum">     197</span>              : </span>
 <span id="L198"><span class="lineNum">     198</span>              :   // Pulls the next row into `*row`. Returns:</span>
 <span id="L199"><span class="lineNum">     199</span>              :   //   * `true`  - a row was written.</span>
@@ -334,7 +334,7 @@
 <span id="L272"><span class="lineNum">     272</span>              : };</span>
 <span id="L273"><span class="lineNum">     273</span>              : </span>
 <span id="L274"><span class="lineNum">     274</span>              : // Storage is the abstract interface every backend implements.</span>
-<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">          12 : //</span></span>
+<span id="L275"><span class="lineNum">     275</span>              : //</span>
 <span id="L276"><span class="lineNum">     276</span>              : // All methods are **thread-safe**. The DuckDB-backed store relies on</span>
 <span id="L277"><span class="lineNum">     277</span>              : // DuckDB's own concurrency model.</span>
 <span id="L278"><span class="lineNum">     278</span>              : //</span>
@@ -342,7 +342,7 @@
 <span id="L280"><span class="lineNum">     280</span>              : // shared by every gRPC request handler.</span>
 <span id="L281"><span class="lineNum">     281</span>              : class Storage {</span>
 <span id="L282"><span class="lineNum">     282</span>              :  public:</span>
-<span id="L283"><span class="lineNum">     283</span>              :   virtual ~Storage() = default;</span>
+<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">          12 :   virtual ~Storage() = default;</span></span>
 <span id="L284"><span class="lineNum">     284</span>              : </span>
 <span id="L285"><span class="lineNum">     285</span>              :   // ------------------------------------------------------------------</span>
 <span id="L286"><span class="lineNum">     286</span>              :   // Dataset CRUD. `location` is the BigQuery region the dataset is</span>
@@ -384,20 +384,20 @@
 <span id="L322"><span class="lineNum">     322</span>              :   // (ALREADY_EXISTS). `DropTable` is the inverse and is NOT_FOUND on</span>
 <span id="L323"><span class="lineNum">     323</span>              :   // missing tables; callers that want &quot;drop if exists&quot; semantics</span>
 <span id="L324"><span class="lineNum">     324</span>              :   // should swallow that status.</span>
-<span id="L325"><span class="lineNum">     325</span> <span class="tlaUNC tlaBgUNC">           0 :   // ------------------------------------------------------------------</span></span>
-<span id="L326"><span class="lineNum">     326</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status CreateTable(</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaUNC">           0 :       const TableId&amp; id, const schema::TableSchema&amp; schema) = 0;</span></span>
-<span id="L328"><span class="lineNum">     328</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DropTable(const TableId&amp; id) = 0;</span></span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaUNC">           0 : </span></span>
-<span id="L330"><span class="lineNum">     330</span> <span class="tlaUNC">           0 :   // Restores a table previously soft-deleted by `DropTable`. When</span></span>
+<span id="L325"><span class="lineNum">     325</span>              :   // ------------------------------------------------------------------</span>
+<span id="L326"><span class="lineNum">     326</span>              :   [[nodiscard]] virtual absl::Status CreateTable(</span>
+<span id="L327"><span class="lineNum">     327</span>              :       const TableId&amp; id, const schema::TableSchema&amp; schema) = 0;</span>
+<span id="L328"><span class="lineNum">     328</span>              :   [[nodiscard]] virtual absl::Status DropTable(const TableId&amp; id) = 0;</span>
+<span id="L329"><span class="lineNum">     329</span>              : </span>
+<span id="L330"><span class="lineNum">     330</span>              :   // Restores a table previously soft-deleted by `DropTable`. When</span>
 <span id="L331"><span class="lineNum">     331</span>              :   // `deleted_ms` is zero, restores the newest tombstone for the table.</span>
 <span id="L332"><span class="lineNum">     332</span>              :   [[nodiscard]] virtual absl::Status RestoreTable(const TableId&amp; id,</span>
-<span id="L333"><span class="lineNum">     333</span>              :                                                   std::int64_t deleted_ms = 0) {</span>
-<span id="L334"><span class="lineNum">     334</span>              :     (void)id;</span>
-<span id="L335"><span class="lineNum">     335</span>              :     (void)deleted_ms;</span>
-<span id="L336"><span class="lineNum">     336</span>              :     return absl::UnimplementedError(</span>
-<span id="L337"><span class="lineNum">     337</span>              :         &quot;Storage::RestoreTable is not implemented for this backend&quot;);</span>
-<span id="L338"><span class="lineNum">     338</span>              :   }</span>
+<span id="L333"><span class="lineNum">     333</span> <span class="tlaUNC tlaBgUNC">           0 :                                                   std::int64_t deleted_ms = 0) {</span></span>
+<span id="L334"><span class="lineNum">     334</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L335"><span class="lineNum">     335</span> <span class="tlaUNC">           0 :     (void)deleted_ms;</span></span>
+<span id="L336"><span class="lineNum">     336</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaUNC">           0 :         &quot;Storage::RestoreTable is not implemented for this backend&quot;);</span></span>
+<span id="L338"><span class="lineNum">     338</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L339"><span class="lineNum">     339</span>              : </span>
 <span id="L340"><span class="lineNum">     340</span>              :   // Lists the tables registered under `dataset_id`. Returns an empty</span>
 <span id="L341"><span class="lineNum">     341</span>              :   // vector when the dataset is empty. NOT_FOUND when the dataset does</span>
@@ -460,27 +460,27 @@
 <span id="L398"><span class="lineNum">     398</span>              : </span>
 <span id="L399"><span class="lineNum">     399</span>              :   // Returns the row count of `id`'s on-disk snapshot at call time</span>
 <span id="L400"><span class="lineNum">     400</span>              :   // (DuckDB: `COUNT(*)` over `read_parquet(..., file_row_number=true)`).</span>
-<span id="L401"><span class="lineNum">     401</span> <span class="tlaUNC">           0 :   // Used by Storage Read session minting to partition streams.</span></span>
-<span id="L402"><span class="lineNum">     402</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;std::int64_t&gt; CountRows(</span></span>
-<span id="L403"><span class="lineNum">     403</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const = 0;</span></span>
-<span id="L404"><span class="lineNum">     404</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L401"><span class="lineNum">     401</span>              :   // Used by Storage Read session minting to partition streams.</span>
+<span id="L402"><span class="lineNum">     402</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::int64_t&gt; CountRows(</span>
+<span id="L403"><span class="lineNum">     403</span>              :       const TableId&amp; id) const = 0;</span>
+<span id="L404"><span class="lineNum">     404</span>              : </span>
 <span id="L405"><span class="lineNum">     405</span>              :   // When the backend persists table data as a Parquet snapshot, returns</span>
 <span id="L406"><span class="lineNum">     406</span>              :   // the absolute path to that file so the DuckDB executor can attach it</span>
 <span id="L407"><span class="lineNum">     407</span>              :   // via `read_parquet` without a row round-trip. Default: no snapshot.</span>
 <span id="L408"><span class="lineNum">     408</span>              :   [[nodiscard]] virtual std::optional&lt;std::string&gt; ParquetSnapshotPath(</span>
-<span id="L409"><span class="lineNum">     409</span>              :       const TableId&amp; id) const {</span>
+<span id="L409"><span class="lineNum">     409</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const {</span></span>
 <span id="L410"><span class="lineNum">     410</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
 <span id="L411"><span class="lineNum">     411</span> <span class="tlaUNC">           0 :     return std::nullopt;</span></span>
 <span id="L412"><span class="lineNum">     412</span> <span class="tlaUNC">           0 :   }</span></span>
-<span id="L413"><span class="lineNum">     413</span> <span class="tlaUNC">           0 : </span></span>
+<span id="L413"><span class="lineNum">     413</span>              : </span>
 <span id="L414"><span class="lineNum">     414</span>              :   // When the backend supports historical Parquet snapshots, returns the</span>
 <span id="L415"><span class="lineNum">     415</span>              :   // absolute path to the snapshot that was current at `as_of_ms` (Unix epoch</span>
 <span id="L416"><span class="lineNum">     416</span>              :   // milliseconds). Default: same as `ParquetSnapshotPath` (ignores as-of).</span>
 <span id="L417"><span class="lineNum">     417</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::optional&lt;std::string&gt;&gt;</span>
-<span id="L418"><span class="lineNum">     418</span>              :   ParquetSnapshotPathAt(const TableId&amp; id, std::int64_t as_of_ms) const {</span>
-<span id="L419"><span class="lineNum">     419</span>              :     (void)as_of_ms;</span>
-<span id="L420"><span class="lineNum">     420</span>              :     return ParquetSnapshotPath(id);</span>
-<span id="L421"><span class="lineNum">     421</span>              :   }</span>
+<span id="L418"><span class="lineNum">     418</span> <span class="tlaUNC">           0 :   ParquetSnapshotPathAt(const TableId&amp; id, std::int64_t as_of_ms) const {</span></span>
+<span id="L419"><span class="lineNum">     419</span> <span class="tlaUNC">           0 :     (void)as_of_ms;</span></span>
+<span id="L420"><span class="lineNum">     420</span> <span class="tlaUNC">           0 :     return ParquetSnapshotPath(id);</span></span>
+<span id="L421"><span class="lineNum">     421</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L422"><span class="lineNum">     422</span>              : </span>
 <span id="L423"><span class="lineNum">     423</span>              :   // ------------------------------------------------------------------</span>
 <span id="L424"><span class="lineNum">     424</span>              :   // Routine CRUD. Persists UDF / UDAF / TVF / procedure DDL so the</span>
@@ -502,54 +502,54 @@
 <span id="L440"><span class="lineNum">     440</span>              :   // ------------------------------------------------------------------</span>
 <span id="L441"><span class="lineNum">     441</span>              :   // Logical view DDL persistence (CREATE VIEW only; materialized views</span>
 <span id="L442"><span class="lineNum">     442</span>              :   // are storage-backed and do not use this table).</span>
-<span id="L443"><span class="lineNum">     443</span> <span class="tlaUNC">           0 :   // ------------------------------------------------------------------</span></span>
-<span id="L444"><span class="lineNum">     444</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status UpsertView(const ViewRecord&amp; record) = 0;</span></span>
-<span id="L445"><span class="lineNum">     445</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DeleteView(const ViewId&amp; id) = 0;</span></span>
-<span id="L446"><span class="lineNum">     446</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;ViewRecord&gt;&gt; ListAllViews()</span></span>
+<span id="L443"><span class="lineNum">     443</span>              :   // ------------------------------------------------------------------</span>
+<span id="L444"><span class="lineNum">     444</span>              :   [[nodiscard]] virtual absl::Status UpsertView(const ViewRecord&amp; record) = 0;</span>
+<span id="L445"><span class="lineNum">     445</span>              :   [[nodiscard]] virtual absl::Status DeleteView(const ViewId&amp; id) = 0;</span>
+<span id="L446"><span class="lineNum">     446</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;std::vector&lt;ViewRecord&gt;&gt; ListAllViews()</span>
 <span id="L447"><span class="lineNum">     447</span>              :       const = 0;</span>
-<span id="L448"><span class="lineNum">     448</span> <span class="tlaUNC">           0 : </span></span>
-<span id="L449"><span class="lineNum">     449</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;TableResourceInfo&gt; GetTableResourceInfo(</span></span>
+<span id="L448"><span class="lineNum">     448</span>              : </span>
+<span id="L449"><span class="lineNum">     449</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;TableResourceInfo&gt; GetTableResourceInfo(</span>
 <span id="L450"><span class="lineNum">     450</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const {</span></span>
 <span id="L451"><span class="lineNum">     451</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
 <span id="L452"><span class="lineNum">     452</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
 <span id="L453"><span class="lineNum">     453</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not expose table resource metadata&quot;);</span></span>
-<span id="L454"><span class="lineNum">     454</span>              :   }</span>
-<span id="L455"><span class="lineNum">     455</span> <span class="tlaUNC">           0 : </span></span>
-<span id="L456"><span class="lineNum">     456</span> <span class="tlaUNC">           0 :   // Row-access policies and column-level security metadata.</span></span>
-<span id="L457"><span class="lineNum">     457</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::StatusOr&lt;TableGovernance&gt; GetTableGovernance(</span></span>
+<span id="L454"><span class="lineNum">     454</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L455"><span class="lineNum">     455</span>              : </span>
+<span id="L456"><span class="lineNum">     456</span>              :   // Row-access policies and column-level security metadata.</span>
+<span id="L457"><span class="lineNum">     457</span>              :   [[nodiscard]] virtual absl::StatusOr&lt;TableGovernance&gt; GetTableGovernance(</span>
 <span id="L458"><span class="lineNum">     458</span> <span class="tlaUNC">           0 :       const TableId&amp; id) const {</span></span>
 <span id="L459"><span class="lineNum">     459</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
 <span id="L460"><span class="lineNum">     460</span> <span class="tlaUNC">           0 :     return TableGovernance{};</span></span>
-<span id="L461"><span class="lineNum">     461</span>              :   }</span>
+<span id="L461"><span class="lineNum">     461</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L462"><span class="lineNum">     462</span>              :   [[nodiscard]] virtual absl::Status UpsertRowAccessPolicy(</span>
-<span id="L463"><span class="lineNum">     463</span>              :       const TableId&amp; id, const RowAccessPolicyRecord&amp; policy) {</span>
+<span id="L463"><span class="lineNum">     463</span> <span class="tlaUNC">           0 :       const TableId&amp; id, const RowAccessPolicyRecord&amp; policy) {</span></span>
 <span id="L464"><span class="lineNum">     464</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
 <span id="L465"><span class="lineNum">     465</span> <span class="tlaUNC">           0 :     (void)policy;</span></span>
 <span id="L466"><span class="lineNum">     466</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
 <span id="L467"><span class="lineNum">     467</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not persist row access policies&quot;);</span></span>
 <span id="L468"><span class="lineNum">     468</span> <span class="tlaUNC">           0 :   }</span></span>
-<span id="L469"><span class="lineNum">     469</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::Status DeleteRowAccessPolicy(</span></span>
+<span id="L469"><span class="lineNum">     469</span>              :   [[nodiscard]] virtual absl::Status DeleteRowAccessPolicy(</span>
 <span id="L470"><span class="lineNum">     470</span> <span class="tlaUNC">           0 :       const TableId&amp; id, absl::string_view policy_id) {</span></span>
-<span id="L471"><span class="lineNum">     471</span>              :     (void)id;</span>
-<span id="L472"><span class="lineNum">     472</span>              :     (void)policy_id;</span>
+<span id="L471"><span class="lineNum">     471</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L472"><span class="lineNum">     472</span> <span class="tlaUNC">           0 :     (void)policy_id;</span></span>
 <span id="L473"><span class="lineNum">     473</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
 <span id="L474"><span class="lineNum">     474</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not persist row access policies&quot;);</span></span>
 <span id="L475"><span class="lineNum">     475</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L476"><span class="lineNum">     476</span>              :   [[nodiscard]] virtual absl::Status SetColumnGovernance(</span>
 <span id="L477"><span class="lineNum">     477</span>              :       const TableId&amp; id,</span>
 <span id="L478"><span class="lineNum">     478</span>              :       absl::string_view column_name,</span>
-<span id="L479"><span class="lineNum">     479</span>              :       const ColumnGovernanceRecord&amp; column) {</span>
-<span id="L480"><span class="lineNum">     480</span>              :     (void)id;</span>
-<span id="L481"><span class="lineNum">     481</span>              :     (void)column_name;</span>
-<span id="L482"><span class="lineNum">     482</span>              :     (void)column;</span>
-<span id="L483"><span class="lineNum">     483</span>              :     return absl::UnimplementedError(</span>
-<span id="L484"><span class="lineNum">     484</span>              :         &quot;Storage backend does not persist column governance&quot;);</span>
-<span id="L485"><span class="lineNum">     485</span>              :   }</span>
+<span id="L479"><span class="lineNum">     479</span> <span class="tlaUNC">           0 :       const ColumnGovernanceRecord&amp; column) {</span></span>
+<span id="L480"><span class="lineNum">     480</span> <span class="tlaUNC">           0 :     (void)id;</span></span>
+<span id="L481"><span class="lineNum">     481</span> <span class="tlaUNC">           0 :     (void)column_name;</span></span>
+<span id="L482"><span class="lineNum">     482</span> <span class="tlaUNC">           0 :     (void)column;</span></span>
+<span id="L483"><span class="lineNum">     483</span> <span class="tlaUNC">           0 :     return absl::UnimplementedError(</span></span>
+<span id="L484"><span class="lineNum">     484</span> <span class="tlaUNC">           0 :         &quot;Storage backend does not persist column governance&quot;);</span></span>
+<span id="L485"><span class="lineNum">     485</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L486"><span class="lineNum">     486</span>              : </span>
 <span id="L487"><span class="lineNum">     487</span>              :   // Persistent-store root (DuckDB catalog + external-source snapshots).</span>
-<span id="L488"><span class="lineNum">     488</span>              :   [[nodiscard]] virtual absl::string_view data_dir() const {</span>
-<span id="L489"><span class="lineNum">     489</span>              :     return &quot;&quot;;</span>
-<span id="L490"><span class="lineNum">     490</span>              :   }</span>
+<span id="L488"><span class="lineNum">     488</span> <span class="tlaUNC">           0 :   [[nodiscard]] virtual absl::string_view data_dir() const {</span></span>
+<span id="L489"><span class="lineNum">     489</span> <span class="tlaUNC">           0 :     return &quot;&quot;;</span></span>
+<span id="L490"><span class="lineNum">     490</span> <span class="tlaUNC">           0 :   }</span></span>
 <span id="L491"><span class="lineNum">     491</span>              : };</span>
 <span id="L492"><span class="lineNum">     492</span>              : </span>
 <span id="L493"><span class="lineNum">     493</span>              : }  // namespace storage</span>

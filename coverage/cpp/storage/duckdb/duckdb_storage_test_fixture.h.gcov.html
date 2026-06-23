@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 05:09:02</td>
+            <td class="headerValue">2026-06-23 09:01:03</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -80,22 +80,22 @@
 <span id="L18"><span class="lineNum">      18</span>              : </span>
 <span id="L19"><span class="lineNum">      19</span>              : class DuckDBStorageTest : public ::testing::Test {</span>
 <span id="L20"><span class="lineNum">      20</span>              :  protected:</span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">          26 :   void SetUp() override {</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          26 :     const char* tmpdir_env = std::getenv(&quot;TMPDIR&quot;);</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          26 :     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : &quot;/tmp&quot;;</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          26 :     std::random_device rd;</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          26 :     std::seed_seq seed{rd(), rd()};</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          26 :     std::mt19937_64 rng(seed);</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          26 :     data_dir_ = std::filesystem::path(tmpdir) /</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          26 :                 absl::StrCat(&quot;bqemu-duckdb-storage-test-&quot;, rng());</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          26 :     std::error_code ec;</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          26 :     std::filesystem::remove_all(data_dir_, ec);</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          26 :   }</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">          28 :   void SetUp() override {</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          28 :     const char* tmpdir_env = std::getenv(&quot;TMPDIR&quot;);</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          28 :     const std::string tmpdir = tmpdir_env != nullptr ? tmpdir_env : &quot;/tmp&quot;;</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          28 :     std::random_device rd;</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          28 :     std::seed_seq seed{rd(), rd()};</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          28 :     std::mt19937_64 rng(seed);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          28 :     data_dir_ = std::filesystem::path(tmpdir) /</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          28 :                 absl::StrCat(&quot;bqemu-duckdb-storage-test-&quot;, rng());</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          28 :     std::error_code ec;</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          28 :     std::filesystem::remove_all(data_dir_, ec);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          28 :   }</span></span>
 <span id="L32"><span class="lineNum">      32</span>              : </span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          26 :   void TearDown() override {</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          26 :     std::error_code ec;</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          26 :     std::filesystem::remove_all(data_dir_, ec);</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          26 :   }</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          28 :   void TearDown() override {</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          28 :     std::error_code ec;</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          28 :     std::filesystem::remove_all(data_dir_, ec);</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          28 :   }</span></span>
 <span id="L37"><span class="lineNum">      37</span>              : </span>
 <span id="L38"><span class="lineNum">      38</span>              :   std::filesystem::path data_dir_{};</span>
 <span id="L39"><span class="lineNum">      39</span>              : };</span>
