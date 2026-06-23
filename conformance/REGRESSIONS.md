@@ -121,5 +121,4 @@ R10:
   - conformance/fixtures/dml/update_delete_array_offset.yaml
   - conformance/fixtures/fastpath/scan_array_unnest_cross_join.yaml
   - conformance/fixtures/fastpath/scan_array_unnest_cross_join_three.yaml
-  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
 ```

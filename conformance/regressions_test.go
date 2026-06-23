@@ -34,10 +34,10 @@ func TestRegressionsIndexPathsExist(t *testing.T) {
 		t.Fatal("REGRESSIONS.md missing ```regressions-index``` YAML block")
 	}
 
-	tagRe := regexp.MustCompile(`(?m)^(R[1-9]):`)
+	tagRe := regexp.MustCompile(`(?m)^(R[1-9][0-9]*):`)
 	tags := tagRe.FindAllStringSubmatch(string(m[1]), -1)
-	if len(tags) != 9 {
-		t.Fatalf("expected 9 regression tags R1–R9, found %d", len(tags))
+	if len(tags) != 10 {
+		t.Fatalf("expected 10 regression tags R1–R10, found %d", len(tags))
 	}
 
 	pathRe := regexp.MustCompile(`(?m)^  - (.+)$`)
