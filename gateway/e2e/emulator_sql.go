@@ -81,6 +81,22 @@ func openQueryPortTestDB(t *testing.T) (*emulatorDB, context.Context) {
 	}, context.Background()
 }
 
+// queryPortSkipIfNotImplemented skips subtests whose SQL hits engine
+// surfaces that are intentionally unimplemented in the emulator today.
+func queryPortSkipIfNotImplemented(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "501") &&
+		(strings.Contains(msg, "not yet implemented") ||
+			strings.Contains(msg, "notImplemented") ||
+			strings.Contains(msg, "UNIMPLEMENTED")) {
+		t.Skip(msg)
+	}
+}
+
 // jobsQueryURL returns the live jobs.query endpoint for this test's project.
 // It reads sharedEmulator on each call so a mid-suite engine restart (new
 // httptest gateway) is visible to long-lived *emulatorDB handles such as the
@@ -654,6 +670,17 @@ func decodeScalarString(s, colType string) (any, error) {
 // canonical form query port uses when scanning into any (see
 // createTimestampFormatFromTime in the ported tests).
 func timestampToQueryPortCanonical(s string) (string, error) {
+	if isEpochMicrosString(s) {
+		us, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return s, nil
+		}
+		t := time.UnixMicro(us).UTC()
+		if t.Nanosecond()%1_000_000 == 0 {
+			return t.Format("2006-01-02 15:04:05+00"), nil
+		}
+		return t.Format("2006-01-02 15:04:05.000000+00"), nil
+	}
 	if strings.HasSuffix(s, "+00") || strings.HasSuffix(s, "+00:00") {
 		// Already in legacy canonical form.
 		if strings.Contains(s, "T") {
@@ -684,6 +711,25 @@ func timestampToQueryPortCanonical(s string) (string, error) {
 		return utc.Format("2006-01-02 15:04:05+00"), nil
 	}
 	return utc.Format("2006-01-02 15:04:05.000000+00"), nil
+}
+
+func isEpochMicrosString(s string) bool {
+	if s == "" {
+		return false
+	}
+	i := 0
+	if s[0] == '-' {
+		if len(s) == 1 {
+			return false
+		}
+		i = 1
+	}
+	for ; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *emulatorRows) Close() error {

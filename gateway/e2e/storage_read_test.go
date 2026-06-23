@@ -12,9 +12,7 @@ import (
 
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 )
 
 // TestStorageReadRoundTrip is the end-to-end story for the
@@ -154,28 +152,14 @@ func runStorageReadRoundTrip(t *testing.T, env *emulatorEnv,
 			boolFiltered)
 	}
 
-	// 7. Malformed restriction must surface from CreateReadSession as
-	// INVALID_ARGUMENT before any rows are read — `id > 0` is a range
-	// op outside the row_restriction parser's surface.
-	malformedReq := &enginepb.CreateReadSessionRequest{
-		Parent: "projects/" + projectID,
-		ReadSession: &enginepb.ReadSession{
-			Table: "projects/" + projectID + "/datasets/" +
-				datasetID + "/tables/" + tableID,
-			ReadOptions: &enginepb.ReadOptions{
-				RowRestriction: "id > 0",
-			},
-		},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = storage.CreateReadSession(ctx, malformedReq)
-	if err == nil {
-		t.Fatal("CreateReadSession with `id > 0` succeeded; want INVALID_ARGUMENT")
-	}
-	if code := status.Code(err); code != codes.InvalidArgument {
-		t.Errorf("CreateReadSession malformed restriction: code = %s, "+
-			"want INVALID_ARGUMENT (err=%v)", code, err)
+	// 7. Range restrictions are accepted by the engine row_restriction
+	// parser; verify the filtered subset matches `id > 0`.
+	rangeFiltered := readSessionIDs(t, storage, projectID, datasetID,
+		tableID, ptr("id > 0"))
+	sort.Strings(rangeFiltered)
+	if !equalStrings(rangeFiltered, wantAll) {
+		t.Errorf("row_restriction `id > 0` ids = %v, want %v",
+			rangeFiltered, wantAll)
 	}
 }
 

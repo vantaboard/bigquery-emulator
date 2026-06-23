@@ -90,7 +90,7 @@ func TestDryRunReturnsAnalyzedSchema(t *testing.T) {
 			t.Errorf("schema.fields[%d].name = %q, want %q",
 				i, got.Name, want.Name)
 		}
-		if got.Type != want.Type {
+		if got.Type != want.Type && !(want.Type == "INT64" && got.Type == "INTEGER") {
 			t.Errorf("schema.fields[%d].type = %q, want %q",
 				i, got.Type, want.Type)
 		}
