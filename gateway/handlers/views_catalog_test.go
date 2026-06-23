@@ -122,6 +122,13 @@ func TestQueryRunCreateViewPersistsMetadata(t *testing.T) {
 	if entry["type"] != viewTableType {
 		t.Errorf("list type = %v, want %q", entry["type"], viewTableType)
 	}
+	viewObj, _ := entry["view"].(map[string]any)
+	if viewObj == nil {
+		t.Fatal("list entry missing view.query")
+	}
+	if viewObj[discoveryMethodQuery] != testViewSQL {
+		t.Errorf("list view.query = %v, want %q", viewObj[discoveryMethodQuery], testViewSQL)
+	}
 }
 
 // TestQueryRunCreateViewReplaceUpdatesQuery asserts CREATE OR REPLACE
@@ -167,6 +174,10 @@ func TestQueryRunDropViewEvictsMetadata(t *testing.T) {
 	)
 	runViewDDLQuery(t, deps, createSQL)
 	runViewDDLQuery(t, deps, dropSQL)
+
+	if _, ok := deps.Metadata.GetTable(testProjectID, testDatasetID, testViewName); ok {
+		t.Error("overlay still present after DROP VIEW")
+	}
 
 	get := newTableReq(http.MethodGet, testViewName, "")
 	rec := httptest.NewRecorder()

@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
 #include "backend/storage/storage.h"
@@ -25,23 +27,31 @@ bool ViewIdIsComplete(const storage::ViewId& id) {
 storage::ViewId ViewIdFromNamePath(const std::vector<std::string>& name_path,
                                    absl::string_view project_id,
                                    absl::string_view default_dataset_id) {
+  // BigQuery accepts a fully backtick-quoted path (`p.d.v`) where the
+  // analyzer returns the whole dotted string as a single name-path
+  // segment. Split before applying the 1/2/3-segment rules (mirrors
+  // control_op_ddl.cc NamePathToTableId and gateway splitViewTableName).
+  std::vector<std::string> segments = name_path;
+  if (segments.size() == 1 && absl::StrContains(segments[0], '.')) {
+    segments = absl::StrSplit(segments[0], '.');
+  }
   storage::ViewId id;
-  switch (name_path.size()) {
+  switch (segments.size()) {
     case 1:
       id.project_id = std::string(project_id);
       id.dataset_id = std::string(default_dataset_id);
-      id.view_id = name_path[0];
+      id.view_id = segments[0];
       break;
     case 2:
       id.project_id = std::string(project_id);
-      id.dataset_id = name_path[0];
-      id.view_id = name_path[1];
+      id.dataset_id = segments[0];
+      id.view_id = segments[1];
       break;
     default:
-      if (name_path.size() >= 3) {
-        id.project_id = name_path[0];
-        id.dataset_id = name_path[1];
-        id.view_id = name_path.back();
+      if (segments.size() >= 3) {
+        id.project_id = segments[0];
+        id.dataset_id = segments[1];
+        id.view_id = segments.back();
       }
       break;
   }

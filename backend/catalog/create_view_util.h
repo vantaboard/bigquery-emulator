@@ -15,7 +15,8 @@ namespace catalog {
 absl::StatusOr<std::unique_ptr<const ::googlesql::Table>>
 MakeViewFromCreateView(
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
-    const ::googlesql::TypeFactory* type_factory);
+    const ::googlesql::TypeFactory* type_factory,
+    absl::string_view view_table_name = {});
 
 }  // namespace catalog
 }  // namespace backend

@@ -13,6 +13,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "backend/catalog/create_view_util.h"
+#include "backend/catalog/view_persistence.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 
@@ -48,6 +49,7 @@ absl::flat_hash_map<std::string, ProjectViews> by_project ABSL_GUARDED_BY(mu);
 
 absl::Status RegisterProjectView(
     absl::string_view project_id,
+    absl::string_view default_dataset_id,
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
     std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output,
     ::googlesql::TypeFactory* type_factory) {
@@ -59,15 +61,17 @@ absl::Status RegisterProjectView(
     return absl::InvalidArgumentError(
         "view_registry: type_factory must be non-null");
   }
-  absl::StatusOr<std::unique_ptr<const ::googlesql::Table>> view_or =
-      MakeViewFromCreateView(create_view_stmt, type_factory);
-  if (!view_or.ok()) return view_or.status();
-  const std::string view_name = create_view_stmt.name_path().back();
-  std::string dataset_id;
-  if (create_view_stmt.name_path().size() >= 2) {
-    dataset_id =
-        create_view_stmt.name_path()[create_view_stmt.name_path().size() - 2];
+  const storage::ViewId vid = ViewIdFromNamePath(
+      create_view_stmt.name_path(), project_id, default_dataset_id);
+  const std::string view_name = vid.view_id;
+  const std::string dataset_id = vid.dataset_id;
+  if (view_name.empty()) {
+    return absl::InvalidArgumentError(
+        "view_registry: CREATE VIEW has empty view name");
   }
+  absl::StatusOr<std::unique_ptr<const ::googlesql::Table>> view_or =
+      MakeViewFromCreateView(create_view_stmt, type_factory, view_name);
+  if (!view_or.ok()) return view_or.status();
 
   absl::MutexLock lock(&mu);
   ProjectViews& bucket = by_project[std::string(project_id)];

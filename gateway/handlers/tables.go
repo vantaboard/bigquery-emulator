@@ -125,32 +125,7 @@ func TableList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetTables()))
 		for _, ref := range resp.GetTables() {
-			labels := bqtypes.ResourceLabels{}
-			if overlay, ok := deps.Metadata.GetTable(
-				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
-			); ok && overlay.Labels != nil {
-				labels = overlay.Labels
-			}
-			tableType := defaultTableType
-			if overlay, ok := deps.Metadata.GetTable(
-				ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
-			); ok && overlay.Type != "" {
-				tableType = overlay.Type
-			} else if refType := ref.GetTableType(); refType != "" {
-				tableType = refType
-			}
-			items = append(items, map[string]any{
-				"kind": tableKind,
-				"id": ref.GetProjectId() + ":" + ref.GetDatasetId() +
-					"." + ref.GetTableId(),
-				"tableReference": bqtypes.TableReference{
-					ProjectID: ref.GetProjectId(),
-					DatasetID: ref.GetDatasetId(),
-					TableID:   ref.GetTableId(),
-				},
-				"type":   tableType,
-				"labels": labels,
-			})
+			items = append(items, tableListItem(r.Context(), deps, ref))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			resourceKeyKind:       tableListKind,

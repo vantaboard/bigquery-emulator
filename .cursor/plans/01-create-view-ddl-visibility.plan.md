@@ -4,16 +4,16 @@ overview: DDL-created views appear in tables.list/get with type VIEW and view.qu
 todos:
   - id: dotted-view-list-id
     content: Fix tables.list id for dotted `p.d.v` CREATE VIEW (currently registers as tableId `p.d.v` in engine list merge)
-    status: pending
+    status: completed
   - id: list-view-query
     content: Populate view.query (or materializedView.query) on tables.list entries, not only tables.get
-    status: pending
+    status: completed
   - id: drop-view-overlay
     content: Verify DROP VIEW evicts overlay + engine registry (handleViewDDLAfterQuery)
-    status: pending
+    status: completed
   - id: e2e-view-regression
     content: gateway/e2e — three-segment and dotted CREATE VIEW → list + get + SELECT
-    status: pending
+    status: completed
 isProject: false
 ---
 

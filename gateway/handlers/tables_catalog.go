@@ -9,6 +9,56 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
 
+// tableListItem builds one tables.list entry from Catalog.ListTables
+// output plus metadata overlay and optional DescribeTable view query.
+func tableListItem(ctx context.Context, deps Dependencies, ref *enginepb.TableRef) map[string]any {
+	overlay, hasOverlay := deps.Metadata.GetTable(
+		ref.GetProjectId(), ref.GetDatasetId(), ref.GetTableId(),
+	)
+	labels := bqtypes.ResourceLabels{}
+	if hasOverlay && overlay.Labels != nil {
+		labels = overlay.Labels
+	}
+	tableType := defaultTableType
+	if hasOverlay && overlay.Type != "" {
+		tableType = overlay.Type
+	} else if refType := ref.GetTableType(); refType != "" {
+		tableType = refType
+	}
+	item := map[string]any{
+		"kind": tableKind,
+		"id": ref.GetProjectId() + ":" + ref.GetDatasetId() +
+			"." + ref.GetTableId(),
+		"tableReference": bqtypes.TableReference{
+			ProjectID: ref.GetProjectId(),
+			DatasetID: ref.GetDatasetId(),
+			TableID:   ref.GetTableId(),
+		},
+		"type":   tableType,
+		"labels": labels,
+	}
+	if hasOverlay {
+		mergeListViewQueryFromOverlay(overlay, item)
+	}
+	if _, hasView := item["view"]; !hasView {
+		if _, hasMV := item["materializedView"]; !hasMV {
+			mergeListViewQueryFromCatalog(ctx, deps, ref, tableType, item)
+		}
+	}
+	return item
+}
+
+func mergeListViewQueryFromOverlay(overlay bqtypes.Table, item map[string]any) {
+	if overlay.View != nil && overlay.View.Query != "" {
+		item["view"] = map[string]any{discoveryMethodQuery: overlay.View.Query}
+	}
+	if overlay.MaterializedView != nil && overlay.MaterializedView.Query != "" {
+		item["materializedView"] = map[string]any{
+			discoveryMethodQuery: overlay.MaterializedView.Query,
+		}
+	}
+}
+
 // catalogTable builds the REST Table resource the same way TableGet does
 // after a successful DescribeTable (engine schema + metadata overlay).
 func catalogTable(
@@ -49,6 +99,47 @@ func catalogTable(
 	}
 	applyTableStorageStats(&t)
 	return t
+}
+
+// mergeListViewQueryFromCatalog attaches view.query (or
+// materializedView.query) from Catalog.DescribeTable when the metadata
+// overlay did not stash DDL text — e.g. three-segment backtick CREATE
+// VIEW forms the gateway parser does not mirror into overlay.
+func mergeListViewQueryFromCatalog(
+	ctx context.Context,
+	deps Dependencies,
+	ref *enginepb.TableRef,
+	tableType string,
+	item map[string]any,
+) {
+	if deps.Catalog == nil {
+		return
+	}
+	isView := tableType == viewTableType || ref.GetTableType() == viewTableType
+	isMV := tableType == materializedViewTableType ||
+		ref.GetTableType() == materializedViewTableType
+	if !isView && !isMV {
+		return
+	}
+	desc, err := deps.Catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{
+		Table: &enginepb.TableRef{
+			ProjectId: ref.GetProjectId(),
+			DatasetId: ref.GetDatasetId(),
+			TableId:   ref.GetTableId(),
+		},
+	})
+	if err != nil {
+		return
+	}
+	if isMV {
+		if q := desc.GetViewQuery(); q != "" {
+			item["materializedView"] = map[string]any{discoveryMethodQuery: q}
+		}
+		return
+	}
+	if q := desc.GetViewQuery(); q != "" {
+		item["view"] = map[string]any{discoveryMethodQuery: q}
+	}
 }
 
 // applyTableStorageStats fills output-only byte counters so the console

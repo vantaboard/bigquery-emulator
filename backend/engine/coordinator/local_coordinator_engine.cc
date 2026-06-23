@@ -301,8 +301,12 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
             "LocalCoordinatorEngine::ExecuteDdl: CREATE VIEW has null "
             "resolved stmt");
       }
-      absl::Status registered = catalog::RegisterProjectView(
-          request.project_id, *create_view, std::move(*reg_output), reg_tf);
+      absl::Status registered =
+          catalog::RegisterProjectView(request.project_id,
+                                       request.default_dataset_id,
+                                       *create_view,
+                                       std::move(*reg_output),
+                                       reg_tf);
       if (!registered.ok()) return registered;
       return catalog::PersistViewDdl(
           bq_catalog->storage(), request, *create_view);

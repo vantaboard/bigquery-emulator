@@ -413,8 +413,7 @@ absl::Status RunDropTable(storage::Storage& storage,
     }
     const storage::ViewId vid = catalog::ViewIdFromNamePath(
         stmt->name_path(), project_id, default_dataset_id);
-    absl::Status dropped =
-        catalog::DropProjectView(project_id, stmt->name_path().back());
+    absl::Status dropped = catalog::DropProjectView(project_id, vid.view_id);
     if (!dropped.ok() && stmt->is_if_exists() &&
         dropped.code() == absl::StatusCode::kNotFound) {
       return absl::OkStatus();

@@ -142,8 +142,11 @@ class CatalogCrashSafetyTest : public ::testing::Test {
       return absl::InternalError("CREATE VIEW has null resolved stmt");
     }
     ::googlesql::TypeFactory* reg_tf = EnsureProjectTypeFactory(kProject);
-    return RegisterProjectView(
-        kProject, *create_view, std::move(output), reg_tf);
+    return RegisterProjectView(kProject,
+                               /*default_dataset_id=*/"",
+                               *create_view,
+                               std::move(output),
+                               reg_tf);
   }
 
   fs::path data_dir_{};

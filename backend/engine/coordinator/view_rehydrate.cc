@@ -63,8 +63,11 @@ absl::Status AnalyzeAndRegisterViewDdl(storage::Storage* storage,
     return absl::InternalError(
         "view_rehydrate: CREATE VIEW has null resolved stmt");
   }
-  return catalog::RegisterProjectView(
-      rec.id.project_id, *create_view, std::move(*reg_output), reg_tf);
+  return catalog::RegisterProjectView(rec.id.project_id,
+                                      rec.id.dataset_id,
+                                      *create_view,
+                                      std::move(*reg_output),
+                                      reg_tf);
 }
 
 }  // namespace

@@ -7,6 +7,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -17,7 +18,8 @@ namespace catalog {
 absl::StatusOr<std::unique_ptr<const ::googlesql::Table>>
 MakeViewFromCreateView(
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
-    const ::googlesql::TypeFactory* type_factory) {
+    const ::googlesql::TypeFactory* type_factory,
+    absl::string_view view_table_name) {
   if (type_factory == nullptr) {
     return absl::InvalidArgumentError(
         "create_view_util: type_factory must be non-null");
@@ -41,7 +43,9 @@ MakeViewFromCreateView(
     }
     columns.push_back({std::string(col->name()), col->type()});
   }
-  const std::string view_name = create_view_stmt.name_path().back();
+  const std::string view_name = view_table_name.empty()
+                                    ? create_view_stmt.name_path().back()
+                                    : std::string(view_table_name);
   ::googlesql::ResolvedCreateStatement::SqlSecurity security =
       create_view_stmt.sql_security();
   if (security ==

@@ -35,6 +35,7 @@ std::vector<RegisteredViewInfo> ListProjectViews(absl::string_view project_id,
 
 absl::Status RegisterProjectView(
     absl::string_view project_id,
+    absl::string_view default_dataset_id,
     const ::googlesql::ResolvedCreateViewStmt& create_view_stmt,
     std::unique_ptr<const ::googlesql::AnalyzerOutput> analyzer_output,
     ::googlesql::TypeFactory* type_factory);
