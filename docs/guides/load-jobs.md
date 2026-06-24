@@ -18,10 +18,11 @@ synchronously and returns `state: DONE` when ingest completes.
 | `file:///path/to/data.csv` | Local development; no cloud credentials |
 | `/absolute/path/to/data.csv` | Same as `file://` |
 | `gs://bucket/object` | Requires the bundled fake-gcs server (`FAKE_GCS_PORT`) or `STORAGE_EMULATOR_HOST` pointing at a storage emulator |
+| `s3://bucket/object` | Dev-only when `S3_ENDPOINT` is set (path-style HTTP GET); otherwise the job fails with a stable error pointing at `S3_ENDPOINT` |
 
-**Not supported:** `s3://`, direct `https://` URLs, and `GOOGLE_SHEETS`
-(use `externalDataConfiguration` on `tables.insert` for sheets-backed
-external tables).
+**Not supported:** direct `https://` URLs and `GOOGLE_SHEETS` (use
+`externalDataConfiguration` on `tables.insert` for sheets-backed external
+tables). See also the load URI matrix in [`docs/REST_API.md`](../REST_API.md).
 
 ## Multipart upload (UI shape)
 

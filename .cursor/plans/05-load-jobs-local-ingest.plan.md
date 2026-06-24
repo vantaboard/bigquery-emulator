@@ -4,13 +4,13 @@ overview: Load jobs and multipart upload work for gs/file paths; document limits
 todos:
   - id: document-load-matrix
     content: Enumerate supported sourceFormat and URI schemes in docs/REST_API.md
-    status: pending
+    status: completed
   - id: e2e-multipart-csv
     content: e2e multipart CSV upload → tabledata.list reads rows
-    status: pending
+    status: completed
   - id: storage-emulator-note
     content: Document STORAGE_EMULATOR_HOST requirement for gs:// in dev
-    status: pending
+    status: completed
 isProject: false
 ---
 
