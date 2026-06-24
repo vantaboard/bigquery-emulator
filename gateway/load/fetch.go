@@ -51,12 +51,13 @@ func fetchS3(ctx context.Context, s3URI string) ([]byte, error) {
 		return nil, err
 	}
 
+	//nolint:gosec // G704: host/scheme fixed to S3_ENDPOINT; object path from load URI is intentional
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
 		mediaURL,
 		nil,
-	) //nolint:gosec // G704: host/scheme fixed to S3_ENDPOINT; object path from load URI is intentional
+	)
 	if err != nil {
 		return nil, err
 	}
