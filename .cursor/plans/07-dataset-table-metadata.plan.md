@@ -4,19 +4,19 @@ overview: Dataset and table Details tabs receive full BigQuery metadata fields i
 todos:
   - id: table-view-useLegacySql
     content: Add view.useLegacySql to ViewDefinition with default false on GET
-    status: pending
+    status: completed
   - id: table-resource-tags-constraints
     content: Round-trip table resourceTags and tableConstraints via metadata overlay
-    status: pending
+    status: completed
   - id: storage-byte-stats
     content: Populate numBytes breakdown (real or explicit 0) on tables.get
-    status: pending
+    status: completed
   - id: dataset-insert-timestamps
     content: Persist creationTime on dataset insert; bump lastModifiedTime only on writes
-    status: pending
+    status: completed
   - id: e2e-delete-dataset
     content: e2e DELETE dataset ?deleteContents=true cascade (gap 8 verify)
-    status: pending
+    status: completed
 isProject: false
 ---
 
