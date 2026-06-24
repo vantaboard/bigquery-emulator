@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +61,33 @@ func TestFetchSourceGCSViaEmulator(t *testing.T) {
 		t.Fatalf("FetchSource: %v", err)
 	}
 	if string(got) != "x,y\np,q\n" {
+		t.Fatalf("body = %q", string(got))
+	}
+}
+
+func TestFetchSourceS3RequiresEndpoint(t *testing.T) {
+	t.Setenv("S3_ENDPOINT", "")
+	_, err := FetchSource(context.Background(), "s3://bucket/x.csv")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "S3_ENDPOINT") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestFetchSourceS3ViaEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("a,b\n1,2\n"))
+	}))
+	defer srv.Close()
+	t.Setenv("S3_ENDPOINT", srv.URL)
+
+	got, err := FetchSource(context.Background(), "s3://bucket/object.csv")
+	if err != nil {
+		t.Fatalf("FetchSource: %v", err)
+	}
+	if string(got) != "a,b\n1,2\n" {
 		t.Fatalf("body = %q", string(got))
 	}
 }

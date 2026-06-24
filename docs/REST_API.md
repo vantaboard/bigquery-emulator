@@ -96,8 +96,12 @@ engine exposes byte accounting.
 `FAKE_GCS_PORT`, same as LOAD jobs) and materialized into the engine
 catalog at insert time; `externalDataConfiguration` round-trips through
 the gateway [`MetadataStore`][metadata-store] on GET/PATCH/UPDATE.
-`type` defaults to `EXTERNAL`. Google Sheets (`GOOGLE_SHEETS` /
-`googleSheetsOptions`) returns **501** with a clear message.
+`type` defaults to `EXTERNAL`. **Bigtable** (`sourceFormat: BIGTABLE`
+with `https://googleapis.com/bigtable/projects/.../instances/.../tables/...`
+URIs) registers metadata-only external tables (zero rows; query behavior
+is stubbed). **Google Sheets** (`GOOGLE_SHEETS` / fixture doc ids) is
+supported for dev fixtures. **Azure Blob** and non-Sheets **Google Drive**
+URIs return **400** with an explicit unsupported message.
 
 **Logical views:** `CREATE [OR REPLACE] VIEW` via `jobs.query` registers
 the view in the engine's in-memory catalog and persists the DDL in
@@ -191,8 +195,9 @@ separate `tables.undelete` RPC.
 | `file://` | Local dev paths (preferred for offline ingest) |
 | absolute path | Same as `file://` without the prefix |
 | `gs://` | Requires the fake-gcs storage emulator (`FAKE_GCS_PORT` / `STORAGE_EMULATOR_HOST`) |
+| `s3://` | Dev-only when `S3_ENDPOINT` is set (path-style HTTP GET); otherwise **400** with `S3_ENDPOINT` guidance |
 
-Unsupported in the load path: `s3://`, `https://` direct fetch, and
+Unsupported in the load path: bare `https://` direct fetch and
 `GOOGLE_SHEETS` (use external tables instead). Upload variants:
 `POST /upload/.../jobs?uploadType=multipart` (job JSON part + file part) and
 resumable upload (`uploadType=resumable` init + `PUT` chunks). See

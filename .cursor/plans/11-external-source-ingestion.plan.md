@@ -4,19 +4,19 @@ overview: Support external-table and load-job URIs for Bigtable, Azure, Drive, a
 todos:
   - id: inventory-schemes
     content: Document current scheme matrix in docs/REST_API.md (gs/file OK; s3/https/azure/drive/bigtable gaps)
-    status: pending
+    status: completed
   - id: bigtable-external-uri
     content: Accept Bigtable external URIs (https://googleapis.com/bigtable/...) in tables.insert externalDataConfiguration
-    status: pending
+    status: completed
   - id: azure-drive-stubs
     content: Add Azure Blob and Google Drive URI handlers or explicit BQ-shaped errors if full fetch is out of scope
-    status: pending
+    status: completed
   - id: s3-load-fetch
     content: Optional s3:// branch in gateway/load/fetch.go mirroring gs:// emulator pattern
-    status: pending
+    status: completed
   - id: e2e-external-smoke
     content: e2e for Bigtable external table definition insert + load-job error shapes for unsupported schemes
-    status: pending
+    status: completed
 isProject: false
 ---
 

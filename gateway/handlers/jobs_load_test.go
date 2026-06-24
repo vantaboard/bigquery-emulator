@@ -50,6 +50,30 @@ func TestJobInsertLoadFromLocalCSV(t *testing.T) {
 	}
 }
 
+func TestJobInsertLoadS3RequiresEndpoint(t *testing.T) {
+	t.Setenv("S3_ENDPOINT", "")
+	cat := &fakeCatalogClient{}
+	reg := jobs.NewRegistry()
+	deps := Dependencies{Catalog: cat, Jobs: reg}
+	body := `{"configuration":{"load":{"sourceUris":["s3://bucket/x.csv"],` +
+		`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"t"},` +
+		`"sourceFormat":"CSV"}}}`
+	rec := runJobInsert(t, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got jobs.Job
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status.ErrorResult == nil {
+		t.Fatal("expected errorResult for s3:// without S3_ENDPOINT")
+	}
+	if !strings.Contains(got.Status.ErrorResult.Message, "S3_ENDPOINT") {
+		t.Fatalf("message = %q", got.Status.ErrorResult.Message)
+	}
+}
+
 func TestJobConfigurationLoadSkipLeadingRowsString(t *testing.T) {
 	t.Parallel()
 	var cfg jobs.JobConfiguration

@@ -196,7 +196,35 @@ func validateExternalConfig(cfg *bqtypes.ExternalDataConfiguration) error {
 	if len(cfg.SourceURIs) == 0 {
 		return errors.New("external table requires at least one sourceUri")
 	}
+	for _, uri := range cfg.SourceURIs {
+		if IsAzureBlobURI(uri) {
+			return UnsupportedAzureBlobError()
+		}
+		if IsGoogleDriveURI(uri) {
+			return UnsupportedDriveError()
+		}
+	}
+	if isBigtable(cfg) {
+		for _, uri := range cfg.SourceURIs {
+			if err := ValidateBigtableURI(uri); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return nil
+}
+
+func parseBigtableExternal(schema *bqtypes.TableSchema) (load.ParsedRows, error) {
+	if schema != nil && len(schema.Fields) > 0 {
+		return load.ParsedRows{Schema: schema, Rows: []map[string]any{}}, nil
+	}
+	return load.ParsedRows{
+		Schema: &bqtypes.TableSchema{
+			Fields: []bqtypes.TableFieldSchema{{Name: "rowkey", Type: "STRING"}},
+		},
+		Rows: []map[string]any{},
+	}, nil
 }
 
 func fetchAndParse(
@@ -208,6 +236,9 @@ func fetchAndParse(
 ) (load.ParsedRows, error) {
 	if isGoogleSheets(cfg) {
 		return parseSheetsExternal(ctx, resolver, cfg, schema, skipLeading)
+	}
+	if isBigtable(cfg) {
+		return parseBigtableExternal(schema)
 	}
 	parsed, _, _, err := load.ParseExternalGCS(ctx, cfg, schema, skipLeading)
 	return parsed, err

@@ -324,3 +324,30 @@ func TestExternalPrepareTableDefinitionsSetsTempDataset(t *testing.T) {
 		t.Fatalf("registered dataset = %q", fake.lastRegisterTable.GetTable().GetDatasetId())
 	}
 }
+
+func TestMaterializeBigtableRegistersMetadataOnly(t *testing.T) {
+	fake := &materializeFakeCatalog{}
+	cfg := &bqtypes.ExternalDataConfiguration{
+		SourceFormat: "BIGTABLE",
+		SourceURIs: []string{
+			"https://googleapis.com/bigtable/projects/p/instances/i/tables/t",
+		},
+		Schema: &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
+			{Name: "cf", Type: testExtColType},
+		}},
+	}
+	if err := Materialize(context.Background(), fake, Target{
+		ProjectID: testExtProjectID,
+		DatasetID: "ds",
+		TableID:   "bt",
+		Schema:    cfg.Schema,
+	}, cfg); err != nil {
+		t.Fatalf("Materialize: %v", err)
+	}
+	if fake.lastRegisterTable == nil {
+		t.Fatal("expected RegisterTable")
+	}
+	if fake.lastInsertRows != nil && len(fake.lastInsertRows.GetRows()) > 0 {
+		t.Fatalf("expected zero rows for Bigtable stub, got %d", len(fake.lastInsertRows.GetRows()))
+	}
+}

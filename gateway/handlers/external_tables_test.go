@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -109,6 +110,63 @@ func TestExternalTableGetRoundTripsConfiguration(t *testing.T) {
 	}
 	if got.ExternalDataConfiguration == nil || got.ExternalDataConfiguration.SourceFormat != "CSV" {
 		t.Fatalf("GET external config = %#v", got.ExternalDataConfiguration)
+	}
+}
+
+func TestExternalTableInsertBigtable(t *testing.T) {
+	fake := &fakeCatalogClient{}
+	store := NewMetadataStore()
+	deps := Dependencies{Catalog: fake, Metadata: store}
+	body := `{
+	  "tableReference": {"tableId": "bt_ext"},
+	  "schema": {"fields": [{"name": "cf", "type": "STRING"}]},
+	  "externalDataConfiguration": {
+	    "sourceFormat": "BIGTABLE",
+	    "sourceUris": ["https://googleapis.com/bigtable/projects/p/instances/i/tables/t"]
+	  }
+	}`
+	req := httptest.NewRequest(http.MethodPost,
+		"/bigquery/v2/projects/dev/datasets/ds/tables", bytes.NewBufferString(body))
+	req.SetPathValue("projectId", "dev")
+	req.SetPathValue("datasetId", "ds")
+	w := httptest.NewRecorder()
+	TableInsert(deps)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	var got bqtypes.Table
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != externalTableType {
+		t.Fatalf("type = %q, want EXTERNAL", got.Type)
+	}
+	if got.ExternalDataConfiguration == nil ||
+		got.ExternalDataConfiguration.SourceFormat != "BIGTABLE" {
+		t.Fatalf("external config = %#v", got.ExternalDataConfiguration)
+	}
+}
+
+func TestExternalTableInsertAzureRejected(t *testing.T) {
+	deps := Dependencies{Catalog: &fakeCatalogClient{}, Metadata: NewMetadataStore()}
+	body := `{
+	  "tableReference": {"tableId": "az_ext"},
+	  "externalDataConfiguration": {
+	    "sourceFormat": "CSV",
+	    "sourceUris": ["https://acct.blob.core.windows.net/c/data.csv"]
+	  }
+	}`
+	req := httptest.NewRequest(http.MethodPost,
+		"/bigquery/v2/projects/dev/datasets/ds/tables", bytes.NewBufferString(body))
+	req.SetPathValue("projectId", "dev")
+	req.SetPathValue("datasetId", "ds")
+	w := httptest.NewRecorder()
+	TableInsert(deps)(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "azure blob storage") {
+		t.Fatalf("body = %s", w.Body.String())
 	}
 }
 
