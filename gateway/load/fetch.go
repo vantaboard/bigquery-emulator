@@ -46,13 +46,23 @@ func fetchS3(ctx context.Context, s3URI string) ([]byte, error) {
 	}
 	bucket := rest[:slash]
 	key := rest[slash+1:]
-	mediaURL := endpoint + "/" + bucket + "/" + key
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mediaURL, nil) //nolint:gosec // dev-only S3_ENDPOINT fetch for LOAD jobs
+	mediaURL, err := s3MediaURL(endpoint, bucket, key)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req) //nolint:gosec // dev-only S3_ENDPOINT fetch for LOAD jobs
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		mediaURL,
+		nil,
+	) //nolint:gosec // G704: host/scheme fixed to S3_ENDPOINT; object path from load URI is intentional
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(
+		req,
+	) //nolint:gosec // G704: dev-only fetch against operator-configured S3_ENDPOINT
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", s3URI, err)
 	}
@@ -66,6 +76,19 @@ func fetchS3(ctx context.Context, s3URI string) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: %w", s3URI, err)
 	}
 	return data, nil
+}
+
+// s3MediaURL builds a GET URL under the operator-configured S3_ENDPOINT.
+// The host/scheme come only from S3_ENDPOINT, not the load URI.
+func s3MediaURL(endpoint, bucket, key string) (string, error) {
+	base, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("invalid S3_ENDPOINT %q: %w", endpoint, err)
+	}
+	if base.Scheme == "" || base.Host == "" {
+		return "", fmt.Errorf("invalid S3_ENDPOINT %q: scheme and host required", endpoint)
+	}
+	return base.JoinPath(bucket, key).String(), nil
 }
 
 func fetchGCS(ctx context.Context, gsURI string) ([]byte, error) {
