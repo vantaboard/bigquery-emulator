@@ -857,11 +857,15 @@ synchronously and returns <code>state: DONE</code> when ingest completes.</p>
 <td><code>gs://bucket/object</code></td>
 <td>Requires the bundled fake-gcs server (<code>FAKE_GCS_PORT</code>) or <code>STORAGE_EMULATOR_HOST</code> pointing at a storage emulator</td>
 </tr>
+<tr>
+<td><code>s3://bucket/object</code></td>
+<td>Dev-only when <code>S3_ENDPOINT</code> is set (path-style HTTP GET); otherwise the job fails with a stable error pointing at <code>S3_ENDPOINT</code></td>
+</tr>
 </tbody>
 </table>
-<p><strong>Not supported:</strong> <code>s3://</code>, direct <code>https://</code> URLs, and <code>GOOGLE_SHEETS</code>
-(use <code>externalDataConfiguration</code> on <code>tables.insert</code> for sheets-backed
-external tables).</p>
+<p><strong>Not supported:</strong> direct <code>https://</code> URLs and <code>GOOGLE_SHEETS</code> (use
+<code>externalDataConfiguration</code> on <code>tables.insert</code> for sheets-backed external
+tables). See also the load URI matrix in <a href="../../REST_API/"><code>docs/REST_API.md</code></a>.</p>
 <h2 id="multipart-upload-ui-shape">Multipart upload (UI shape)<a class="headerlink" href="#multipart-upload-ui-shape" title="Permanent link">&para;</a></h2>
 <p>The UI posts to:</p>
 <p><code>POST /upload/bigquery/v2/projects/{projectId}/jobs?uploadType=multipart</code></p>

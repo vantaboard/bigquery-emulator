@@ -1487,8 +1487,12 @@ engine exposes byte accounting.</p>
 <code>FAKE_GCS_PORT</code>, same as LOAD jobs) and materialized into the engine
 catalog at insert time; <code>externalDataConfiguration</code> round-trips through
 the gateway <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/metadata_store.go"><code>MetadataStore</code></a> on GET/PATCH/UPDATE.
-<code>type</code> defaults to <code>EXTERNAL</code>. Google Sheets (<code>GOOGLE_SHEETS</code> /
-<code>googleSheetsOptions</code>) returns <strong>501</strong> with a clear message.</p>
+<code>type</code> defaults to <code>EXTERNAL</code>. <strong>Bigtable</strong> (<code>sourceFormat: BIGTABLE</code>
+with <code>https://googleapis.com/bigtable/projects/.../instances/.../tables/...</code>
+URIs) registers metadata-only external tables (zero rows; query behavior
+is stubbed). <strong>Google Sheets</strong> (<code>GOOGLE_SHEETS</code> / fixture doc ids) is
+supported for dev fixtures. <strong>Azure Blob</strong> and non-Sheets <strong>Google Drive</strong>
+URIs return <strong>400</strong> with an explicit unsupported message.</p>
 <p><strong>Logical views:</strong> <code>CREATE [OR REPLACE] VIEW</code> via <code>jobs.query</code> registers
 the view in the engine's in-memory catalog and persists the DDL in
 <code>DuckDBStorage</code> (<code>__bqemu_views</code>). <code>tables.list</code> / <code>tables.get</code>
@@ -1647,9 +1651,13 @@ separate <code>tables.undelete</code> RPC.</p>
 <td><code>gs://</code></td>
 <td>Requires the fake-gcs storage emulator (<code>FAKE_GCS_PORT</code> / <code>STORAGE_EMULATOR_HOST</code>)</td>
 </tr>
+<tr>
+<td><code>s3://</code></td>
+<td>Dev-only when <code>S3_ENDPOINT</code> is set (path-style HTTP GET); otherwise <strong>400</strong> with <code>S3_ENDPOINT</code> guidance</td>
+</tr>
 </tbody>
 </table>
-<p>Unsupported in the load path: <code>s3://</code>, <code>https://</code> direct fetch, and
+<p>Unsupported in the load path: bare <code>https://</code> direct fetch and
 <code>GOOGLE_SHEETS</code> (use external tables instead). Upload variants:
 <code>POST /upload/.../jobs?uploadType=multipart</code> (job JSON part + file part) and
 resumable upload (<code>uploadType=resumable</code> init + <code>PUT</code> chunks). See
