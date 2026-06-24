@@ -4,13 +4,13 @@ overview: PATCH /tables schema changes (mode relax, descriptions, defaults) pers
 todos:
   - id: verify-narrowing-400
     content: Confirm NULLABLE→REQUIRED 400 matches production BQ; document in docs/REST_API.md
-    status: pending
+    status: completed
   - id: patch-equals-get
     content: Optional — ensure PATCH 200 body always matches subsequent GET (engine-backed, not blind echo)
-    status: pending
+    status: cancelled
   - id: e2e-schema-regression
     content: gateway/e2e — REQUIRED→NULLABLE, description, defaultValueExpression round-trip
-    status: pending
+    status: completed
 isProject: false
 ---
 

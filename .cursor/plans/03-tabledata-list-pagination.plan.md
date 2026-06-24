@@ -4,13 +4,13 @@ overview: Native GET /tables/{id}/data pagination works for Preview; harden edge
 todos:
   - id: e2e-multi-page
     content: gateway/e2e — insert 5 rows, paginate with maxResults=2 and pageToken
-    status: pending
+    status: completed
   - id: selected-fields-format
     content: Optional — selectedFields, formatOptions parity if UI needs them
-    status: pending
+    status: cancelled
   - id: view-preview-path
     content: Document or implement view preview via tabledata.list vs query fallback
-    status: pending
+    status: cancelled
 isProject: false
 ---
 

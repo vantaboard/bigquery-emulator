@@ -4,16 +4,16 @@ overview: Routines list/get/create/update/delete return complete metadata; quali
 todos:
   - id: unify-list-sources
     content: Union catalog + in-memory store in RoutineList so DDL routines always appear
-    status: pending
+    status: completed
   - id: catalog-timestamps
     content: Non-zero creationTime/lastModifiedTime on catalog-backed GET (if still divergent)
-    status: pending
+    status: completed
   - id: catalog-aware-update
     content: RoutineUpdate existence check against catalog when enabled
-    status: pending
+    status: completed
   - id: e2e-ddl-routine-list
     content: gateway/e2e — CREATE FUNCTION → routines.list + routines.get
-    status: pending
+    status: completed
 isProject: false
 ---
 

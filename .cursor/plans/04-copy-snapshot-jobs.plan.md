@@ -4,13 +4,13 @@ overview: Copy and snapshot modals work via configuration.copy jobs including SN
 todos:
   - id: e2e-copy-regression
     content: gateway/e2e — basic copy job DONE + destination rows match source
-    status: pending
+    status: completed
   - id: e2e-snapshot-regression
     content: gateway/e2e — SNAPSHOT operationType, destination type SNAPSHOT, expirationTime on tables.get
-    status: pending
+    status: completed
   - id: live-table-time-travel
     content: Optional — SNAPSHOT from live table @epoch via FOR SYSTEM_TIME (deleted-table path works)
-    status: pending
+    status: cancelled
 isProject: false
 ---
 

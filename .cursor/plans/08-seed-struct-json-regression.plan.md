@@ -4,10 +4,10 @@ overview: Regression guard ensuring seed loader REPEATED STRUCT+JSON columns ins
 todos:
   - id: yaml-e2e-seed
     content: Add end-to-end seed YAML test with REPEATED STRUCT JSON fixture
-    status: pending
+    status: completed
   - id: keep-unit-tests
     content: Maintain TestCatalogApplier_InsertRows_RepeatedStruct coverage
-    status: pending
+    status: completed
 isProject: false
 ---
 
