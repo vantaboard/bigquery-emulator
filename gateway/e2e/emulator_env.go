@@ -129,6 +129,17 @@ type emulatorFlags struct {
 	// dataDir maps to `--data_dir`. Empty defers to the emulator's
 	// default; tests that want a hermetic data dir pass `t.TempDir()`.
 	dataDir string
+	// enableSQLToolsAPI registers /api/emulator/sql/* on the gateway.
+	enableSQLToolsAPI bool
+}
+
+func gatewayOptionsFromFlags(flags emulatorFlags) gateway.Options {
+	opts := gateway.Options{}
+	if flags.enableSQLToolsAPI {
+		opts.EnableSQLToolsAPI = true
+		opts.SQLToolsAPIAllowRemote = true
+	}
+	return opts
 }
 
 // startEmulator is the default-configuration helper for tests that
@@ -142,6 +153,11 @@ func startEmulator(t *testing.T) *emulatorEnv {
 // launchEmulator starts emulator_main and an in-process gateway. Used by
 // TestMain for the query port and by startEmulatorWithFlags.
 func launchEmulator(dataDir string) (*emulatorEnv, error) {
+	return launchEmulatorFlags(emulatorFlags{dataDir: dataDir})
+}
+
+func launchEmulatorFlags(flags emulatorFlags) (*emulatorEnv, error) {
+	dataDir := flags.dataDir
 	if runtime.GOOS == "windows" {
 		return nil, errors.New("emulator_main is a POSIX subprocess; Windows is not yet wired")
 	}
@@ -179,7 +195,7 @@ func launchEmulator(dataDir string) (*emulatorEnv, error) {
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("WaitForReady: %w", err)
 	}
-	handler := gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client)
+	handler := gateway.NewServer(gatewayOptionsFromFlags(flags), handlers.BuildDependencies(client), client)
 	httpServer := httptest.NewServer(handler)
 	return &emulatorEnv{
 		httpServer: httpServer,
@@ -209,7 +225,7 @@ func startEmulatorWithFlags(t *testing.T, flags emulatorFlags) *emulatorEnv {
 	if runtime.GOOS == "windows" {
 		t.Skip("emulator_main is a POSIX subprocess; Windows is not yet wired")
 	}
-	env, err := launchEmulator(flags.dataDir)
+	env, err := launchEmulatorFlags(flags)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			t.Skip(err.Error())
