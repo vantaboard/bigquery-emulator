@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">96.1&nbsp;%</td>
-            <td class="headerCovTableEntry">154</td>
-            <td class="headerCovTableEntry">148</td>
+            <td class="headerCovTableEntryHi">96.2&nbsp;%</td>
+            <td class="headerCovTableEntry">158</td>
+            <td class="headerCovTableEntry">152</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-23 09:01:03</td>
+            <td class="headerValue">2026-06-24 04:32:17</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -204,103 +204,107 @@
 <span id="L142"><span class="lineNum">     142</span> <span class="tlaUNC tlaBgUNC">           0 :       return absl::InternalError(&quot;CREATE VIEW has null resolved stmt&quot;);</span></span>
 <span id="L143"><span class="lineNum">     143</span> <span class="tlaUNC">           0 :     }</span></span>
 <span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC tlaBgGNC">           9 :     ::googlesql::TypeFactory* reg_tf = EnsureProjectTypeFactory(kProject);</span></span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           9 :     return RegisterProjectView(</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           9 :         kProject, *create_view, std::move(output), reg_tf);</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           9 :   }</span></span>
-<span id="L148"><span class="lineNum">     148</span>              : </span>
-<span id="L149"><span class="lineNum">     149</span>              :   fs::path data_dir_{};</span>
-<span id="L150"><span class="lineNum">     150</span>              :   std::unique_ptr&lt;storage::duckdb::DuckDBStorage&gt; storage_{};</span>
-<span id="L151"><span class="lineNum">     151</span>              : };</span>
-<span id="L152"><span class="lineNum">     152</span>              : </span>
-<span id="L153"><span class="lineNum">     153</span>              : TEST_F(CatalogCrashSafetyTest,</span>
-<span id="L154"><span class="lineNum">     154</span> <span class="tlaGNC">           1 :        DuplicateViewNameAcrossDatasetsDoesNotAbortCatalogConstruction) {</span></span>
-<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_a&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_b&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L157"><span class="lineNum">     157</span>              : </span>
-<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterViewFromSql(</span></span>
-<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">           1 :                   &quot;CREATE VIEW ds_a.profiles AS SELECT id FROM ds_base.source&quot;)</span></span>
-<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           9 :     return RegisterProjectView(kProject,</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           9 :                                /*default_dataset_id=*/&quot;&quot;,</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           9 :                                *create_view,</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           9 :                                std::move(output),</span></span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           9 :                                reg_tf);</span></span>
+<span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           9 :   }</span></span>
+<span id="L151"><span class="lineNum">     151</span>              : </span>
+<span id="L152"><span class="lineNum">     152</span>              :   fs::path data_dir_{};</span>
+<span id="L153"><span class="lineNum">     153</span>              :   std::unique_ptr&lt;storage::duckdb::DuckDBStorage&gt; storage_{};</span>
+<span id="L154"><span class="lineNum">     154</span>              : };</span>
+<span id="L155"><span class="lineNum">     155</span>              : </span>
+<span id="L156"><span class="lineNum">     156</span>              : TEST_F(CatalogCrashSafetyTest,</span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :        DuplicateViewNameAcrossDatasetsDoesNotAbortCatalogConstruction) {</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_a&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_b&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L160"><span class="lineNum">     160</span>              : </span>
 <span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterViewFromSql(</span></span>
-<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :                   &quot;CREATE VIEW ds_b.profiles AS SELECT id FROM ds_base.source&quot;)</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :                   &quot;CREATE VIEW ds_a.profiles AS SELECT id FROM ds_base.source&quot;)</span></span>
 <span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
-<span id="L164"><span class="lineNum">     164</span>              : </span>
-<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">           6 :   for (int i = 0; i &lt; 5; ++i) {</span></span>
-<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           5 :     CatalogBundle bundle = MakeCatalog();</span></span>
-<span id="L167"><span class="lineNum">     167</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* table_a = nullptr;</span></span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* table_b = nullptr;</span></span>
-<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_a&quot;, &quot;profiles&quot;}, &amp;table_a).ok());</span></span>
-<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_b&quot;, &quot;profiles&quot;}, &amp;table_b).ok());</span></span>
-<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           5 :     ASSERT_NE(table_a, nullptr);</span></span>
-<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           5 :     ASSERT_NE(table_b, nullptr);</span></span>
-<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           5 :     EXPECT_NE(table_a, table_b);</span></span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           5 :   }</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L176"><span class="lineNum">     176</span>              : </span>
-<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 : TEST_F(CatalogCrashSafetyTest, ReRegisterViewReplacesWithoutAbort) {</span></span>
-<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_tenant&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 :   const std::string ddl =</span></span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 :       &quot;CREATE VIEW ds_tenant.v AS SELECT id FROM ds_base.source&quot;;</span></span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterViewFromSql(ddl).ok());</span></span>
-<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(</span></span>
-<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :       RegisterViewFromSql(</span></span>
-<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           1 :           &quot;CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM ds_base.source&quot;)</span></span>
-<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           1 :           .ok());</span></span>
-<span id="L186"><span class="lineNum">     186</span>              : </span>
-<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           4 :   for (int i = 0; i &lt; 3; ++i) {</span></span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           3 :     CatalogBundle bundle = MakeCatalog();</span></span>
-<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           3 :     const ::googlesql::Table* view = nullptr;</span></span>
-<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           3 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
-<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           3 :     ASSERT_NE(view, nullptr);</span></span>
-<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           3 :   }</span></span>
-<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L194"><span class="lineNum">     194</span>              : </span>
-<span id="L195"><span class="lineNum">     195</span> <span class="tlaGNC">           1 : TEST_F(CatalogCrashSafetyTest, ReplayFunctionsTwiceOnSameCatalogDoesNotAbort) {</span></span>
-<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           1 :   const std::string fn_name = &quot;crash_safety_ds.fn&quot;;</span></span>
-<span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory type_factory;</span></span>
-<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">           1 :   ::googlesql::SimpleCatalog catalog(kProject, &amp;type_factory);</span></span>
-<span id="L199"><span class="lineNum">     199</span>              : </span>
-<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterProjectFunction(kProject,</span></span>
-<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           1 :                                       /*is_temp=*/false,</span></span>
-<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">           1 :                                       /*analyzer_output=*/nullptr,</span></span>
-<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           1 :                                       MakeScalarFn(fn_name))</span></span>
-<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
-<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :   ReplayFunctionsIntoCatalog(kProject, catalog);</span></span>
-<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :   ReplayFunctionsIntoCatalog(kProject, catalog);</span></span>
-<span id="L207"><span class="lineNum">     207</span>              : </span>
-<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">           1 :   const ::googlesql::Function* fn = nullptr;</span></span>
-<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(catalog.GetFunction(fn_name, &amp;fn).ok());</span></span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           1 :   ASSERT_NE(fn, nullptr);</span></span>
-<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L212"><span class="lineNum">     212</span>              : </span>
-<span id="L213"><span class="lineNum">     213</span>              : TEST_F(CatalogCrashSafetyTest,</span>
-<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :        RegistrationCatalogSurvivesRepeatedViewAuthorizeCycles) {</span></span>
-<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_main&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_tenant&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L217"><span class="lineNum">     217</span>              : </span>
-<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory reg_tf;</span></span>
-<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :   const ::googlesql::LanguageOptions language = MakeCatalogLanguageOptions();</span></span>
-<span id="L220"><span class="lineNum">     220</span>              : </span>
-<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           6 :   for (int i = 0; i &lt; 5; ++i) {</span></span>
-<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           5 :     ASSERT_TRUE(RegisterViewFromSql(</span></span>
-<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           5 :                     &quot;CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM &quot;</span></span>
-<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           5 :                     &quot;ds_base.source&quot;)</span></span>
-<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           5 :                     .ok());</span></span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           5 :     GoogleSqlCatalog* reg_catalog = GetOrCreateRegistrationCatalog(</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           5 :         kProject, storage_.get(), &amp;reg_tf, language, &quot;ds_tenant&quot;);</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           5 :     ASSERT_NE(reg_catalog, nullptr);</span></span>
-<span id="L229"><span class="lineNum">     229</span>              : </span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           5 :     CatalogBundle query_catalog = MakeCatalog(&quot;ds_tenant&quot;);</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* view = nullptr;</span></span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(</span></span>
-<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           5 :         query_catalog.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
-<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           5 :     ASSERT_NE(view, nullptr);</span></span>
-<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           5 :   }</span></span>
-<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L237"><span class="lineNum">     237</span>              : </span>
-<span id="L238"><span class="lineNum">     238</span>              : }  // namespace</span>
-<span id="L239"><span class="lineNum">     239</span>              : }  // namespace catalog</span>
-<span id="L240"><span class="lineNum">     240</span>              : }  // namespace backend</span>
-<span id="L241"><span class="lineNum">     241</span>              : }  // namespace bigquery_emulator</span>
+<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterViewFromSql(</span></span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">           1 :                   &quot;CREATE VIEW ds_b.profiles AS SELECT id FROM ds_base.source&quot;)</span></span>
+<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
+<span id="L167"><span class="lineNum">     167</span>              : </span>
+<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">           6 :   for (int i = 0; i &lt; 5; ++i) {</span></span>
+<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">           5 :     CatalogBundle bundle = MakeCatalog();</span></span>
+<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* table_a = nullptr;</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* table_b = nullptr;</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_a&quot;, &quot;profiles&quot;}, &amp;table_a).ok());</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_b&quot;, &quot;profiles&quot;}, &amp;table_b).ok());</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           5 :     ASSERT_NE(table_a, nullptr);</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           5 :     ASSERT_NE(table_b, nullptr);</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           5 :     EXPECT_NE(table_a, table_b);</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           5 :   }</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L179"><span class="lineNum">     179</span>              : </span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 : TEST_F(CatalogCrashSafetyTest, ReRegisterViewReplacesWithoutAbort) {</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_tenant&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 :   const std::string ddl =</span></span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           1 :       &quot;CREATE VIEW ds_tenant.v AS SELECT id FROM ds_base.source&quot;;</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterViewFromSql(ddl).ok());</span></span>
+<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(</span></span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :       RegisterViewFromSql(</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :           &quot;CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM ds_base.source&quot;)</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :           .ok());</span></span>
+<span id="L189"><span class="lineNum">     189</span>              : </span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           4 :   for (int i = 0; i &lt; 3; ++i) {</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           3 :     CatalogBundle bundle = MakeCatalog();</span></span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           3 :     const ::googlesql::Table* view = nullptr;</span></span>
+<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           3 :     EXPECT_TRUE(bundle.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
+<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">           3 :     ASSERT_NE(view, nullptr);</span></span>
+<span id="L195"><span class="lineNum">     195</span> <span class="tlaGNC">           3 :   }</span></span>
+<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L197"><span class="lineNum">     197</span>              : </span>
+<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">           1 : TEST_F(CatalogCrashSafetyTest, ReplayFunctionsTwiceOnSameCatalogDoesNotAbort) {</span></span>
+<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">           1 :   const std::string fn_name = &quot;crash_safety_ds.fn&quot;;</span></span>
+<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory type_factory;</span></span>
+<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           1 :   ::googlesql::SimpleCatalog catalog(kProject, &amp;type_factory);</span></span>
+<span id="L202"><span class="lineNum">     202</span>              : </span>
+<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterProjectFunction(kProject,</span></span>
+<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :                                       /*dataset_id=*/&quot;&quot;,</span></span>
+<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :                                       /*is_temp=*/false,</span></span>
+<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :                                       /*analyzer_output=*/nullptr,</span></span>
+<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">           1 :                                       MakeScalarFn(fn_name))</span></span>
+<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
+<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">           1 :   ReplayFunctionsIntoCatalog(kProject, catalog);</span></span>
+<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           1 :   ReplayFunctionsIntoCatalog(kProject, catalog);</span></span>
+<span id="L211"><span class="lineNum">     211</span>              : </span>
+<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">           1 :   const ::googlesql::Function* fn = nullptr;</span></span>
+<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(catalog.GetFunction(fn_name, &amp;fn).ok());</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :   ASSERT_NE(fn, nullptr);</span></span>
+<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L216"><span class="lineNum">     216</span>              : </span>
+<span id="L217"><span class="lineNum">     217</span>              : TEST_F(CatalogCrashSafetyTest,</span>
+<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :        RegistrationCatalogSurvivesRepeatedViewAuthorizeCycles) {</span></span>
+<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_main&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(storage_-&gt;CreateDataset({kProject, &quot;ds_tenant&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L221"><span class="lineNum">     221</span>              : </span>
+<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory reg_tf;</span></span>
+<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           1 :   const ::googlesql::LanguageOptions language = MakeCatalogLanguageOptions();</span></span>
+<span id="L224"><span class="lineNum">     224</span>              : </span>
+<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           6 :   for (int i = 0; i &lt; 5; ++i) {</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           5 :     ASSERT_TRUE(RegisterViewFromSql(</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           5 :                     &quot;CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM &quot;</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           5 :                     &quot;ds_base.source&quot;)</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           5 :                     .ok());</span></span>
+<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           5 :     GoogleSqlCatalog* reg_catalog = GetOrCreateRegistrationCatalog(</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           5 :         kProject, storage_.get(), &amp;reg_tf, language, &quot;ds_tenant&quot;);</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           5 :     ASSERT_NE(reg_catalog, nullptr);</span></span>
+<span id="L233"><span class="lineNum">     233</span>              : </span>
+<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           5 :     CatalogBundle query_catalog = MakeCatalog(&quot;ds_tenant&quot;);</span></span>
+<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* view = nullptr;</span></span>
+<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(</span></span>
+<span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           5 :         query_catalog.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
+<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           5 :     ASSERT_NE(view, nullptr);</span></span>
+<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           5 :   }</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L241"><span class="lineNum">     241</span>              : </span>
+<span id="L242"><span class="lineNum">     242</span>              : }  // namespace</span>
+<span id="L243"><span class="lineNum">     243</span>              : }  // namespace catalog</span>
+<span id="L244"><span class="lineNum">     244</span>              : }  // namespace backend</span>
+<span id="L245"><span class="lineNum">     245</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>
