@@ -61,9 +61,8 @@ func fetchS3(ctx context.Context, s3URI string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(
-		req,
-	) //nolint:gosec // G704: dev-only fetch against operator-configured S3_ENDPOINT
+	//nolint:gosec // G704: dev-only fetch against operator-configured S3_ENDPOINT
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", s3URI, err)
 	}
