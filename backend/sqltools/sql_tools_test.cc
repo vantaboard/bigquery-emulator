@@ -2,6 +2,8 @@
 
 #include "backend/sqltools/sql_references.h"
 #include "googlesql/public/builtin_function_options.h"
+#include "googlesql/public/function.h"
+#include "googlesql/public/function_signature.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "gtest/gtest.h"
@@ -15,14 +17,30 @@ class SqlToolsTest : public ::testing::Test {
  protected:
   void SetUp() override {
     language_ = MakeSqlToolsLanguageOptions();
-    catalog_ = std::make_unique<::googlesql::SimpleCatalog>("test-project");
+    catalog_ = std::make_unique<::googlesql::SimpleCatalog>("test-project",
+                                                            &type_factory_);
     catalog_->AddBuiltinFunctionsAndTypes(
         ::googlesql::BuiltinFunctionOptions(language_));
+  }
+
+  void AddScalarFunction(const std::string& name) {
+    ::googlesql::FunctionSignature signature(
+        ::googlesql::FunctionArgumentType(::googlesql::types::Int64Type()),
+        /*arguments=*/{},
+        /*context_id=*/static_cast<int64_t>(0));
+    auto function = std::make_unique<::googlesql::Function>(
+        std::vector<std::string>{name},
+        /*group=*/"External_function",
+        ::googlesql::Function::SCALAR,
+        std::vector<::googlesql::FunctionSignature>{signature});
+    catalog_->AddFunction(function.get());
+    owned_functions_.push_back(std::move(function));
   }
 
   ::googlesql::LanguageOptions language_;
   ::googlesql::TypeFactory type_factory_;
   std::unique_ptr<::googlesql::SimpleCatalog> catalog_;
+  std::vector<std::unique_ptr<const ::googlesql::Function>> owned_functions_;
 };
 
 TEST_F(SqlToolsTest, FormatLenientProducesIndentedSql) {
@@ -161,6 +179,61 @@ TEST_F(SqlToolsTest, CompleteIncompleteSqlUsesHeuristicColumns) {
     }
   }
   EXPECT_TRUE(found_name);
+}
+
+TEST_F(SqlToolsTest, CompleteUserRoutineNotDuplicatedAsFunction) {
+  AddScalarFunction("add_one");
+  CatalogNames names;
+  names.routines.push_back(CatalogRoutineEntry{"ds.add_one",
+                                               "test-project.ds.add_one",
+                                               "routine",
+                                               "SQL scalar function"});
+  names.routines.push_back(CatalogRoutineEntry{
+      "add_one", "test-project.ds.add_one", "routine", "SQL scalar function"});
+
+  const std::string sql = "SELECT add_";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "ds");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  bool found_routine = false;
+  bool found_function = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "add_one" && candidate.kind == "routine") {
+      found_routine = true;
+      EXPECT_EQ(candidate.fqn, "test-project.ds.add_one");
+      EXPECT_EQ(candidate.insert_text, "add_one(");
+    }
+    if (candidate.label == "add_one" && candidate.kind == "function") {
+      found_function = true;
+    }
+  }
+  EXPECT_TRUE(found_routine);
+  EXPECT_FALSE(found_function);
+}
+
+TEST_F(SqlToolsTest, CompleteRoutineCandidateIncludesFqn) {
+  CatalogNames names;
+  names.routines.push_back(CatalogRoutineEntry{
+      "proj.ds.my_fn",
+      "proj.ds.my_fn",
+      "routine",
+      "SQL scalar function",
+  });
+  const std::string sql = "CREATE FUNCTION ";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "ds");
+  ASSERT_TRUE(result.ok()) << result.status();
+  bool found = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "proj.ds.my_fn") {
+      found = true;
+      EXPECT_EQ(candidate.kind, "routine");
+      EXPECT_EQ(candidate.fqn, "proj.ds.my_fn");
+      break;
+    }
+  }
+  EXPECT_TRUE(found);
 }
 
 }  // namespace

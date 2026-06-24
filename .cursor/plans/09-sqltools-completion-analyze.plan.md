@@ -4,19 +4,19 @@ overview: SQL Tools API endpoints work; polish completion for user routines, qua
 todos:
   - id: user-routines-in-complete
     content: Emit DDL-created routines with kind:routine, fqn, and signature detail in /complete
-    status: pending
+    status: completed
   - id: qualified-name-candidates
     content: Project-qualified table/dataset/routine candidates for 3-part typing
-    status: pending
+    status: completed
   - id: in-scope-column-fallback
     content: Heuristic FROM-table column completion when analyze fails on incomplete SQL
-    status: pending
+    status: completed
   - id: diagnostic-offset-zero
     content: Fix omitempty dropping startByte:0 in diagnostic JSON
-    status: pending
+    status: completed
   - id: e2e-sqltools-regression
     content: gateway/sqltools tests — capabilities, analyze referencedTables, complete with user UDF
-    status: pending
+    status: completed
 isProject: false
 ---
 

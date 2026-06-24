@@ -283,6 +283,7 @@ type candidateWire struct {
 	Kind       string `json:"kind"`
 	InsertText string `json:"insertText"`
 	Detail     string `json:"detail,omitempty"`
+	Fqn        string `json:"fqn,omitempty"`
 }
 
 type completeResponse struct {
@@ -338,7 +339,7 @@ func (d HandlerDeps) handleComplete(w http.ResponseWriter, r *http.Request) {
 	for _, c := range resp.GetCandidates() {
 		out.Candidates = append(out.Candidates, candidateWire{
 			Label: c.GetLabel(), Kind: c.GetKind(), InsertText: c.GetInsertText(),
-			Detail: c.GetDetail(),
+			Detail: c.GetDetail(), Fqn: c.GetFqn(),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

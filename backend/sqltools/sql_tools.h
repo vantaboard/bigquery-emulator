@@ -101,6 +101,7 @@ struct CompletionCandidate {
   std::string kind;
   std::string insert_text;
   std::string detail;
+  std::string fqn;
 };
 
 struct CompleteResult {

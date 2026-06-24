@@ -40,7 +40,12 @@ func (s *stubSQLToolsClient) Tokenize(
 func (s *stubSQLToolsClient) Complete(
 	context.Context, *enginepb.CompleteSqlRequest, ...grpc.CallOption,
 ) (*enginepb.CompleteSqlResponse, error) {
-	return &enginepb.CompleteSqlResponse{}, nil
+	return &enginepb.CompleteSqlResponse{
+		Candidates: []*enginepb.SqlCompletionCandidate{{
+			Label: "add_one", Kind: "routine", InsertText: "add_one(",
+			Detail: "SQL scalar function", Fqn: "proj.ds.add_one",
+		}},
+	}, nil
 }
 
 func (s *stubSQLToolsClient) Analyze(
@@ -96,6 +101,27 @@ func TestTokenStartUtf16ZeroWhenRequested(t *testing.T) {
 	body := string(b)
 	if !strings.Contains(body, `"startUtf16":0`) {
 		t.Fatalf("body=%q; expected startUtf16:0", body)
+	}
+}
+
+func TestCompleteCandidateFqnSurvivesJSON(t *testing.T) {
+	deps := HandlerDeps{
+		Access: AccessConfig{AllowRemote: true},
+		Client: &engine.Client{SQLTools: &stubSQLToolsClient{}},
+	}
+	body := bytes.NewBufferString(`{"projectId":"proj","sql":"SELECT add_","cursorByteOffset":10}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/emulator/sql/complete", body)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	deps.handleComplete(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"fqn":"proj.ds.add_one"`) {
+		t.Fatalf("body=%q; expected fqn field", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"kind":"routine"`) {
+		t.Fatalf("body=%q; expected routine kind", rec.Body.String())
 	}
 }
 

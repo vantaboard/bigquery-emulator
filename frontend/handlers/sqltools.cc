@@ -231,6 +231,9 @@ SqlToolsService::SqlToolsService(backend::storage::Storage* storage)
     if (!candidate.detail.empty()) {
       out->set_detail(candidate.detail);
     }
+    if (!candidate.fqn.empty()) {
+      out->set_fqn(candidate.fqn);
+    }
   }
   return ::grpc::Status::OK;
 }

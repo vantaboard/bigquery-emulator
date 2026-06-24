@@ -491,6 +491,7 @@ message SqlCompletionCandidate {
   string kind = 2;
   string insert_text = 3;
   string detail = 4;
+  string fqn = 5;
 }
 
 message CompleteSqlResponse {

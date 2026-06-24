@@ -3439,6 +3439,7 @@ type SqlCompletionCandidate struct {
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	InsertText    string                 `protobuf:"bytes,3,opt,name=insert_text,json=insertText,proto3" json:"insert_text,omitempty"`
 	Detail        string                 `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	Fqn           string                 `protobuf:"bytes,5,opt,name=fqn,proto3" json:"fqn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3497,6 +3498,13 @@ func (x *SqlCompletionCandidate) GetInsertText() string {
 func (x *SqlCompletionCandidate) GetDetail() string {
 	if x != nil {
 		return x.Detail
+	}
+	return ""
+}
+
+func (x *SqlCompletionCandidate) GetFqn() string {
+	if x != nil {
+		return x.Fqn
 	}
 	return ""
 }
@@ -3984,13 +3992,14 @@ const file_emulator_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12,\n" +
 	"\x12default_dataset_id\x18\x02 \x01(\tR\x10defaultDatasetId\x12\x10\n" +
 	"\x03sql\x18\x03 \x01(\tR\x03sql\x12,\n" +
-	"\x12cursor_byte_offset\x18\x04 \x01(\x05R\x10cursorByteOffset\"{\n" +
+	"\x12cursor_byte_offset\x18\x04 \x01(\x05R\x10cursorByteOffset\"\x8d\x01\n" +
 	"\x16SqlCompletionCandidate\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1f\n" +
 	"\vinsert_text\x18\x03 \x01(\tR\n" +
 	"insertText\x12\x16\n" +
-	"\x06detail\x18\x04 \x01(\tR\x06detail\"\xb9\x01\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\x12\x10\n" +
+	"\x03fqn\x18\x05 \x01(\tR\x03fqn\"\xb9\x01\n" +
 	"\x13CompleteSqlResponse\x12L\n" +
 	"\n" +
 	"candidates\x18\x01 \x03(\v2,.bigquery_emulator.v1.SqlCompletionCandidateR\n" +
