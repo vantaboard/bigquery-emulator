@@ -274,6 +274,17 @@ func TestTimestampStringToMicros(t *testing.T) {
 	}
 }
 
+func TestTimestampStringToMicrosWholeSecondShortOffset(t *testing.T) {
+	t.Parallel()
+	micros, err := bqtypes.TimestampStringToMicros("2025-12-01 10:49:40+00")
+	if err != nil {
+		t.Fatalf("TimestampStringToMicros: %v", err)
+	}
+	if micros != "1764586180000000" {
+		t.Fatalf("got %q, want %q", micros, "1764586180000000")
+	}
+}
+
 func TestWireCellsToRowForSchemaTimestamp(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{

@@ -192,41 +192,15 @@ absl::StatusOr<Value> EvalResolvedCast(const ::googlesql::ResolvedCast& cast,
       return Value::TimestampFromUnixMicros(micros);
     }
     if (inner.type_kind() == ::googlesql::TYPE_STRING) {
-      int64_t micros = 0;
-      std::string text(inner.string_value());
-      if (absl::EndsWith(text, " UTC")) {
-        text.resize(text.size() - 4);
+      auto parsed = ParseTimestampWireString(inner.string_value());
+      if (!parsed.ok()) {
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 absl::StrCat("semantic: CAST STRING to "
+                                              "TIMESTAMP failed for '",
+                                              inner.string_value(),
+                                              "'"));
       }
-      absl::Time t;
-      std::string err;
-      if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
-          absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
-          absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err)) {
-        return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
-      }
-      if (auto s = ::googlesql::functions::ParseStringToTimestamp(
-              "%F %T",
-              text,
-              DefaultTimeZone(),
-              /*parse_version2=*/true,
-              &micros);
-          s.ok()) {
-        return Value::TimestampFromUnixMicros(micros);
-      }
-      if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-              text,
-              DefaultTimeZone(),
-              kMicros,
-              /*allow_tz_in_str=*/true,
-              &micros);
-          s.ok()) {
-        return Value::TimestampFromUnixMicros(micros);
-      }
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               absl::StrCat("semantic: CAST STRING to "
-                                            "TIMESTAMP failed for '",
-                                            inner.string_value(),
-                                            "'"));
+      return *parsed;
     }
   }
   if (target->kind() == ::googlesql::TYPE_BOOL) {

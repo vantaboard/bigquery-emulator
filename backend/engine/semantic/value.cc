@@ -24,6 +24,8 @@
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/civil_time.h"
+#include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/interval_value.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
@@ -71,6 +73,69 @@ std::string FormatTimestampUtc(absl::Time t) {
 }
 
 }  // namespace
+
+std::string NormalizeTimestampOffsetSuffix(std::string text) {
+  if (text.size() >= 3) {
+    const size_t n = text.size();
+    const char sign = text[n - 3];
+    const char d0 = text[n - 2];
+    const char d1 = text[n - 1];
+    if ((sign == '+' || sign == '-') && absl::ascii_isdigit(d0) &&
+        absl::ascii_isdigit(d1)) {
+      // Already `+HH:MM` when the character before the sign is ':'.
+      if (n < 6 || text[n - 6] != ':') {
+        absl::StrAppend(&text, ":00");
+      }
+    }
+  }
+  return text;
+}
+
+absl::StatusOr<Value> ParseTimestampWireString(absl::string_view body) {
+  std::string text(body);
+  if (absl::EndsWith(text, " UTC")) {
+    text.resize(text.size() - 4);
+  }
+  text = NormalizeTimestampOffsetSuffix(std::move(text));
+  int64_t micros = 0;
+  absl::Time t;
+  std::string err;
+  const absl::TimeZone utc = absl::UTCTimeZone();
+  constexpr ::googlesql::functions::TimestampScale kMicros =
+      ::googlesql::functions::TimestampScale::kMicroseconds;
+  if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S", text, &t, &err)) {
+    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
+  }
+  if (auto s = ::googlesql::functions::ParseStringToTimestamp(
+          "%F %T", text, utc, /*parse_version2=*/true, &micros);
+      s.ok()) {
+    return Value::TimestampFromUnixMicros(micros);
+  }
+  if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
+          text, utc, kMicros, /*allow_tz_in_str=*/true, &micros);
+      s.ok()) {
+    return Value::TimestampFromUnixMicros(micros);
+  }
+  if (absl::ParseTime("%Y-%m-%d", text, &t, &err)) {
+    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
+  }
+  int32_t date = 0;
+  if (auto date_status = ::googlesql::functions::ParseStringToDate(
+          "%Y-%m-%d", text, /*parse_version2=*/true, &date);
+      date_status.ok()) {
+    if (auto convert_status = ::googlesql::functions::ConvertDateToTimestamp(
+            date, kMicros, utc, &micros);
+        convert_status.ok()) {
+      return Value::TimestampFromUnixMicros(micros);
+    }
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: invalid TIMESTAMP value '", body, "'"));
+}
 
 absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
   if (type == nullptr) return {};

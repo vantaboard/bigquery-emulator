@@ -117,6 +117,13 @@ int SyntheticPositionalParameterIndex(absl::string_view name);
 // returns `TYPE_UNKNOWN` on an unrecognized name.
 ::googlesql::TypeKind ParseTypeKindName(absl::string_view type_kind_name);
 
+// Normalize engine TIMESTAMP wire strings before parsing (e.g. trailing
+// `+00` / `-07` without minutes -> `+00:00` / `-07:00`).
+std::string NormalizeTimestampOffsetSuffix(std::string text);
+
+// Parse a TIMESTAMP wire / literal string into a typed Value.
+absl::StatusOr<Value> ParseTimestampWireString(absl::string_view text);
+
 // True for gateway synthetic positional keys (`p0`, `p1`, ...) emitted
 // when binding REST positional query parameters.
 bool IsSyntheticPositionalParameterName(absl::string_view name);

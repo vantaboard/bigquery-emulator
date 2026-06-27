@@ -22,6 +22,8 @@ See [`.cursor/rules/pin-reported-bugs.mdc`](../.cursor/rules/pin-reported-bugs.m
 | R8 | CTE in subquery → "WithRefScan without active WithScan bindings" | cte_subquery + differential | `a7e968ff` materialized WITH bindings |
 | R9 | Anti-join over QUALIFY-deduped views → DuckDB "column id not found" | differential + transpiler test | `e123bec5`, `0f7f054a` join binding fix |
 | R10 | Correlated / cross-product UNNEST → DuckDB "column id not found" (only `__bq_input_rn`) | conformance + transpiler test | UNNEST id-alias output mapping fix |
+| R11 | `SELECT DISTINCT` after ROW_NUMBER dedup → DuckDB binder "source_updated_at not found" | core_usage + transpiler test | aggregate scan drops stale implicit ORDER BY |
+| R12 | TIMESTAMP wire `...+00` → "Failed to parse input string" on read/construct | core_usage + semantic test | short-offset normalization before parse |
 
 ## Paths by tag
 
@@ -121,4 +123,12 @@ R10:
   - conformance/fixtures/dml/update_delete_array_offset.yaml
   - conformance/fixtures/fastpath/scan_array_unnest_cross_join.yaml
   - conformance/fixtures/fastpath/scan_array_unnest_cross_join_three.yaml
+R11:
+  - conformance/fixtures/core_usage/everyday_sql/select_distinct_after_analytic_dedup.yaml
+  - conformance/fixtures/core_usage/everyday_sql/select_distinct_unnest_after_analytic_dedup.yaml
+  - backend/engine/duckdb/transpiler/transpiler_integration_test.cc
+R12:
+  - conformance/fixtures/core_usage/everyday_sql/timestamp_short_offset_wire.yaml
+  - backend/engine/semantic/value_test.cc
+  - gateway/bqtypes/wire_test.go
 ```

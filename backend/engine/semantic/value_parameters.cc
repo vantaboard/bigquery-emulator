@@ -248,46 +248,7 @@ absl::StatusOr<Value> ParseTimeParameter(absl::string_view body) {
 }
 
 absl::StatusOr<Value> ParseTimestampParameter(absl::string_view body) {
-  std::string text(body);
-  if (absl::EndsWith(text, " UTC")) {
-    text.resize(text.size() - 4);
-  }
-  int64_t micros = 0;
-  absl::Time t;
-  std::string err;
-  const absl::TimeZone utc = absl::UTCTimeZone();
-  if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
-      absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
-      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S%Ez", text, &t, &err) ||
-      absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err) ||
-      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S", text, &t, &err)) {
-    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
-  }
-  if (auto s = ::googlesql::functions::ParseStringToTimestamp(
-          "%F %T", text, utc, /*parse_version2=*/true, &micros);
-      s.ok()) {
-    return Value::TimestampFromUnixMicros(micros);
-  }
-  if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-          text, utc, kTimestampMicros, /*allow_tz_in_str=*/true, &micros);
-      s.ok()) {
-    return Value::TimestampFromUnixMicros(micros);
-  }
-  if (absl::ParseTime("%Y-%m-%d", text, &t, &err)) {
-    return Value::TimestampFromUnixMicros(absl::ToUnixMicros(t));
-  }
-  int32_t date = 0;
-  if (auto date_status = ::googlesql::functions::ParseStringToDate(
-          "%Y-%m-%d", text, /*parse_version2=*/true, &date);
-      date_status.ok()) {
-    if (auto convert_status = ::googlesql::functions::ConvertDateToTimestamp(
-            date, kTimestampMicros, utc, &micros);
-        convert_status.ok()) {
-      return Value::TimestampFromUnixMicros(micros);
-    }
-  }
-  return absl::InvalidArgumentError(
-      absl::StrCat("semantic: invalid TIMESTAMP parameter value '", body, "'"));
+  return ParseTimestampWireString(body);
 }
 
 }  // namespace

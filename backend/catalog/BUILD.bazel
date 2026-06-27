@@ -26,6 +26,7 @@ cc_library(
     srcs = ["storage_table.cc"],
     hdrs = ["storage_table.h"],
     deps = [
+        "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/storage",
         "@com_google_absl//absl/status",

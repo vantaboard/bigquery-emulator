@@ -273,8 +273,10 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
       return s;
     }
     int64_t micros = 0;
+    const std::string text =
+        NormalizeTimestampOffsetSuffix(std::string(args[0].string_value()));
     if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-            args[0].string_value(),
+            text,
             tz,
             kMicros,
             /*allow_tz_in_str=*/false,
@@ -285,17 +287,11 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
     return Value::TimestampFromUnixMicros(micros);
   }
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
-    int64_t micros = 0;
-    if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-            args[0].string_value(),
-            DefaultTimeZone(),
-            kMicros,
-            /*allow_tz_in_str=*/true,
-            &micros);
-        !s.ok()) {
-      return s;
+    auto parsed = ParseTimestampWireString(args[0].string_value());
+    if (!parsed.ok()) {
+      return parsed.status();
     }
-    return Value::TimestampFromUnixMicros(micros);
+    return *parsed;
   }
   return absl::InvalidArgumentError(
       "semantic: TIMESTAMP constructor signature not supported");

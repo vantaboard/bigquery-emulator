@@ -1,0 +1,15 @@
+# R12: TIMESTAMP wire string with short +00 offset
+# Reported: v0.6.0 email thread (Chris Karvouniaris)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+name: timestamp_short_offset_wire
+description: |
+  Engine-emitted TIMESTAMP strings like `2025-12-01 10:49:40+00` must parse
+  through TIMESTAMP() and CAST without "Failed to parse input string".
+project_id: proj-core-ts-offset
+query: |
+  SELECT
+    TIMESTAMP('2025-12-01 10:49:40+00') IS NOT NULL AS whole_second,
+    TIMESTAMP('2026-06-05 20:26:43.220623+00') IS NOT NULL AS fractional
+expected:
+  rows:
+    - {whole_second: 'true', fractional: 'true'}

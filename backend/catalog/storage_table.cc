@@ -12,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "backend/engine/semantic/value.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/evaluator_table_iterator.h"
@@ -106,6 +107,13 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
                          n.status().message()));
       }
       return ::googlesql::Value::BigNumeric(*n);
+    }
+    if (type->kind() == ::googlesql::TYPE_TIMESTAMP) {
+      auto parsed = semantic::ParseTimestampWireString(value.string_value());
+      if (!parsed.ok()) {
+        return parsed.status();
+      }
+      return *parsed;
     }
   }
   switch (value.kind()) {

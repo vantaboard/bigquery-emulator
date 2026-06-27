@@ -192,6 +192,26 @@ TEST(SemanticValueTest, ParseParameterValueTimestampIsoWithoutTimezone) {
   EXPECT_EQ(absl::ToUnixSeconds(v->ToTime()), 1782122400);
 }
 
+TEST(SemanticValueTest, ParseTimestampWireStringShortOffset) {
+  auto v = ParseTimestampWireString("2025-12-01 10:49:40+00");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+  EXPECT_EQ(absl::ToUnixSeconds(v->ToTime()), 1764586180);
+}
+
+TEST(SemanticValueTest, ParseTimestampWireStringFractionalShortOffset) {
+  auto v = ParseTimestampWireString("2026-06-05 20:26:43.220623+00");
+  ASSERT_TRUE(v.ok()) << v.status();
+  EXPECT_EQ(v->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+}
+
+TEST(SemanticValueTest, NormalizeTimestampOffsetSuffixIdempotent) {
+  EXPECT_EQ(NormalizeTimestampOffsetSuffix("2025-12-01 10:49:40+00"),
+            "2025-12-01 10:49:40+00:00");
+  EXPECT_EQ(NormalizeTimestampOffsetSuffix("2025-12-01 10:49:40+00:00"),
+            "2025-12-01 10:49:40+00:00");
+}
+
 TEST(SemanticValueTest, ParseParameterValueTimestampDateOnly) {
   auto v = ParseParameterValue("2026-06-22", "TIMESTAMP");
   ASSERT_TRUE(v.ok()) << v.status();
