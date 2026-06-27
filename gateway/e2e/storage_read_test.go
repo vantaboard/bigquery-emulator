@@ -163,6 +163,134 @@ func runStorageReadRoundTrip(t *testing.T, env *emulatorEnv,
 	}
 }
 
+// TestStorageReadTimestampRoundTrip verifies TIMESTAMP cells round-trip through
+// insertAll and Storage Read as epoch micros, including short +00 wire forms
+// the semantic executor emits (R12 class).
+func TestStorageReadTimestampRoundTrip(t *testing.T) {
+	env := startEmulatorWithFlags(t, emulatorFlags{
+		dataDir: t.TempDir(),
+	})
+	const (
+		projectID = "proj-storage-read-ts"
+		datasetID = "ds_storage_read_ts"
+		tableID   = "samples"
+	)
+	base := env.URL() + "/bigquery/v2/projects/" + projectID
+	statusCode, body := doJSON(t, http.MethodPost, base+"/datasets",
+		[]byte(`{"datasetReference":{"projectId":"`+projectID+
+			`","datasetId":"`+datasetID+`"},"location":"US"}`))
+	if statusCode != http.StatusOK {
+		t.Fatalf("datasets.insert -> %d: %s", statusCode, string(body))
+	}
+
+	tableBody := `{
+        "tableReference":{"projectId":"` + projectID +
+		`","datasetId":"` + datasetID +
+		`","tableId":"` + tableID + `"},
+        "schema":{"fields":[
+            {"name":"id","type":"INT64","mode":"REQUIRED"},
+            {"name":"ts","type":"TIMESTAMP","mode":"NULLABLE"}
+        ]}
+    }`
+	statusCode, body = doJSON(t, http.MethodPost,
+		base+"/datasets/"+datasetID+"/tables", []byte(tableBody))
+	if statusCode != http.StatusOK {
+		t.Fatalf("tables.insert -> %d: %s", statusCode, string(body))
+	}
+
+	insertBody := `{
+        "rows":[
+            {"insertId":"a","json":{"id":1,"ts":"2025-12-01 10:49:40+00"}},
+            {"insertId":"b","json":{"id":2,"ts":"2026-06-05 20:26:43.220623+00"}}
+        ]
+    }`
+	statusCode, body = doJSON(t, http.MethodPost,
+		base+"/datasets/"+datasetID+"/tables/"+tableID+"/insertAll",
+		[]byte(insertBody))
+	if statusCode != http.StatusOK {
+		t.Fatalf("tabledata.insertAll -> %d: %s", statusCode, string(body))
+	}
+
+	conn, err := grpc.NewClient(env.EngineAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial engine at %s: %v", env.EngineAddress(), err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	storage := enginepb.NewStorageReadClient(conn)
+
+	wantMicros := map[string]string{
+		"1": "1764586180000000",
+		"2": "1780691203220623",
+	}
+	got := readSessionTimestampMicros(t, storage, projectID, datasetID, tableID,
+		nil)
+	for id, want := range wantMicros {
+		if got[id] != want {
+			t.Errorf("id=%s ts micros = %q, want %q", id, got[id], want)
+		}
+	}
+}
+
+// readSessionTimestampMicros drains ReadRows and returns id -> ts micros strings.
+func readSessionTimestampMicros(t *testing.T, storage enginepb.StorageReadClient,
+	projectID, datasetID, tableID string,
+	restriction *string) map[string]string {
+	t.Helper()
+	req := &enginepb.CreateReadSessionRequest{
+		Parent: "projects/" + projectID,
+		ReadSession: &enginepb.ReadSession{
+			Table: "projects/" + projectID + "/datasets/" +
+				datasetID + "/tables/" + tableID,
+		},
+	}
+	if restriction != nil {
+		req.ReadSession.ReadOptions = &enginepb.ReadOptions{
+			RowRestriction: *restriction,
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	session, err := storage.CreateReadSession(ctx, req)
+	if err != nil {
+		t.Fatalf("CreateReadSession: %v", err)
+	}
+	if len(session.GetStreams()) != 1 {
+		t.Fatalf("CreateReadSession streams = %d, want 1",
+			len(session.GetStreams()))
+	}
+
+	readCtx, readCancel := context.WithTimeout(context.Background(),
+		30*time.Second)
+	defer readCancel()
+	stream, err := storage.ReadRows(readCtx, &enginepb.ReadRowsRequest{
+		ReadStream: session.GetStreams()[0].GetName(),
+	})
+	if err != nil {
+		t.Fatalf("ReadRows: %v", err)
+	}
+	out := make(map[string]string)
+	for {
+		page, recvErr := stream.Recv()
+		if recvErr == io.EOF {
+			break
+		}
+		if recvErr != nil {
+			t.Fatalf("ReadRows recv: %v", recvErr)
+		}
+		for _, row := range page.GetRows() {
+			if len(row.GetCells()) < 2 {
+				t.Fatalf("ReadRows row has %d cells, want >= 2: %+v",
+					len(row.GetCells()), row)
+			}
+			id := row.GetCells()[0].GetStringValue()
+			ts := row.GetCells()[1].GetStringValue()
+			out[id] = ts
+		}
+	}
+	return out
+}
+
 // readSessionIDs mints a fresh CreateReadSession over the supplied
 // table, drains every page of ReadRows, and returns the values of
 // the `id` column (the first cell). When `restriction` is non-nil it

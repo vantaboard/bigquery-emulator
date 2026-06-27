@@ -285,6 +285,48 @@ func TestTimestampStringToMicrosWholeSecondShortOffset(t *testing.T) {
 	}
 }
 
+func TestTimestampStringToMicrosVariants(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "whole_second_short_offset",
+			input: "2025-12-01 10:49:40+00",
+			want:  "1764586180000000",
+		},
+		{
+			name:  "fractional_short_offset",
+			input: "2026-06-05 20:26:43.220623+00",
+			want:  "1780691203220623",
+		},
+		{
+			name:  "z_suffix",
+			input: "1985-04-12T23:20:50.520000Z",
+			want:  "482196050520000",
+		},
+		{
+			name:  "long_offset",
+			input: "2025-12-01 10:49:40+00:00",
+			want:  "1764586180000000",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := bqtypes.TimestampStringToMicros(tc.input)
+			if err != nil {
+				t.Fatalf("TimestampStringToMicros: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWireCellsToRowForSchemaTimestamp(t *testing.T) {
 	t.Parallel()
 	schema := &enginepb.TableSchema{
