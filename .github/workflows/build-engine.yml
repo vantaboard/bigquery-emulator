@@ -1,8 +1,9 @@
 # Canonical C++ engine build for CI.
 #
 # Runs once per push/PR, uploads `engine-binaries` for downstream
-# workflows (ci, conformance, docker-smoke, thirdparty java live)
-# to consume via `workflow_run` + `setup-engine-from-artifact`.
+# workflows (ci, conformance, googlesql-corpus, docker-smoke,
+# thirdparty java live) to consume via `workflow_run` +
+# `setup-engine-from-artifact`.
 #
 # Caching layers:
 #   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin (exact
