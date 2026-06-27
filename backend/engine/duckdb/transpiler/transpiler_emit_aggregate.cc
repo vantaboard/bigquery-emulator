@@ -347,6 +347,32 @@ std::string Transpiler::EmitAggregateScan(
   } else if (!group_by_exprs.empty()) {
     absl::StrAppend(&sql, " GROUP BY ", absl::StrJoin(group_by_exprs, ", "));
   }
+  if (!projections.empty()) {
+    absl::flat_hash_set<std::string> projected;
+    projected.reserve(projections.size());
+    for (int i = 0; i < node->group_by_list_size(); ++i) {
+      const ::googlesql::ResolvedComputedColumn* gc = node->group_by_list(i);
+      if (gc == nullptr) continue;
+      projected.insert(internal::QuoteIdent(gc->column().name()));
+    }
+    for (int i = 0; i < node->aggregate_list_size(); ++i) {
+      const ::googlesql::ResolvedComputedColumnBase* ac =
+          node->aggregate_list(i);
+      if (ac == nullptr) continue;
+      projected.insert(internal::QuoteIdent(ac->column().name()));
+    }
+    for (int i = 0; i < node->grouping_call_list_size(); ++i) {
+      const ::googlesql::ResolvedGroupingCall* gc = node->grouping_call_list(i);
+      if (gc == nullptr) continue;
+      projected.insert(internal::QuoteIdent(gc->output_column().name()));
+    }
+    internal::FilterOutputOrderItemsByProjectedColumns(
+        &output_order_items_, &output_order_column_ids_, projected);
+    if (!projected.contains(internal::QuoteIdent(internal::kBqInputRnCol))) {
+      input_rn_ordering_ = false;
+      output_includes_input_rn_ = false;
+    }
+  }
   join_output_uses_id_aliases_ = false;
   return sql;
 }

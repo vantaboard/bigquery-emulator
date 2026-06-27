@@ -1,0 +1,44 @@
+# R11: SELECT DISTINCT after ROW_NUMBER dedup window
+# Reported: v0.6.0 email thread (Chris Karvouniaris)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+name: select_distinct_after_analytic_dedup
+description: |
+  SELECT DISTINCT city over a deduped profiles subquery must not fail with
+  DuckDB binder errors from implicit ORDER BY columns dropped by GROUP BY.
+project_id: proj-core-distinct-dedup
+setup:
+  - dataset: ds_distinct
+  - sql: |
+      CREATE TABLE ds_distinct.profiles (
+        id INT64,
+        city STRING,
+        is_deleted BOOL,
+        source_updated_at TIMESTAMP
+      )
+  - rows:
+      dataset: ds_distinct
+      table: profiles
+      rows:
+        - {id: 1, city: Paris, is_deleted: false, source_updated_at: '2025-01-01 00:00:00 UTC'}
+        - {id: 1, city: Paris, is_deleted: false, source_updated_at: '2025-06-01 00:00:00 UTC'}
+        - {id: 2, city: Lyon, is_deleted: false, source_updated_at: '2025-01-01 00:00:00 UTC'}
+        - {id: 3, city: null, is_deleted: false, source_updated_at: '2025-01-01 00:00:00 UTC'}
+query: |
+  SELECT DISTINCT city
+  FROM (
+    SELECT * FROM (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) AS rn
+      FROM ds_distinct.profiles
+    )
+    WHERE rn = 1
+  )
+  WHERE COALESCE(is_deleted, FALSE) = FALSE
+    AND city IS NOT NULL
+  ORDER BY city
+expected:
+  route: duckdb_native
+  rows:
+    - {city: Lyon}
+    - {city: Paris}

@@ -377,6 +377,34 @@ inline std::vector<std::string> ExtraOrderColumnsForWrap(
   return extra;
 }
 
+// Drop implicit ORDER BY keys that are not projected by a column-reducing
+// scan (e.g. SELECT DISTINCT / GROUP BY after an analytic dedup window).
+inline void FilterOutputOrderItemsByProjectedColumns(
+    std::vector<std::string>* order_items,
+    std::vector<int>* order_column_ids,
+    const absl::flat_hash_set<std::string>& projected_quoted_names) {
+  if (order_items == nullptr || order_items->empty()) return;
+  std::vector<std::string> filtered;
+  std::vector<int> filtered_ids;
+  filtered.reserve(order_items->size());
+  filtered_ids.reserve(order_items->size());
+  for (size_t i = 0; i < order_items->size(); ++i) {
+    const std::string col = OrderItemLeadingColumn((*order_items)[i]);
+    if (col.empty()) continue;
+    if (projected_quoted_names.contains(col)) {
+      filtered.push_back((*order_items)[i]);
+      filtered_ids.push_back(order_column_ids != nullptr &&
+                                     i < order_column_ids->size()
+                                 ? (*order_column_ids)[i]
+                                 : -1);
+    }
+  }
+  *order_items = std::move(filtered);
+  if (order_column_ids != nullptr) {
+    *order_column_ids = std::move(filtered_ids);
+  }
+}
+
 inline std::vector<std::string> FilterOutputOrderItems(
     const std::vector<std::string>& items,
     const ::googlesql::ResolvedQueryStmt* node) {

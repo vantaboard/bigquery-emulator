@@ -235,6 +235,55 @@ WHERE o.profile_id IS NOT NULL AND p.id IS NULL
   EXPECT_NE(sql.find("ORDER BY \"__bq_j_1\""), std::string::npos) << sql;
 }
 
+TEST_F(TranspilerTest, TranspileDistinctScalarAfterAnalyticDedup) {
+  // R11: SELECT DISTINCT after ROW_NUMBER dedup must not ORDER BY columns
+  // dropped by the DISTINCT/GROUP BY projection (email regression).
+  const ::googlesql::ResolvedStatement* stmt = Analyze(R"sql(
+SELECT DISTINCT city
+FROM (
+  SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) AS rn
+    FROM (
+      SELECT 1 AS id, 'Paris' AS city, FALSE AS is_deleted,
+             TIMESTAMP '2025-01-01' AS source_updated_at
+      UNION ALL
+      SELECT 1, 'Paris', FALSE, TIMESTAMP '2025-06-01'
+    )
+  ) WHERE rn = 1
+)
+WHERE COALESCE(is_deleted, FALSE) = FALSE AND city IS NOT NULL
+)sql");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "DISTINCT city after dedup must transpile";
+  EXPECT_EQ(sql.find("source_updated_at"), std::string::npos) << sql;
+  EXPECT_EQ(sql.find("__bq_input_rn"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileDistinctUnnestAfterAnalyticDedup) {
+  // R11: DISTINCT over UNNEST(tags) after dedup window (email regression).
+  const ::googlesql::ResolvedStatement* stmt = Analyze(R"sql(
+SELECT DISTINCT value
+FROM (
+  SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) AS rn
+    FROM (
+      SELECT 1 AS id, ['a', 'b'] AS tags, FALSE AS is_deleted,
+             TIMESTAMP '2025-01-01' AS source_updated_at
+    )
+  ) WHERE rn = 1
+), UNNEST(tags) AS value
+WHERE COALESCE(is_deleted, FALSE) = FALSE
+)sql");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "DISTINCT UNNEST after dedup must transpile";
+  EXPECT_EQ(sql.find("source_updated_at"), std::string::npos) << sql;
+  EXPECT_EQ(sql.find("__bq_input_rn"), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, TranspileFullOuterJoinCoalesceOrderBy) {
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT COALESCE(CAST(u.id AS STRING), 'no-user') AS user_id, "

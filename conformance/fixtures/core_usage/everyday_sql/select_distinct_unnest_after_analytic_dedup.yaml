@@ -1,0 +1,41 @@
+# R11: SELECT DISTINCT over UNNEST after ROW_NUMBER dedup window
+# Reported: v0.6.0 email thread (Chris Karvouniaris)
+# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+name: select_distinct_unnest_after_analytic_dedup
+description: |
+  SELECT DISTINCT value FROM table, UNNEST(tags) over a deduped subquery must
+  transpile and execute without dangling ORDER BY binder errors.
+project_id: proj-core-distinct-unnest
+setup:
+  - dataset: ds_distinct
+  - sql: |
+      CREATE TABLE ds_distinct.profiles (
+        id INT64,
+        tags ARRAY<STRING>,
+        is_deleted BOOL,
+        source_updated_at TIMESTAMP
+      )
+  - rows:
+      dataset: ds_distinct
+      table: profiles
+      rows:
+        - {id: 1, tags: [vip, news], is_deleted: false, source_updated_at: '2025-06-01 00:00:00 UTC'}
+        - {id: 1, tags: [vip], is_deleted: false, source_updated_at: '2025-01-01 00:00:00 UTC'}
+query: |
+  SELECT DISTINCT value
+  FROM (
+    SELECT * FROM (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) AS rn
+      FROM ds_distinct.profiles
+    )
+    WHERE rn = 1
+  ), UNNEST(tags) AS value
+  WHERE COALESCE(is_deleted, FALSE) = FALSE
+  ORDER BY value
+expected:
+  route: duckdb_native
+  rows:
+    - {value: news}
+    - {value: vip}
