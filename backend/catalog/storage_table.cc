@@ -109,7 +109,8 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
       return ::googlesql::Value::BigNumeric(*n);
     }
     if (type->kind() == ::googlesql::TYPE_TIMESTAMP) {
-      auto parsed = semantic::ParseTimestampWireString(value.string_value());
+      auto parsed =
+          engine::semantic::ParseTimestampWireString(value.string_value());
       if (!parsed.ok()) {
         return parsed.status();
       }

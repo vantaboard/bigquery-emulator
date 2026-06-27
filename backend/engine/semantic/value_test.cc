@@ -210,6 +210,54 @@ TEST(SemanticValueTest, NormalizeTimestampOffsetSuffixIdempotent) {
             "2025-12-01 10:49:40+00:00");
   EXPECT_EQ(NormalizeTimestampOffsetSuffix("2025-12-01 10:49:40+00:00"),
             "2025-12-01 10:49:40+00:00");
+  EXPECT_EQ(NormalizeTimestampOffsetSuffix("2026-06-05 20:26:43.220623+00"),
+            "2026-06-05 20:26:43.220623+00:00");
+}
+
+TEST(SemanticValueTest, TimestampWireRoundTrip) {
+  struct Case {
+    const char* wire;
+    int64_t unix_seconds;
+  };
+  static constexpr Case kCases[] = {
+      {"2025-12-01 10:49:40+00", 1764586180},
+      {"2026-06-05 20:26:43.220623+00", 0},
+      {"1970-01-01 00:00:00+00", 0},
+      {"2025-12-01 10:49:40+00:00", 1764586180},
+      {"2025-12-01 10:49:40Z", 1764586180},
+  };
+  for (const Case& c : kCases) {
+    SCOPED_TRACE(c.wire);
+    auto parsed = ParseTimestampWireString(c.wire);
+    ASSERT_TRUE(parsed.ok()) << parsed.status();
+    EXPECT_EQ(parsed->type_kind(), ::googlesql::TYPE_TIMESTAMP);
+    if (c.unix_seconds != 0) {
+      EXPECT_EQ(absl::ToUnixSeconds(parsed->ToTime()), c.unix_seconds);
+    }
+    auto stored = ToStorageValue(*parsed);
+    ASSERT_TRUE(stored.ok()) << stored.status();
+    EXPECT_EQ(stored->kind(), storage::Value::Kind::kString);
+    auto roundtrip = ParseTimestampWireString(stored->string_value());
+    ASSERT_TRUE(roundtrip.ok()) << roundtrip.status();
+    EXPECT_EQ(roundtrip->ToTime(), parsed->ToTime());
+  }
+
+  const absl::Time whole_second = absl::FromUnixSeconds(1764586180);
+  auto from_value = ToStorageValue(Value::Timestamp(whole_second));
+  ASSERT_TRUE(from_value.ok()) << from_value.status();
+  EXPECT_EQ(from_value->string_value(), "2025-12-01 10:49:40+00");
+  auto reparsed = ParseTimestampWireString(from_value->string_value());
+  ASSERT_TRUE(reparsed.ok()) << reparsed.status();
+  EXPECT_EQ(absl::ToUnixSeconds(reparsed->ToTime()), 1764586180);
+
+  auto parsed_frac = ParseTimestampWireString("2026-06-05 20:26:43.220623+00");
+  ASSERT_TRUE(parsed_frac.ok()) << parsed_frac.status();
+  auto frac_stored = ToStorageValue(*parsed_frac);
+  ASSERT_TRUE(frac_stored.ok()) << frac_stored.status();
+  EXPECT_NE(frac_stored->string_value().find(".220623+00"), std::string::npos);
+  auto frac_reparsed = ParseTimestampWireString(frac_stored->string_value());
+  ASSERT_TRUE(frac_reparsed.ok()) << frac_reparsed.status();
+  EXPECT_EQ(frac_reparsed->ToTime(), parsed_frac->ToTime());
 }
 
 TEST(SemanticValueTest, ParseParameterValueTimestampDateOnly) {

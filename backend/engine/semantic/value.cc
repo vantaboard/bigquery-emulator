@@ -80,12 +80,15 @@ std::string NormalizeTimestampOffsetSuffix(std::string text) {
     const char sign = text[n - 3];
     const char d0 = text[n - 2];
     const char d1 = text[n - 1];
+    // Short UTC offset `...+HH` / `...-HH` (not already `...+HH:MM`).
     if ((sign == '+' || sign == '-') && absl::ascii_isdigit(d0) &&
-        absl::ascii_isdigit(d1)) {
-      // Already `+HH:MM` when the character before the sign is ':'.
-      if (n < 6 || text[n - 6] != ':') {
-        absl::StrAppend(&text, ":00");
+        absl::ascii_isdigit(d1) && text[n - 3] == sign) {
+      // Date-only `YYYY-MM-DD` also ends with `-DD`; require a time component.
+      if (text.find(':') == std::string::npos &&
+          text.find('T') == std::string::npos) {
+        return text;
       }
+      absl::StrAppend(&text, ":00");
     }
   }
   return text;
