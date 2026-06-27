@@ -2,6 +2,7 @@
 # Reported: v0.6.0 email thread (Chris Karvouniaris)
 # Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: select_distinct_after_analytic_dedup
+verified_production: true
 description: |
   SELECT DISTINCT city over a deduped profiles subquery must not fail with
   DuckDB binder errors from implicit ORDER BY columns dropped by GROUP BY.

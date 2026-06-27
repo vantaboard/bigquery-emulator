@@ -23,7 +23,7 @@ All fixtures set `verified_production: true`. The conformance runner and
 | `ddl_lifecycle/` | CREATE OR REPLACE, CTAS read-back, IF NOT EXISTS, ALTER, DROP IF EXISTS |
 | `default_dataset/` | Bare table names with/without request `defaultDataset` |
 | `dml_readback/` | INSERT/UPDATE/DELETE/MERGE/TRUNCATE with post-state SELECT |
-| `everyday_sql/` | Joins, aggregates, windows, QUALIFY, set ops, CTEs, UNNEST, scalars, scripting |
+| `everyday_sql/` | Joins, aggregates, windows, QUALIFY, set ops, CTEs, UNNEST, scalars, scripting; `cache_shape_*` dedup-then-downstream-op templates (DISTINCT, view-backed cache reads) |
 
 These fixtures omit `expected.route` so they assert **behavior** (rows/errors),
 not internal routing disposition.

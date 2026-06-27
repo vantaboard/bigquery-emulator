@@ -2,6 +2,7 @@
 # Reported: v0.6.0 email thread (Chris Karvouniaris)
 # Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: timestamp_short_offset_wire
+verified_production: true
 description: |
   Engine-emitted TIMESTAMP strings like `2025-12-01 10:49:40+00` must parse
   through TIMESTAMP() and CAST without "Failed to parse input string".

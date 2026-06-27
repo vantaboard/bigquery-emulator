@@ -408,6 +408,34 @@ executes (`duckdb_executor_security.*`).
 
 Conformance fixtures live under `conformance/fixtures/security/`.
 
+## Timestamp wire format
+
+TIMESTAMP values cross several producer/parser boundaries inside one
+process. Every producer string must be accepted by every consumer parser
+so storage → SELECT → Storage Read stays symmetric.
+
+| Producer | Format | Location |
+|----------|--------|----------|
+| Semantic executor / storage attach | `YYYY-MM-DD HH:MM:SS[.ffffff]+00` (short UTC offset) | `FormatTimestampUtc` in `backend/engine/semantic/value.cc` via `ToStorageValue` |
+| DuckDB Arrow read path | Microsecond-precision naive text (no TZ suffix) | `FormatTimestampMicros` in `backend/engine/duckdb/arrow_to_bq_types.cc` |
+| Insert micros-as-string | Decimal epoch micros | `TryFormatMicrosTimestampString` in `backend/storage/duckdb/duckdb_storage_literals.cc` |
+
+**Parsing rules:**
+
+- C++ consumers normalize short `+HH` / `-HH` suffixes to `+HH:00` via
+  `NormalizeTimestampOffsetSuffix` before parse (`backend/engine/semantic/value.h`).
+- `ParseTimestampWireString` is the shared entry point for wire-shaped TIMESTAMP
+  strings in the semantic executor and catalog typed reads.
+- Go gateway REST encoding uses `bqtypes.TimestampStringToMicros`, which also
+  accepts whole-second `+00`, fractional `+00`, `Z`, and `+00:00` forms
+  (`gateway/bqtypes/wire.go`).
+
+**Asymmetry:** REST query responses may pass unparseable TIMESTAMP strings
+through as text; Storage Read hard-errors when `timestampCellToMicros` cannot
+parse a cell (`gateway/handlers/bqstorage/arrow.go`). Pin with
+`gateway/e2e/storage_read_test.go` (`TestStorageReadTimestampRoundTrip`) and
+`backend/engine/semantic/value_test.cc` (`TimestampWireRoundTrip`).
+
 ## Cross-references
 
 - [`backend/engine/duckdb/transpiler/SHAPE_TRACKER.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md) — per-node route dispositions (`duckdb_native`, `duckdb_rewrite`, `duckdb_udf`, `semantic_executor`, `control_op`, `local_stub`, `unsupported`).

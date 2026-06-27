@@ -1,0 +1,35 @@
+# Proactive cache-shape: dedup VIEW then client-style SELECT DISTINCT.
+name: cache_shape_dedup_view_then_query
+verified_production: true
+description: |
+  VIEW with QUALIFY ROW_NUMBER dedup, then SELECT DISTINCT city from the view
+  — mirrors client cache tables backed by deduped views.
+project_id: proj-core-cache-view
+setup:
+  - dataset: ds_cache_view
+  - sql: |
+      CREATE TABLE ds_cache_view.events (
+        id INT64,
+        city STRING,
+        updated_at TIMESTAMP
+      )
+  - rows:
+      dataset: ds_cache_view
+      table: events
+      rows:
+        - {id: 1, city: Paris, updated_at: '2025-01-01 00:00:00 UTC'}
+        - {id: 1, city: Paris, updated_at: '2025-06-01 00:00:00 UTC'}
+        - {id: 2, city: Lyon, updated_at: '2025-01-01 00:00:00 UTC'}
+  - sql: |
+      CREATE VIEW ds_cache_view.v_events AS
+      SELECT * FROM ds_cache_view.events
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated_at DESC) = 1
+query: |
+  SELECT DISTINCT city
+  FROM ds_cache_view.v_events
+  WHERE city IS NOT NULL
+  ORDER BY city
+expected:
+  rows:
+    - {city: Lyon}
+    - {city: Paris}

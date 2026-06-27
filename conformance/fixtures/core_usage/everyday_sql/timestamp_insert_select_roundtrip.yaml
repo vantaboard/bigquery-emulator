@@ -1,0 +1,28 @@
+# R12 class: TIMESTAMP insert via rows fixture then SELECT read-back.
+name: timestamp_insert_select_roundtrip
+verified_production: true
+description: |
+  CREATE TABLE with TIMESTAMP, seed rows via fixture rows block, SELECT ts back
+  exercises storage attach and DuckDB read path for engine-emitted wire forms.
+project_id: proj-core-ts-roundtrip
+setup:
+  - dataset: ds_ts
+  - sql: |
+      CREATE TABLE ds_ts.samples (
+        id INT64,
+        ts TIMESTAMP
+      )
+  - rows:
+      dataset: ds_ts
+      table: samples
+      rows:
+        - {id: 1, ts: '2025-12-01 10:49:40 UTC'}
+        - {id: 2, ts: '2026-06-05 20:26:43.220623 UTC'}
+query: |
+  SELECT id, FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E*S', ts, 'UTC') AS ts_text
+  FROM ds_ts.samples
+  ORDER BY id
+expected:
+  rows:
+    - {id: "1", ts_text: '2025-12-01 10:49:40'}
+    - {id: "2", ts_text: '2026-06-05 20:26:43.220623'}

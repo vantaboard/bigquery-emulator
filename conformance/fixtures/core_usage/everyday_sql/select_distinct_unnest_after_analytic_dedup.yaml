@@ -2,6 +2,7 @@
 # Reported: v0.6.0 email thread (Chris Karvouniaris)
 # Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
 name: select_distinct_unnest_after_analytic_dedup
+verified_production: true
 description: |
   SELECT DISTINCT value FROM table, UNNEST(tags) over a deduped subquery must
   transpile and execute without dangling ORDER BY binder errors.

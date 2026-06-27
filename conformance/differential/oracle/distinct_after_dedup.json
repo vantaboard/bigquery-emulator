@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-06-27T00:00:00Z",
+  "project": "proj-diff-distinct-dedup",
+  "oracle_source": "bq-cli",
+  "success": true,
+  "schema": {
+    "fields": [
+      {
+        "name": "city",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "Lyon"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "Paris"
+        }
+      ]
+    }
+  ]
+}

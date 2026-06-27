@@ -1,0 +1,36 @@
+# R11 class: SELECT DISTINCT after ROW_NUMBER dedup subquery.
+name: distinct_after_dedup
+description: |
+  DISTINCT on a scalar column over a deduped subquery — differential oracle for
+  the stale implicit ORDER BY binder failure class.
+oracle_ref: distinct_after_dedup.json
+oracle_source: bq-cli
+project_id: proj-diff-distinct-dedup
+setup:
+  - dataset: ds_diff
+  - sql: |
+      CREATE TABLE ds_diff.events (
+        id INT64,
+        city STRING,
+        updated_at TIMESTAMP
+      )
+  - rows:
+      dataset: ds_diff
+      table: events
+      rows:
+        - {id: 1, city: Paris, updated_at: '2025-01-01 00:00:00 UTC'}
+        - {id: 1, city: Paris, updated_at: '2025-06-01 00:00:00 UTC'}
+        - {id: 2, city: Lyon, updated_at: '2025-01-01 00:00:00 UTC'}
+query: |
+  SELECT DISTINCT city
+  FROM (
+    SELECT * FROM (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated_at DESC) AS rn
+      FROM ds_diff.events
+    )
+    WHERE rn = 1
+  )
+  WHERE city IS NOT NULL
+  ORDER BY city

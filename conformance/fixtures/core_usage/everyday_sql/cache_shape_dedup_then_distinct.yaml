@@ -1,0 +1,39 @@
+# Proactive cache-shape: dedup subquery then SELECT DISTINCT (R11 class).
+name: cache_shape_dedup_then_distinct
+verified_production: true
+description: |
+  Generic ROW_NUMBER dedup subquery followed by SELECT DISTINCT on a scalar
+  column — recurring ELT cache-refresh pattern without is_deleted filters.
+project_id: proj-core-cache-distinct
+setup:
+  - dataset: ds_cache
+  - sql: |
+      CREATE TABLE ds_cache.events (
+        id INT64,
+        city STRING,
+        updated_at TIMESTAMP
+      )
+  - rows:
+      dataset: ds_cache
+      table: events
+      rows:
+        - {id: 1, city: Paris, updated_at: '2025-01-01 00:00:00 UTC'}
+        - {id: 1, city: Paris, updated_at: '2025-06-01 00:00:00 UTC'}
+        - {id: 2, city: Lyon, updated_at: '2025-01-01 00:00:00 UTC'}
+query: |
+  SELECT DISTINCT city
+  FROM (
+    SELECT * FROM (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated_at DESC) AS rn
+      FROM ds_cache.events
+    )
+    WHERE rn = 1
+  )
+  WHERE city IS NOT NULL
+  ORDER BY city
+expected:
+  rows:
+    - {city: Lyon}
+    - {city: Paris}
