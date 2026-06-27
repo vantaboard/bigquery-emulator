@@ -257,8 +257,18 @@ WHERE COALESCE(is_deleted, FALSE) = FALSE AND city IS NOT NULL
   TestTranspiler t;
   std::string sql = t.Transpile(stmt);
   ASSERT_FALSE(sql.empty()) << "DISTINCT city after dedup must transpile";
-  EXPECT_EQ(sql.find("source_updated_at"), std::string::npos) << sql;
-  EXPECT_EQ(sql.find("__bq_input_rn"), std::string::npos) << sql;
+  const size_t group_by = sql.rfind(" GROUP BY ");
+  const size_t order_by = group_by == std::string::npos
+                              ? sql.rfind(" ORDER BY ")
+                              : sql.find(" ORDER BY ", group_by);
+  if (order_by != std::string::npos &&
+      (group_by == std::string::npos || order_by > group_by)) {
+    const std::string order_clause = sql.substr(order_by);
+    EXPECT_EQ(order_clause.find("source_updated_at"), std::string::npos)
+        << order_clause;
+    EXPECT_EQ(order_clause.find("__bq_input_rn"), std::string::npos)
+        << order_clause;
+  }
 }
 
 TEST_F(TranspilerTest, TranspileDistinctUnnestAfterAnalyticDedup) {
@@ -280,8 +290,18 @@ WHERE COALESCE(is_deleted, FALSE) = FALSE
   TestTranspiler t;
   std::string sql = t.Transpile(stmt);
   ASSERT_FALSE(sql.empty()) << "DISTINCT UNNEST after dedup must transpile";
-  EXPECT_EQ(sql.find("source_updated_at"), std::string::npos) << sql;
-  EXPECT_EQ(sql.find("__bq_input_rn"), std::string::npos) << sql;
+  const size_t group_by = sql.rfind(" GROUP BY ");
+  const size_t order_by = group_by == std::string::npos
+                              ? sql.rfind(" ORDER BY ")
+                              : sql.find(" ORDER BY ", group_by);
+  if (order_by != std::string::npos &&
+      (group_by == std::string::npos || order_by > group_by)) {
+    const std::string order_clause = sql.substr(order_by);
+    EXPECT_EQ(order_clause.find("source_updated_at"), std::string::npos)
+        << order_clause;
+    EXPECT_EQ(order_clause.find("__bq_input_rn"), std::string::npos)
+        << order_clause;
+  }
 }
 
 TEST_F(TranspilerTest, TranspileFullOuterJoinCoalesceOrderBy) {

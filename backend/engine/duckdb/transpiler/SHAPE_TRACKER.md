@@ -152,6 +152,25 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedComputedColumn`                      | `duckdb_native`       | `transpiler-select-core`: `<expr> AS "<resolved-column-name>"`; child expression failures propagate the empty-string fallback contract. |
 | `ResolvedDeferredComputedColumn`              | `semantic_executor`   | Side-effect-aware computed column (deferred error capture via `side_effect_column`). Evaluated in `scan_eval_aggregate.cc`; pinned by `scan_eval_aggregate_deferred_test`. |
 | `ResolvedOrderByItem`                         | `duckdb_native` (subset) | `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` promotes to `semantic_executor` with the parent `ResolvedOrderByScan`. |
+
+## Cross-scan ORDER BY invariant
+
+Column-reducing scans (`ResolvedAggregateScan` with `DISTINCT` / `GROUP BY`,
+set-op dedup, etc.) must **clear or filter** the transpiler's cross-scan
+`output_order_items_` / `output_order_column_ids_` state before
+`EmitQueryStmt` appends a root `ORDER BY`. Analytic scans capture window
+`PARTITION BY` / `ORDER BY` keys into that state for input-order preservation;
+when a downstream scan drops those columns from its projection, the root
+`ORDER BY` may only reference **final output column names**.
+
+- `EmitAggregateScan` calls `FilterOutputOrderItemsByProjectedColumns` after
+  emitting the grouped projection.
+- `EmitQueryStmt` calls `FilterOutputOrderState` as a belt-and-suspenders guard
+  before appending `output_order_items_` to the outermost SELECT.
+
+Pinned by `transpiler_emit_composition_test.cc`
+(`SeededDistinctAfterDedupGeneratorBinds`, `DistinctCityAfterQualifyDedupBinds`)
+and `transpiler_integration_test.cc` (`TranspileDistinctScalarAfterAnalyticDedup`).
 | `ResolvedColumnHolder`                        | `semantic_executor`   | UNNEST WITH OFFSET shape; `backend/engine/semantic/array_struct/array_scan.cc` binds the holder's `ResolvedColumn` to the per-row INT64 offset; `docs/ENGINE_POLICY.md` Family 1. |
 | `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` | `duckdb_rewrite` | `advanced-relational-routing`: GROUPING SETS / ROLLUP / CUBE lower onto DuckDB's `GROUP BY GROUPING SETS (...)` form via `EmitGroupingSetEntry` (see the `ResolvedAggregateScan` row).         |
 | `ResolvedAggregateHavingModifier`             | `semantic_executor`   | HAVING MAX/MIN inside aggregate calls; `scan_eval_agg_having.cc` filters input rows before aggregate evaluation. Conformance: `conformance/fixtures/aggregate/aggregate_any_value_having_max.yaml`. |

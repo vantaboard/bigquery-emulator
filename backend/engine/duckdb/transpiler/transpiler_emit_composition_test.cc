@@ -16,6 +16,7 @@ namespace {
 
 constexpr int kCompositionGeneratorSeed = 0x06060606;
 constexpr int kCompositionGeneratorCases = 24;
+constexpr int kDistinctAfterDedupGeneratorCases = 12;
 
 std::string WrapQualifyDedupSubquery(absl::string_view partition_col,
                                      absl::string_view inner_sql) {
@@ -41,6 +42,11 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
   void SetUp() override {
     TranspilerBindFixture::SetUp();
 
+    const ::googlesql::ArrayType* profile_tags_type = nullptr;
+    ASSERT_TRUE(
+        type_factory_
+            ->MakeArrayType(type_factory_->get_string(), &profile_tags_type)
+            .ok());
     auto profiles = std::make_unique<::googlesql::SimpleTable>(
         "profiles",
         std::vector<::googlesql::SimpleTable::NameAndType>{
@@ -48,6 +54,16 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
             {"name", type_factory_->get_string()},
         });
     catalog_->AddOwnedTable(std::move(profiles));
+
+    auto dedup_profiles = std::make_unique<::googlesql::SimpleTable>(
+        "dedup_profiles",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"city", type_factory_->get_string()},
+            {"tags", profile_tags_type},
+            {"source_updated_at", type_factory_->get_timestamp()},
+        });
+    catalog_->AddOwnedTable(std::move(dedup_profiles));
 
     auto bq_orders = std::make_unique<::googlesql::SimpleTable>(
         "bq_orders",
@@ -85,8 +101,34 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
     ExecDdl("CREATE TABLE people (id BIGINT, name VARCHAR)");
     ExecDdl("CREATE TABLE items (id BIGINT, vals BIGINT[])");
     ExecDdl("CREATE TABLE arrays (tags STRING[])");
+    ExecDdl(
+        "CREATE TABLE dedup_profiles (id BIGINT, city VARCHAR, tags STRING[], "
+        "source_updated_at TIMESTAMPTZ)");
   }
 };
+
+TEST_F(TranspilerCompositionTest, DistinctCityAfterQualifyDedupBinds) {
+  static constexpr const char kSql[] = R"sql(
+SELECT DISTINCT city
+FROM (
+  SELECT * FROM dedup_profiles
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) = 1
+)
+WHERE city IS NOT NULL
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
+
+TEST_F(TranspilerCompositionTest, DistinctUnnestAfterQualifyDedupBinds) {
+  static constexpr const char kSql[] = R"sql(
+SELECT DISTINCT tag
+FROM (
+  SELECT * FROM dedup_profiles
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY source_updated_at DESC) = 1
+), UNNEST(tags) AS tag
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
 
 TEST_F(TranspilerCompositionTest, CorrelatedUnnestFromTableBinds) {
   static constexpr const char kSql[] = R"sql(
@@ -213,6 +255,30 @@ TEST_F(TranspilerCompositionTest, SeededCompositionGeneratorBinds) {
     }
 
     SCOPED_TRACE(absl::StrCat("case=", i, " sql=", sql));
+    AssertSqlTranspileBinds(sql);
+  }
+}
+
+TEST_F(TranspilerCompositionTest, SeededDistinctAfterDedupGeneratorBinds) {
+  uint32_t rng = kCompositionGeneratorSeed ^ 0xD157111Cu;
+  for (int i = 0; i < kDistinctAfterDedupGeneratorCases; ++i) {
+    const int wrap3 = static_cast<int>(LcgNext(&rng) % 3);
+    const std::string deduped = WrapQualifyDedupSubquery(
+        "id", "SELECT id, city, tags FROM dedup_profiles");
+
+    std::string sql;
+    if (wrap3 == 0) {
+      sql = absl::StrCat(
+          "SELECT DISTINCT city FROM (", deduped, ") WHERE city IS NOT NULL");
+    } else if (wrap3 == 1) {
+      sql = absl::StrCat(
+          "SELECT DISTINCT tag FROM (", deduped, "), UNNEST(tags) AS tag");
+    } else {
+      sql = absl::StrCat(
+          "SELECT city, COUNT(*) AS c FROM (", deduped, ") GROUP BY city");
+    }
+
+    SCOPED_TRACE(absl::StrCat("distinct_case=", i, " sql=", sql));
     AssertSqlTranspileBinds(sql);
   }
 }

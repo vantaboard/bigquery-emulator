@@ -374,6 +374,9 @@ std::string Transpiler::EmitAggregateScan(
     }
   }
   join_output_uses_id_aliases_ = false;
+  if (!projections.empty()) {
+    join_output_columns_use_id_aliases_ = false;
+  }
   return sql;
 }
 

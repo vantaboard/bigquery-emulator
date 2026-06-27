@@ -405,30 +405,6 @@ inline void FilterOutputOrderItemsByProjectedColumns(
   }
 }
 
-inline std::vector<std::string> FilterOutputOrderItems(
-    const std::vector<std::string>& items,
-    const ::googlesql::ResolvedQueryStmt* node) {
-  if (node == nullptr) return {};
-  std::vector<std::string> filtered;
-  filtered.reserve(items.size());
-  for (const std::string& item : items) {
-    if (item.empty() || item[0] != '"') continue;
-    const size_t end = item.find('"', 1);
-    if (end == std::string::npos) continue;
-    const std::string quoted_col = item.substr(0, end + 1);
-    for (int i = 0; i < node->output_column_list_size(); ++i) {
-      const ::googlesql::ResolvedOutputColumn* out =
-          node->output_column_list(i);
-      if (out == nullptr) continue;
-      if (quoted_col == QuoteIdent(out->column().name())) {
-        filtered.push_back(item);
-        break;
-      }
-    }
-  }
-  return filtered;
-}
-
 // `CASE val WHEN w1 THEN t1 ... ELSE e END` for analyzer `$case_with_value`.
 inline std::string EmitCaseWithValue(const std::vector<std::string>& args) {
   if (args.size() < 2 || (args.size() % 2) != 0) return "";

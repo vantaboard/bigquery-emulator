@@ -101,6 +101,26 @@ std::string Transpiler::EmitQueryStmt(
   std::string sql = absl::StrCat(
       "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
   if (!output_order_items_.empty()) {
+    std::vector<std::string> filtered_items;
+    std::vector<int> filtered_ids;
+    filtered_items.reserve(output_order_items_.size());
+    filtered_ids.reserve(output_order_items_.size());
+    for (size_t i = 0; i < output_order_items_.size(); ++i) {
+      const std::string& item = output_order_items_[i];
+      if (item.empty() || item[0] != '"') continue;
+      const size_t end = item.find('"', 1);
+      if (end == std::string::npos) continue;
+      const std::string quoted_col = item.substr(0, end + 1);
+      if (!internal::OutputListContainsColumn(quoted_col, node)) continue;
+      filtered_items.push_back(item);
+      filtered_ids.push_back(i < output_order_column_ids_.size()
+                                 ? output_order_column_ids_[i]
+                                 : -1);
+    }
+    output_order_items_ = std::move(filtered_items);
+    output_order_column_ids_ = std::move(filtered_ids);
+  }
+  if (!output_order_items_.empty()) {
     std::vector<std::string> wrap_order_items;
     wrap_order_items.reserve(output_order_items_.size());
     for (size_t i = 0; i < output_order_items_.size(); ++i) {
