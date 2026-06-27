@@ -771,6 +771,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#timestamp-wire-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Timestamp wire format
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cross-references" class="md-nav__link">
     <span class="md-ellipsis">
       Cross-references
@@ -1052,6 +1061,15 @@
   <a href="#row-access-and-column-level-security-mvp" class="md-nav__link">
     <span class="md-ellipsis">
       Row-access and column-level security (MVP)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timestamp-wire-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Timestamp wire format
     </span>
   </a>
   
@@ -1885,6 +1903,51 @@ and DENIED. DENIED columns surface <code>accessDenied</code> (HTTP 403) when
 selected. Masking runs in the DuckDB row source after the query
 executes (<code>duckdb_executor_security.*</code>).</p>
 <p>Conformance fixtures live under <code>conformance/fixtures/security/</code>.</p>
+<h2 id="timestamp-wire-format">Timestamp wire format<a class="headerlink" href="#timestamp-wire-format" title="Permanent link">&para;</a></h2>
+<p>TIMESTAMP values cross several producer/parser boundaries inside one
+process. Every producer string must be accepted by every consumer parser
+so storage → SELECT → Storage Read stays symmetric.</p>
+<table>
+<thead>
+<tr>
+<th>Producer</th>
+<th>Format</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Semantic executor / storage attach</td>
+<td><code>YYYY-MM-DD HH:MM:SS[.ffffff]+00</code> (short UTC offset)</td>
+<td><code>FormatTimestampUtc</code> in <code>backend/engine/semantic/value.cc</code> via <code>ToStorageValue</code></td>
+</tr>
+<tr>
+<td>DuckDB Arrow read path</td>
+<td>Microsecond-precision naive text (no TZ suffix)</td>
+<td><code>FormatTimestampMicros</code> in <code>backend/engine/duckdb/arrow_to_bq_types.cc</code></td>
+</tr>
+<tr>
+<td>Insert micros-as-string</td>
+<td>Decimal epoch micros</td>
+<td><code>TryFormatMicrosTimestampString</code> in <code>backend/storage/duckdb/duckdb_storage_literals.cc</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Parsing rules:</strong></p>
+<ul>
+<li>C++ consumers normalize short <code>+HH</code> / <code>-HH</code> suffixes to <code>+HH:00</code> via
+  <code>NormalizeTimestampOffsetSuffix</code> before parse (<code>backend/engine/semantic/value.h</code>).</li>
+<li><code>ParseTimestampWireString</code> is the shared entry point for wire-shaped TIMESTAMP
+  strings in the semantic executor and catalog typed reads.</li>
+<li>Go gateway REST encoding uses <code>bqtypes.TimestampStringToMicros</code>, which also
+  accepts whole-second <code>+00</code>, fractional <code>+00</code>, <code>Z</code>, and <code>+00:00</code> forms
+  (<code>gateway/bqtypes/wire.go</code>).</li>
+</ul>
+<p><strong>Asymmetry:</strong> REST query responses may pass unparseable TIMESTAMP strings
+through as text; Storage Read hard-errors when <code>timestampCellToMicros</code> cannot
+parse a cell (<code>gateway/handlers/bqstorage/arrow.go</code>). Pin with
+<code>gateway/e2e/storage_read_test.go</code> (<code>TestStorageReadTimestampRoundTrip</code>) and
+<code>backend/engine/semantic/value_test.cc</code> (<code>TimestampWireRoundTrip</code>).</p>
 <h2 id="cross-references">Cross-references<a class="headerlink" href="#cross-references" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/backend/engine/duckdb/transpiler/SHAPE_TRACKER.md"><code>backend/engine/duckdb/transpiler/SHAPE_TRACKER.md</code></a> — per-node route dispositions (<code>duckdb_native</code>, <code>duckdb_rewrite</code>, <code>duckdb_udf</code>, <code>semantic_executor</code>, <code>control_op</code>, <code>local_stub</code>, <code>unsupported</code>).</li>
