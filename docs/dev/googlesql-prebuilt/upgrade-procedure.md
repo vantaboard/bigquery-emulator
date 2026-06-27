@@ -175,7 +175,7 @@ gh variable list --repo <owner>/<repo>
 ```
 
 These cover every lane that calls `setup-googlesql` without an
-explicit override: ci.yml, conformance.yml, coverage-bazel.yml,
+explicit override: build-engine.yml, conformance.yml,
 thirdparty-samples.yml, docker-smoke.yml, and googlesql-parity.yml's
 prebuilt leg.
 

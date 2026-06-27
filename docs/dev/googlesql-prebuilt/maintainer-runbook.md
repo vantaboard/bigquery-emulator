@@ -186,7 +186,7 @@ artifact:
 
 `vars.GOOGLESQL_PREBUILT_URL` and `vars.GOOGLESQL_PREBUILT_SHA256`
 are read by every lane that calls `setup-googlesql` without an
-explicit override (ci.yml, conformance.yml, coverage-bazel.yml,
+explicit override (build-engine.yml, conformance.yml,
 thirdparty-samples.yml, docker-smoke.yml, googlesql-parity.yml's
 prebuilt leg). Update them with `gh`:
 

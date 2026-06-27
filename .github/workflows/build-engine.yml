@@ -1,9 +1,10 @@
 # Canonical C++ engine build for CI.
 #
-# Runs once per push/PR, uploads `engine-binaries` for downstream
+# Runs once per push/PR: builds `engine-binaries`, runs first-party
+# `cc_test`, and (main push only) emits `cpp-bazel-coverage`. Downstream
 # workflows (ci, conformance, googlesql-corpus, docker-smoke,
-# thirdparty java live) to consume via `workflow_run` +
-# `setup-engine-from-artifact`.
+# coverage-publish, thirdparty live lanes) consume artifacts via
+# `workflow_run` + `setup-engine-from-artifact` / artifact download.
 #
 # Caching layers:
 #   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin (exact
@@ -43,7 +44,9 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # cc_test + main-only instrumented coverage can exceed 120 min on a
+    # cold `engine` disk cache; mirrors release.yml's 180 min ceiling.
+    timeout-minutes: 180
     outputs:
       googlesql-mode: ${{ steps.googlesql.outputs.mode }}
       artifact-version: ${{ steps.googlesql.outputs.artifact-version }}
@@ -129,6 +132,58 @@ jobs:
             task emulator:build-engine:bazel
           fi
 
+      - name: Run first-party cc_test targets via Bazel
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: task lint:cpp:test
+
+      - name: Install coverage tooling (main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          sudo apt-get install -y --no-install-recommends llvm lcov
+          for tool in llvm-cov llvm-profdata; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              ver="$(basename "$(ls -1 /usr/bin/${tool}-* 2>/dev/null | sort -V | tail -1)")"
+              if [ -n "$ver" ]; then
+                sudo ln -sf "/usr/bin/$ver" "/usr/bin/$tool"
+              fi
+            fi
+          done
+
+      - name: Enumerate cc_test targets (main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: coverage-targets
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          set -euo pipefail
+          case "${GOOGLESQL_SOURCE:-prebuilt}" in
+            prebuilt) gsq_cfg=googlesql-prebuilt ;;
+            local|source) gsq_cfg=googlesql-source ;;
+            *) echo "Unexpected GOOGLESQL_SOURCE='${GOOGLESQL_SOURCE}'" >&2; exit 2 ;;
+          esac
+          query='kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)'
+          targets="$(bazel query --config="$gsq_cfg" "$query" | tr '\n' ' ')"
+          if [ -z "${targets// }" ]; then
+            echo "no cc_test targets found via bazel query: $query" >&2
+            exit 1
+          fi
+          echo "targets=${targets}" >> "$GITHUB_OUTPUT"
+
+      - name: Run bazel coverage (main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          case "${GOOGLESQL_SOURCE:-prebuilt}" in
+            prebuilt) gsq_cfg=googlesql-prebuilt ;;
+            local|source) gsq_cfg=googlesql-source ;;
+          esac
+          echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          task bazel:coverage \
+            TARGETS="${{ steps.coverage-targets.outputs.targets }}" \
+            COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
+
       - name: Build Go gateway (gateway_main)
         run: |
           mkdir -p bin
@@ -182,6 +237,15 @@ jobs:
             bin/libduckdb.so
             bin/gateway_main
             engine-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload C++ (Bazel) coverage artifact
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v6
+        with:
+          name: cpp-bazel-coverage
+          path: .cache/coverage/_coverage_report.dat
           if-no-files-found: error
           retention-days: 14
 

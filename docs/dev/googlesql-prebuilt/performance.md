@@ -52,7 +52,7 @@ Every CI lane that touches the engine binary now goes through the
 |---|---|
 | Main build + test | [`ci.yml`](../../../.github/workflows/ci.yml) |
 | Conformance fixture lanes | [`conformance.yml`](../../../.github/workflows/conformance.yml) |
-| Coverage (Bazel) | [`coverage-bazel.yml`](../../../.github/workflows/coverage-bazel.yml) |
+| Coverage (Bazel) | [`build-engine.yml`](../../../.github/workflows/build-engine.yml) (main push) |
 | Third-party samples | [`thirdparty-samples.yml`](../../../.github/workflows/thirdparty-samples.yml) |
 | Docker smoke | [`docker-smoke.yml`](../../../.github/workflows/docker-smoke.yml) |
 | Release | [`release.yml`](../../../.github/workflows/release.yml) (with `fail-on-source-fallback: true`) |

@@ -2,8 +2,9 @@
 
 GitHub Actions builds the C++ engine (`emulator_main` + `libduckdb.so`) **once**
 per push/PR in the [`build-engine`](../../.github/workflows/build-engine.yml)
-workflow. Downstream lanes download that artifact instead of compiling GoogleSQL
-again.
+workflow, runs first-party `cc_test` in the same job, and (on push to `main`
+only) emits instrumented Bazel coverage. Downstream lanes download
+`engine-binaries` instead of compiling GoogleSQL again.
 
 ## Flow
 
@@ -11,6 +12,7 @@ again.
 push / pull_request
         │
         ├─► build-engine / build          ──► engine-binaries artifact
+        │                                   └──► cpp-bazel-coverage (main push)
         ├─► ci-cpp-analysis / cpp-analysis (parallel, no engine)
         ├─► conformance-routing-matrix / routing-matrix (parallel)
         └─► thirdparty-golang-compile / golang compile (parallel)
@@ -18,15 +20,14 @@ push / pull_request
                 │ workflow_run (build-engine success)
                 ├─► ci / build-and-test (amd64) ──► go-coverage artifact
                 ├─► conformance / conformance (duckdb)
+                ├─► googlesql-corpus / googlesql corpus (pinned)
                 ├─► docker-smoke / quickstart-smoke
                 ├─► thirdparty-samples / java live
                 ├─► thirdparty-samples / python nox snippets
                 ├─► thirdparty-samples / node Mocha
                 ├─► thirdparty-samples / golang live
                 ├─► thirdparty-samples / bigframes snippet gate
-                └─► coverage-bazel / bazel-coverage (main push only)
-                        │
-                        └─► coverage-publish (after ci or coverage-bazel)
+                └─► coverage-publish (after ci or build-engine)
 ```
 
 Consumer workflows (`ci`, `conformance`, `docker-smoke`, `thirdparty-samples`)
@@ -34,10 +35,10 @@ are **`workflow_run` only**. They never run on push, so they cannot show green
 with skipped gate jobs. If `build-engine` fails, each consumer runs an
 `engine-build-failed` job that exits non-zero.
 
-[`coverage-bazel`](../../.github/workflows/coverage-bazel.yml) is also
-**`workflow_run` only** and runs **only on push to `main`** (not on PRs). PR
-coverage gates use Go coverage from `ci` only; C++ Bazel coverage is
-informational and runs post-merge.
+[`coverage-publish`](../../.github/workflows/coverage-publish.yml) aggregates
+Go coverage from `ci` and C++ coverage from the same `build-engine` run on
+push to `main`. PR coverage gates use Go coverage from `ci` only; C++ Bazel
+coverage is informational and runs post-merge inside `build-engine`.
 
 Cheap push/PR workflows (no engine):
 
@@ -50,8 +51,8 @@ Cheap push/PR workflows (no engine):
 | Layer | Where | Purpose |
 |-------|--------|---------|
 | `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged **and** the cache key matches exactly |
-| `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine`, `coverage-bazel` | Skip tarball download when prebuilt SHA256 pin unchanged |
-| Bazel `disk-cache: engine` | `build-engine`, `coverage-bazel`, `ci` cc_test | Shared incremental compile cache (safe partial reuse) |
+| `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine` | Skip tarball download when prebuilt SHA256 pin unchanged |
+| Bazel `disk-cache: engine` | `build-engine` | Shared incremental compile cache for engine, cc_test, and coverage |
 | `engine-binaries` artifact | per successful `build-engine` run | Consumers + re-runs download without rebuilding |
 
 ### `bin/` cache safety (exact hit only)
@@ -108,9 +109,9 @@ it to **`ci-cpp-analysis / cpp-analysis (cppcheck)`** (workflow was split out).
 
 ## Local development
 
-[`task ci:run`](../../taskfiles/ci.yml) still builds the engine sequentially on
-one machine (`task emulator:build-engine:bazel`). CI splits build and test
-across workflows for runner efficiency; local dev keeps the single-process mirror.
+# CI splits build, cc_test, and (on main) C++ coverage into `build-engine`;
+# `task ci:run` still runs them sequentially on one machine. Local dev
+# keeps the single-process mirror.
 
 Docker lanes locally continue to use `task docker:smoke` (full build). CI
 docker-smoke sets `DOCKER_SMOKE_SKIP_BUILD=1` after loading a pre-built image

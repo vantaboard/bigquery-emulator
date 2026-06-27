@@ -33,7 +33,8 @@ version: "3"
 
 vars:
   # Shared by `lint:cpp:test` and `lint:cpp:compile-commands` (same
-  # expression as `coverage-bazel.yml` Enumerate step and `task lint:cpp:test`).
+  # expression as `build-engine.yml` coverage enumerate step and
+  # `task lint:cpp:test`).
   CC_TEST_BAZEL_QUERY: >-
     kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)
   # Map GOOGLESQL_SOURCE to the `--config=` group Bazel needs for
