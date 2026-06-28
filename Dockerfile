@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=mirror.gcr.io/docker/dockerfile:1.7
 #
 # Multi-stage build for the BigQuery emulator. Mirrors the
 # cloud-spanner-emulator container layout: one image carries both the Go

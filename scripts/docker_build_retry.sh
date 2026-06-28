@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Retry docker build for flaky registry/network on GitHub-hosted runners.
 #
-# CI Dockerfiles declare `# syntax=docker/dockerfile:…`, which BuildKit
-# resolves from Docker Hub before the first build step. Parallel thirdparty
-# jobs routinely hit transient `i/o timeout` / `DeadlineExceeded` errors on
-# that metadata fetch; a short pre-pull + bounded retry avoids a full
-# workflow failure.
+# CI Dockerfiles declare `# syntax=…/docker/dockerfile:…`, which BuildKit
+# resolves from a registry before the first build step. Parallel thirdparty
+# jobs routinely hit transient Docker Hub timeouts on that metadata fetch;
+# prefer `mirror.gcr.io/docker/dockerfile:…` in the Dockerfile syntax line.
 #
 # Usage (from repo root):
 #   bash scripts/docker_build_retry.sh docker build --build-arg … -t tag .
@@ -13,8 +12,10 @@
 #
 # Tunables:
 #   DOCKERFILE                    Dockerfile path for syntax pre-pull (default Dockerfile)
-#   DOCKER_BUILD_MAX_ATTEMPTS     default 3
-#   DOCKER_BUILD_RETRY_DELAY_SEC  initial backoff seconds (default 15)
+#   DOCKER_PULL_MAX_ATTEMPTS      pre-pull retries (default 6)
+#   DOCKER_PULL_RETRY_DELAY_SEC   initial pull backoff seconds (default 10)
+#   DOCKER_BUILD_MAX_ATTEMPTS     full build retries (default 5)
+#   DOCKER_BUILD_RETRY_DELAY_SEC  initial build backoff seconds (default 15)
 set -euo pipefail
 
 if [ "$#" -lt 3 ] || [ "$1" != docker ]; then
@@ -37,8 +38,10 @@ buildx)
 	;;
 esac
 
-max_attempts="${DOCKER_BUILD_MAX_ATTEMPTS:-3}"
+max_attempts="${DOCKER_BUILD_MAX_ATTEMPTS:-5}"
 initial_delay="${DOCKER_BUILD_RETRY_DELAY_SEC:-15}"
+pull_max_attempts="${DOCKER_PULL_MAX_ATTEMPTS:-6}"
+pull_initial_delay="${DOCKER_PULL_RETRY_DELAY_SEC:-10}"
 dockerfile="${DOCKERFILE:-Dockerfile}"
 
 pull_dockerfile_frontend() {
@@ -49,7 +52,21 @@ pull_dockerfile_frontend() {
 	image="${syntax_line#*=}"
 	image="${image#"${image%%[![:space:]]*}"}"
 	echo "Pre-pulling Dockerfile frontend ${image} (from ${dockerfile})" >&2
-	docker pull "$image"
+	local attempt=1 delay="$pull_initial_delay"
+	while [ "$attempt" -le "$pull_max_attempts" ]; do
+		if docker pull "$image"; then
+			return 0
+		fi
+		if [ "$attempt" -ge "$pull_max_attempts" ]; then
+			echo "docker pull ${image} failed after ${pull_max_attempts} attempts" >&2
+			return 1
+		fi
+		echo "docker pull failed (${attempt}/${pull_max_attempts}); retrying in ${delay}s…" >&2
+		sleep "$delay"
+		delay=$((delay + delay / 2))
+		attempt=$((attempt + 1))
+	done
+	return 1
 }
 
 attempt=1
