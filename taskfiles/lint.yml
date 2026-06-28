@@ -464,6 +464,7 @@ tasks:
         done
         python3 tools/lint/cpp/compile_db.py \
           "${target_args[@]}" \
+          --bazel-config "{{.GOOGLESQL_BAZEL_CONFIG}}" \
           --output compile_commands.json
 
   cpp:test:

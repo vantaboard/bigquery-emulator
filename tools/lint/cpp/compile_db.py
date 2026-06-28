@@ -66,7 +66,7 @@ def _eprint(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-def _run_aquery(targets: list[str]) -> dict:
+def _run_aquery(targets: list[str], bazel_config: str | None) -> dict:
     """Run `bazel aquery --output=jsonproto` and return the parsed JSON.
 
     `targets` is a list of Bazel labels — the script unions their
@@ -93,6 +93,8 @@ def _run_aquery(targets: list[str]) -> dict:
         "--output=jsonproto",
         f'mnemonic("CppCompile", {expr_inner})',
     ]
+    if bazel_config:
+        cmd[2:2] = ["--config", bazel_config]
     proc = subprocess.run(
         cmd,
         check=False,
@@ -256,6 +258,15 @@ def main() -> int:
         required=True,
         help="Destination path for the generated compile_commands.json",
     )
+    parser.add_argument(
+        "--bazel-config",
+        default=None,
+        help=(
+            "Optional Bazel --config group (e.g. googlesql-prebuilt). "
+            "Must match the config used for `bazel query` when discovering "
+            "test targets so module resolution sees the same @googlesql graph."
+        ),
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[3]
@@ -264,7 +275,7 @@ def main() -> int:
         return 1
 
     os.chdir(repo_root)
-    aquery = _run_aquery(args.target)
+    aquery = _run_aquery(args.target, args.bazel_config)
     entries = _extract_actions(aquery, repo_root)
     if not entries:
         _eprint("compile_db: aquery produced 0 first-party CppCompile actions.")
