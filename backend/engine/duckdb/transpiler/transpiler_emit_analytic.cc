@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,6 +38,10 @@ namespace duckdb {
 namespace transpiler {
 
 namespace {
+
+constexpr absl::string_view kLocalAnalyticBail =
+    "\x01"
+    "bail";
 
 bool OutputIncludesColumnName(const std::vector<std::string>& output_names,
                               absl::string_view col_name) {
@@ -103,13 +108,234 @@ bool AnalyticScanIsOnlyPercentileDiscRespectNulls(
   return true;
 }
 
+using EmitExprFn = std::function<std::string(const ::googlesql::ResolvedExpr*)>;
+using EmitColumnRefFn =
+    std::function<std::string(const ::googlesql::ResolvedColumnRef*)>;
+
+void CapturePartitionOutputOrder(
+    const ::googlesql::ResolvedWindowPartitioning* partition,
+    bool over_has_order,
+    const std::vector<std::string>& query_output_column_names,
+    const EmitExprFn& emit_expr,
+    const EmitColumnRefFn& emit_col,
+    std::vector<std::string>* output_order_items,
+    std::vector<int>* output_order_column_ids,
+    bool* failed) {
+  if (partition == nullptr || *failed) return;
+  (void)partition->hint_list_size();
+  if (!partition->collation_list().empty()) {
+    return;
+  }
+  for (int i = 0; i < partition->partition_by_list_size(); ++i) {
+    const ::googlesql::ResolvedExpr* part_expr_node =
+        partition->partition_by_list(i);
+    if (part_expr_node == nullptr) continue;
+    if (part_expr_node->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
+      const auto* ref = part_expr_node->GetAs<::googlesql::ResolvedColumnRef>();
+      if (ref == nullptr) continue;
+      if (OutputIncludesColumnName(query_output_column_names,
+                                   ref->column().name()) ||
+          !over_has_order) {
+        std::string col = emit_col(ref);
+        if (col.empty()) {
+          *failed = true;
+          return;
+        }
+        output_order_items->push_back(absl::StrCat(col, " ASC"));
+        output_order_column_ids->push_back(ref->column().column_id());
+      }
+    } else if (!over_has_order) {
+      std::string part_expr = emit_expr(part_expr_node);
+      if (part_expr.empty()) {
+        *failed = true;
+        return;
+      }
+      output_order_items->push_back(absl::StrCat(part_expr, " ASC"));
+      output_order_column_ids->push_back(-1);
+    }
+  }
+}
+
+void CaptureOrderByOutputOrder(
+    const ::googlesql::ResolvedWindowOrdering* order_by,
+    const EmitColumnRefFn& emit_col,
+    std::vector<std::string>* output_order_items,
+    std::vector<int>* output_order_column_ids,
+    bool* failed) {
+  if (order_by == nullptr || *failed) return;
+  (void)order_by->hint_list_size();
+  for (int i = 0; i < order_by->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item =
+        order_by->order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) {
+      *failed = true;
+      return;
+    }
+    if (item->collation_name() != nullptr) {
+      *failed = true;
+      return;
+    }
+    std::string col = emit_col(item->column_ref());
+    if (col.empty()) {
+      *failed = true;
+      return;
+    }
+    output_order_items->push_back(absl::StrCat(
+        col,
+        internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
+    output_order_column_ids->push_back(
+        item->column_ref()->column().column_id());
+  }
+}
+
+std::optional<std::string> FindPercentileDiscSortKey(
+    const ::googlesql::ResolvedAnalyticScan* node,
+    const EmitExprFn& emit_expr) {
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) continue;
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* fn_col =
+          group->analytic_function_list(f);
+      if (fn_col == nullptr || fn_col->expr() == nullptr ||
+          fn_col->expr()->node_kind() !=
+              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        continue;
+      }
+      const auto* afn =
+          fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+      if (afn == nullptr || afn->function() == nullptr ||
+          internal::ResolveFunctionName(afn->function()) != "percentile_disc" ||
+          afn->null_handling_modifier() !=
+              ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS ||
+          afn->argument_list_size() == 0) {
+        continue;
+      }
+      return emit_expr(afn->argument_list(0));
+    }
+  }
+  return std::nullopt;
+}
+
+std::string TryEmitPercentileDiscOnlyScan(
+    const ::googlesql::ResolvedAnalyticScan* node,
+    absl::string_view input,
+    const EmitExprFn& emit_expr) {
+  if (!AnalyticScanIsOnlyPercentileDiscRespectNulls(node)) return "";
+  std::vector<std::string> pct_projections;
+  std::vector<std::string> pct_refs;
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) return "";
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* fn_col =
+          group->analytic_function_list(f);
+      if (fn_col == nullptr || fn_col->expr() == nullptr ||
+          fn_col->expr()->node_kind() !=
+              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+        return "";
+      }
+      const auto* afn =
+          fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+      if (afn == nullptr || afn->argument_list_size() < 2) return "";
+      std::string p_expr = emit_expr(afn->argument_list(1));
+      if (p_expr.empty()) return "";
+      pct_projections.push_back(BuildPercentileDiscRespectNullsScalarSql(
+          p_expr, fn_col->column().name()));
+      pct_refs.push_back(
+          absl::StrCat("_pct.", internal::QuoteIdent(fn_col->column().name())));
+    }
+  }
+  if (pct_projections.empty()) return "";
+  return absl::StrCat("SELECT _base.*, ",
+                      absl::StrJoin(pct_refs, ", "),
+                      " FROM (",
+                      input,
+                      ") _base CROSS JOIN (SELECT ",
+                      absl::StrJoin(pct_projections, ", "),
+                      " FROM (",
+                      input,
+                      ")) _pct");
+}
+
+std::string WrapInputWithPctCoalesce(absl::string_view input,
+                                     absl::string_view sort_key) {
+  return absl::StrCat("SELECT *, IF(",
+                      sort_key,
+                      " IS NULL, ",
+                      internal::kBqPctNullSentinel,
+                      ", ",
+                      sort_key,
+                      ") AS ",
+                      internal::QuoteIdent(internal::kBqPctCoalesceCol),
+                      " FROM (",
+                      input,
+                      ")");
+}
+
+bool PercentileDiscRespectNullsClearsOrder(
+    const ::googlesql::ResolvedComputedColumnBase* fn_col) {
+  if (fn_col == nullptr || fn_col->expr() == nullptr ||
+      fn_col->expr()->node_kind() !=
+          ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+    return false;
+  }
+  const auto* afn =
+      fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+  return afn != nullptr && afn->function() != nullptr &&
+         internal::ResolveFunctionName(afn->function()) == "percentile_disc" &&
+         afn->null_handling_modifier() ==
+             ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS;
+}
+
+bool AppendAnalyticGroupProjections(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group,
+    bool input_rn_ordering,
+    const std::function<std::string(
+        const ::googlesql::ResolvedWindowPartitioning*)>& build_partition,
+    const std::function<std::string(
+        const ::googlesql::ResolvedWindowOrdering*, bool, bool)>& build_order,
+    const std::function<
+        void(const ::googlesql::ResolvedAnalyticFunctionGroup*)>& capture_order,
+    const std::function<
+        std::string(const ::googlesql::ResolvedComputedColumnBase*,
+                    absl::string_view,
+                    absl::string_view)>& build_projection,
+    std::vector<std::string>* projections) {
+  if (group == nullptr) return false;
+  std::string partition_clause = build_partition(group->partition_by());
+  if (partition_clause == kLocalAnalyticBail) return false;
+  const bool append_input_rn =
+      input_rn_ordering && !internal::AnalyticGroupHasRangeFrame(group) &&
+      (internal::AnalyticOrderNeedsInputRn(group) ||
+       internal::AnalyticGroupNeedsInputRnForEmptyOrder(group));
+  std::string order_clause = build_order(
+      group->order_by(), /*bigquery_null_defaults=*/true, append_input_rn);
+  if (order_clause == kLocalAnalyticBail) return false;
+  capture_order(group);
+
+  for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+    const ::googlesql::ResolvedComputedColumnBase* fn_col =
+        group->analytic_function_list(f);
+    std::string effective_order = order_clause;
+    if (PercentileDiscRespectNullsClearsOrder(fn_col)) {
+      effective_order.clear();
+    }
+    std::string projection =
+        build_projection(fn_col, partition_clause, effective_order);
+    if (projection.empty()) return false;
+    projections->push_back(std::move(projection));
+  }
+  return true;
+}
+
 }  // namespace
 
 std::string Transpiler::BuildPartitionClause(
     const ::googlesql::ResolvedWindowPartitioning* p) {
   if (p == nullptr) return "";
-  // PARTITION BY collations are BQ-specific; bail so the engine
-  // surfaces UNIMPLEMENTED. Optimizer hints are no-ops locally.
   (void)p->hint_list_size();
   if (!p->collation_list().empty()) {
     return std::string(kAnalyticBail);
@@ -212,10 +438,6 @@ std::string Transpiler::BuildAnalyticProjection(
     if (fn_sql.empty()) return "";
   }
 
-  // Frame clause sits *inside* the OVER (...). DuckDB requires an
-  // ORDER BY for ROWS / RANGE frames; we leave that contract to the
-  // analyzer (which rejects malformed cases at AnalyzeStatement time)
-  // and just propagate the bounds verbatim.
   if (fn_sql.find(" OVER (") != std::string::npos) {
     return absl::StrCat(
         fn_sql, " AS ", internal::QuoteIdent(col->column().name()));
@@ -239,54 +461,30 @@ void Transpiler::CaptureAnalyticOutputOrder(
   const bool over_has_order =
       order_by != nullptr && order_by->order_by_item_list_size() > 0;
 
-  const ::googlesql::ResolvedWindowPartitioning* partition =
-      group->partition_by();
-  if (partition != nullptr) {
-    (void)partition->hint_list_size();
-    if (!partition->collation_list().empty()) {
-      return;
-    }
-    for (int i = 0; i < partition->partition_by_list_size(); ++i) {
-      const ::googlesql::ResolvedExpr* part_expr_node =
-          partition->partition_by_list(i);
-      if (part_expr_node == nullptr) continue;
-      if (part_expr_node->node_kind() == ::googlesql::RESOLVED_COLUMN_REF) {
-        const auto* ref =
-            part_expr_node->GetAs<::googlesql::ResolvedColumnRef>();
-        if (ref == nullptr) continue;
-        if (OutputIncludesColumnName(query_output_column_names_,
-                                     ref->column().name()) ||
-            !over_has_order) {
-          std::string col = EmitColumnRef(ref);
-          if (col.empty()) return;
-          output_order_items_.push_back(absl::StrCat(col, " ASC"));
-          output_order_column_ids_.push_back(ref->column().column_id());
-        }
-      } else if (!over_has_order) {
-        std::string part_expr = EmitExpr(part_expr_node);
-        if (part_expr.empty()) return;
-        output_order_items_.push_back(absl::StrCat(part_expr, " ASC"));
-        output_order_column_ids_.push_back(-1);
-      }
-    }
-  }
+  const EmitExprFn emit_expr = [this](const ::googlesql::ResolvedExpr* expr) {
+    return EmitExpr(expr);
+  };
+  const EmitColumnRefFn emit_col =
+      [this](const ::googlesql::ResolvedColumnRef* ref) {
+        return EmitColumnRef(ref);
+      };
 
-  if (order_by != nullptr) {
-    (void)order_by->hint_list_size();
-    for (int i = 0; i < order_by->order_by_item_list_size(); ++i) {
-      const ::googlesql::ResolvedOrderByItem* item =
-          order_by->order_by_item_list(i);
-      if (item == nullptr || item->column_ref() == nullptr) return;
-      if (item->collation_name() != nullptr) return;
-      std::string col = EmitColumnRef(item->column_ref());
-      if (col.empty()) return;
-      output_order_items_.push_back(absl::StrCat(
-          col,
-          internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
-      output_order_column_ids_.push_back(
-          item->column_ref()->column().column_id());
-    }
-  }
+  bool failed = false;
+  CapturePartitionOutputOrder(group->partition_by(),
+                              over_has_order,
+                              query_output_column_names_,
+                              emit_expr,
+                              emit_col,
+                              &output_order_items_,
+                              &output_order_column_ids_,
+                              &failed);
+  if (failed) return;
+  CaptureOrderByOutputOrder(order_by,
+                            emit_col,
+                            &output_order_items_,
+                            &output_order_column_ids_,
+                            &failed);
+  if (failed) return;
 
   if (input_rn_ordering_) {
     output_order_items_.push_back(
@@ -297,22 +495,6 @@ void Transpiler::CaptureAnalyticOutputOrder(
 
 std::string Transpiler::EmitAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan* node) {
-  // Emit `SELECT *, <fn> OVER (PARTITION BY ... ORDER BY ... [frame])
-  // AS "<col>", ... FROM (<input>)` -- one projection per analytic
-  // function across every group. The OVER clause lives at the group
-  // level (PARTITION / ORDER BY) plus per-function (window_frame), so
-  // we walk the function-group list once and delegate the per-clause
-  // assembly to `BuildPartitionClause` / `BuildOrderClause` /
-  // `BuildAnalyticProjection`.
-  //
-  // Skiplisted shapes the first emit pass does not cover (each helper
-  // returns `kAnalyticBail` for these, which we propagate as the
-  // empty-string fallback contract):
-  //   * Hint lists on the partition / order spec (PARTITION BY ...
-  //     OPTIONS(...) and similar) -- BQ-specific.
-  //   * Collation lists on PARTITION BY -- collations land separately.
-  //   * The `partition_by` `parameter_list` -- lateral-correlated
-  //     analytics; defer to the lateral-rewrite plan.
   if (node == nullptr) return "";
   std::string input = EmitScan(node->input_scan());
   if (input.empty()) return "";
@@ -326,136 +508,55 @@ std::string Transpiler::EmitAnalyticScan(
   }
   input_rn_ordering_ = true;
 
-  std::string pct_respect_nulls_sort_key;
-  for (int g = 0; g < node->function_group_list_size(); ++g) {
-    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
-        node->function_group_list(g);
-    if (group == nullptr) continue;
-    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-      const ::googlesql::ResolvedComputedColumnBase* fn_col =
-          group->analytic_function_list(f);
-      if (fn_col == nullptr || fn_col->expr() == nullptr ||
-          fn_col->expr()->node_kind() !=
-              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
-        continue;
-      }
-      const auto* afn =
-          fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-      if (afn == nullptr || afn->function() == nullptr ||
-          internal::ResolveFunctionName(afn->function()) != "percentile_disc" ||
-          afn->null_handling_modifier() !=
-              ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS ||
-          afn->argument_list_size() == 0) {
-        continue;
-      }
-      pct_respect_nulls_sort_key = EmitExpr(afn->argument_list(0));
-      if (pct_respect_nulls_sort_key.empty()) return "";
-      break;
-    }
-    if (!pct_respect_nulls_sort_key.empty()) break;
-  }
-  if (!pct_respect_nulls_sort_key.empty()) {
-    input = absl::StrCat("SELECT *, IF(",
-                         pct_respect_nulls_sort_key,
-                         " IS NULL, ",
-                         internal::kBqPctNullSentinel,
-                         ", ",
-                         pct_respect_nulls_sort_key,
-                         ") AS ",
-                         internal::QuoteIdent(internal::kBqPctCoalesceCol),
-                         " FROM (",
-                         input,
-                         ")");
-  }
+  const EmitExprFn emit_expr = [this](const ::googlesql::ResolvedExpr* expr) {
+    return EmitExpr(expr);
+  };
 
-  if (AnalyticScanIsOnlyPercentileDiscRespectNulls(node) &&
-      !pct_respect_nulls_sort_key.empty()) {
-    std::vector<std::string> pct_projections;
-    std::vector<std::string> pct_refs;
-    for (int g = 0; g < node->function_group_list_size(); ++g) {
-      const ::googlesql::ResolvedAnalyticFunctionGroup* group =
-          node->function_group_list(g);
-      if (group == nullptr) return "";
-      for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-        const ::googlesql::ResolvedComputedColumnBase* fn_col =
-            group->analytic_function_list(f);
-        if (fn_col == nullptr || fn_col->expr() == nullptr ||
-            fn_col->expr()->node_kind() !=
-                ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
-          return "";
-        }
-        const auto* afn =
-            fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-        if (afn == nullptr || afn->argument_list_size() < 2) return "";
-        std::string p_expr = EmitExpr(afn->argument_list(1));
-        if (p_expr.empty()) return "";
-        pct_projections.push_back(BuildPercentileDiscRespectNullsScalarSql(
-            p_expr, fn_col->column().name()));
-        pct_refs.push_back(absl::StrCat(
-            "_pct.", internal::QuoteIdent(fn_col->column().name())));
-      }
+  std::optional<std::string> pct_sort_key =
+      FindPercentileDiscSortKey(node, emit_expr);
+  if (pct_sort_key.has_value()) {
+    if (pct_sort_key->empty()) return "";
+    input = WrapInputWithPctCoalesce(input, *pct_sort_key);
+    if (std::string special =
+            TryEmitPercentileDiscOnlyScan(node, input, emit_expr);
+        !special.empty()) {
+      return special;
     }
-    if (pct_projections.empty()) return "";
-    return absl::StrCat("SELECT _base.*, ",
-                        absl::StrJoin(pct_refs, ", "),
-                        " FROM (",
-                        input,
-                        ") _base CROSS JOIN (SELECT ",
-                        absl::StrJoin(pct_projections, ", "),
-                        " FROM (",
-                        input,
-                        ")) _pct");
   }
 
   std::vector<std::string> projections;
+  const auto build_partition =
+      [this](const ::googlesql::ResolvedWindowPartitioning* p) {
+        return BuildPartitionClause(p);
+      };
+  const auto build_order = [this](const ::googlesql::ResolvedWindowOrdering* o,
+                                  bool bq_nulls,
+                                  bool append_rn) {
+    return BuildOrderClause(o, bq_nulls, append_rn);
+  };
+  const auto capture_order =
+      [this](const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+        CaptureAnalyticOutputOrder(group);
+      };
+  const auto build_projection =
+      [this](const ::googlesql::ResolvedComputedColumnBase* col,
+             absl::string_view partition,
+             absl::string_view order) {
+        return BuildAnalyticProjection(col, partition, order);
+      };
   for (int g = 0; g < node->function_group_list_size(); ++g) {
-    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
-        node->function_group_list(g);
-    if (group == nullptr) return "";
-
-    std::string partition_clause = BuildPartitionClause(group->partition_by());
-    if (partition_clause == kAnalyticBail) return "";
-    const bool append_input_rn =
-        input_rn_ordering_ && !internal::AnalyticGroupHasRangeFrame(group) &&
-        (internal::AnalyticOrderNeedsInputRn(group) ||
-         internal::AnalyticGroupNeedsInputRnForEmptyOrder(group));
-    std::string order_clause =
-        BuildOrderClause(group->order_by(),
-                         /*bigquery_null_defaults=*/true,
-                         /*append_input_rn=*/append_input_rn);
-    if (order_clause == kAnalyticBail) return "";
-    CaptureAnalyticOutputOrder(group);
-
-    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-      const ::googlesql::ResolvedComputedColumnBase* fn_col =
-          group->analytic_function_list(f);
-      std::string effective_order = order_clause;
-      if (fn_col != nullptr && fn_col->expr() != nullptr &&
-          fn_col->expr()->node_kind() ==
-              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
-        const auto* afn =
-            fn_col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-        if (afn != nullptr && afn->function() != nullptr &&
-            internal::ResolveFunctionName(afn->function()) ==
-                "percentile_disc" &&
-            afn->null_handling_modifier() ==
-                ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
-          effective_order.clear();
-        }
-      }
-      std::string projection =
-          BuildAnalyticProjection(fn_col, partition_clause, effective_order);
-      if (projection.empty()) return "";
-      projections.push_back(std::move(projection));
+    if (!AppendAnalyticGroupProjections(node->function_group_list(g),
+                                        input_rn_ordering_,
+                                        build_partition,
+                                        build_order,
+                                        capture_order,
+                                        build_projection,
+                                        &projections)) {
+      return "";
     }
   }
 
-  if (projections.empty()) {
-    // No analytic functions in any group is a malformed AST; the
-    // analyzer would not produce it, but we guard so an unexpected
-    // shape falls back rather than emitting illegal SQL.
-    return "";
-  }
+  if (projections.empty()) return "";
   std::string select_list =
       absl::StrCat("*, ", absl::StrJoin(projections, ", "));
   return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");

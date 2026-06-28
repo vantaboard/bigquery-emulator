@@ -109,6 +109,80 @@ std::string EmitIntervalProduct(absl::string_view amount_sql, int part_enum) {
                       ")");
 }
 
+std::optional<std::string> TryEmitExtractCall(
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  if (node->argument_list_size() != 2) return std::nullopt;
+  const auto part0 = TryIntervalPartEnum(node->argument_list(0));
+  const auto part1 = TryIntervalPartEnum(node->argument_list(1));
+  if (part0.has_value() && !part1.has_value()) {
+    std::string value_sql = emit_expr(node->argument_list(1));
+    if (value_sql.empty()) return std::nullopt;
+    return absl::StrCat("bq_extract(", *part0, ", ", value_sql, ")");
+  }
+  if (!part0.has_value() && part1.has_value()) {
+    std::string value_sql = emit_expr(node->argument_list(0));
+    if (value_sql.empty()) return std::nullopt;
+    return absl::StrCat("bq_extract(", *part1, ", ", value_sql, ")");
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> TryEmitDateAddThreeArg(
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  if (node->argument_list_size() != 3) return std::nullopt;
+  std::string date_sql = emit_expr(node->argument_list(0));
+  std::string amount_sql = emit_expr(node->argument_list(1));
+  const auto part = TryIntervalPartEnum(node->argument_list(2));
+  if (date_sql.empty() || amount_sql.empty() || !part.has_value()) {
+    return std::nullopt;
+  }
+  return absl::StrCat(
+      "bq_date_add(", date_sql, ", ", amount_sql, ", ", *part, ")");
+}
+
+std::optional<std::string> TryEmitDateAddIntervalArg(
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  if (node->argument_list_size() != 2) return std::nullopt;
+  std::string date_sql = emit_expr(node->argument_list(0));
+  if (date_sql.empty()) return std::nullopt;
+  const ::googlesql::ResolvedExpr* interval_expr = node->argument_list(1);
+  if (interval_expr == nullptr ||
+      interval_expr->node_kind() != ::googlesql::RESOLVED_FUNCTION_CALL) {
+    return std::nullopt;
+  }
+  const auto* interval_call =
+      interval_expr->GetAs<::googlesql::ResolvedFunctionCall>();
+  const auto iv = TryDecomposeIntervalArgs(interval_call);
+  if (!iv.has_value()) return std::nullopt;
+  std::string amount_sql =
+      emit_expr(interval_call->argument_list(iv->amount_arg_index));
+  if (amount_sql.empty()) return std::nullopt;
+  return absl::StrCat(
+      "bq_date_add(", date_sql, ", ", amount_sql, ", ", iv->part_enum, ")");
+}
+
+std::optional<std::string> TryEmitDateAddCall(
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  if (auto three = TryEmitDateAddThreeArg(node, emit_expr); three.has_value()) {
+    return three;
+  }
+  return TryEmitDateAddIntervalArg(node, emit_expr);
+}
+
+std::optional<std::string> TryEmitIntervalCall(
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  const auto iv = TryDecomposeIntervalArgs(node);
+  if (!iv.has_value()) return std::nullopt;
+  std::string amount_sql = emit_expr(node->argument_list(iv->amount_arg_index));
+  if (amount_sql.empty()) return std::nullopt;
+  return EmitIntervalProduct(amount_sql, iv->part_enum);
+}
+
 }  // namespace
 
 std::optional<std::string> TryEmitDateTimeFunctionCall(
@@ -117,65 +191,13 @@ std::optional<std::string> TryEmitDateTimeFunctionCall(
     const EmitExprFn& emit_expr) {
   if (node == nullptr) return std::nullopt;
   if (name == "$extract" || name == "extract") {
-    if (node->argument_list_size() == 2) {
-      const auto part0 = TryIntervalPartEnum(node->argument_list(0));
-      const auto part1 = TryIntervalPartEnum(node->argument_list(1));
-      if (part0.has_value() && !part1.has_value()) {
-        std::string value_sql = emit_expr(node->argument_list(1));
-        if (value_sql.empty()) return std::nullopt;
-        return absl::StrCat("bq_extract(", *part0, ", ", value_sql, ")");
-      }
-      if (!part0.has_value() && part1.has_value()) {
-        std::string value_sql = emit_expr(node->argument_list(0));
-        if (value_sql.empty()) return std::nullopt;
-        return absl::StrCat("bq_extract(", *part1, ", ", value_sql, ")");
-      }
-    }
-    return std::nullopt;
+    return TryEmitExtractCall(node, emit_expr);
   }
   if (name == "date_add") {
-    if (node->argument_list_size() == 3) {
-      std::string date_sql = emit_expr(node->argument_list(0));
-      std::string amount_sql = emit_expr(node->argument_list(1));
-      const auto part = TryIntervalPartEnum(node->argument_list(2));
-      if (!date_sql.empty() && !amount_sql.empty() && part.has_value()) {
-        return absl::StrCat(
-            "bq_date_add(", date_sql, ", ", amount_sql, ", ", *part, ")");
-      }
-      return std::nullopt;
-    }
-    if (node->argument_list_size() == 2) {
-      std::string date_sql = emit_expr(node->argument_list(0));
-      if (date_sql.empty()) return std::nullopt;
-      const ::googlesql::ResolvedExpr* interval_expr = node->argument_list(1);
-      if (interval_expr != nullptr &&
-          interval_expr->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
-        const auto* interval_call =
-            interval_expr->GetAs<::googlesql::ResolvedFunctionCall>();
-        if (auto iv = TryDecomposeIntervalArgs(interval_call); iv.has_value()) {
-          std::string amount_sql =
-              emit_expr(interval_call->argument_list(iv->amount_arg_index));
-          if (amount_sql.empty()) return std::nullopt;
-          return absl::StrCat("bq_date_add(",
-                              date_sql,
-                              ", ",
-                              amount_sql,
-                              ", ",
-                              iv->part_enum,
-                              ")");
-        }
-      }
-    }
-    return std::nullopt;
+    return TryEmitDateAddCall(node, emit_expr);
   }
   if (name == "$interval") {
-    if (auto iv = TryDecomposeIntervalArgs(node); iv.has_value()) {
-      std::string amount_sql =
-          emit_expr(node->argument_list(iv->amount_arg_index));
-      if (amount_sql.empty()) return std::nullopt;
-      return EmitIntervalProduct(amount_sql, iv->part_enum);
-    }
-    return std::nullopt;
+    return TryEmitIntervalCall(node, emit_expr);
   }
   return std::nullopt;
 }

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,6 +36,209 @@ namespace backend {
 namespace engine {
 namespace duckdb {
 namespace transpiler {
+
+namespace {
+
+using EmitExprFn = std::function<std::string(const ::googlesql::ResolvedExpr*)>;
+using EmitScanFn = std::function<std::string(const ::googlesql::ResolvedScan*)>;
+
+std::string WithScanColumnAnchor(int idx) {
+  return absl::StrCat("_cte_", idx);
+}
+
+struct WithEntryEmitResult {
+  std::string cte_sql;
+  bool has_rn = false;
+};
+
+WithEntryEmitResult EmitNonRecursiveWithEntry(
+    const ::googlesql::ResolvedWithEntry* entry,
+    const ::googlesql::ResolvedScan* sub_scan,
+    bool body_needs_input_rn,
+    const EmitScanFn& emit_scan) {
+  WithEntryEmitResult result;
+  bool cte_has_rn = false;
+  std::string sub = emit_scan(sub_scan);
+  if (sub.empty()) return result;
+  if (body_needs_input_rn &&
+      sub_scan->node_kind() == ::googlesql::RESOLVED_SET_OPERATION_SCAN &&
+      sub_scan->GetAs<::googlesql::ResolvedSetOperationScan>()->op_type() ==
+          ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
+    sub = absl::StrCat("SELECT *, row_number() OVER () AS ",
+                       internal::QuoteIdent(internal::kBqInputRnCol),
+                       " FROM (",
+                       sub,
+                       ")");
+    cte_has_rn = true;
+  }
+  std::vector<std::string> cols;
+  cols.reserve(sub_scan->column_list_size());
+  for (int j = 0; j < sub_scan->column_list_size(); ++j) {
+    cols.push_back(
+        absl::StrCat(internal::QuoteIdent(sub_scan->column_list(j).name()),
+                     " AS ",
+                     internal::QuoteIdent(WithScanColumnAnchor(j))));
+  }
+  std::string projected;
+  if (cols.empty()) {
+    projected = absl::StrCat("SELECT * FROM (", sub, ")");
+  } else {
+    projected =
+        absl::StrCat("SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
+  }
+  if (cte_has_rn && !cols.empty()) {
+    projected = absl::StrCat(projected.substr(0, projected.find(" FROM ")),
+                             ", ",
+                             internal::QuoteIdent(internal::kBqInputRnCol),
+                             projected.substr(projected.find(" FROM ")));
+  }
+  result.cte_sql = absl::StrCat(
+      internal::QuoteIdent(entry->with_query_name()), " AS (", projected, ")");
+  result.has_rn = cte_has_rn;
+  return result;
+}
+
+std::string FormatRecursiveWithEntry(
+    absl::string_view query_name,
+    const std::vector<std::string>& anchor_names,
+    absl::string_view body_sql) {
+  std::vector<std::string> quoted_cols;
+  quoted_cols.reserve(anchor_names.size());
+  for (const std::string& name : anchor_names) {
+    quoted_cols.push_back(internal::QuoteIdent(name));
+  }
+  std::string cols_clause =
+      quoted_cols.empty()
+          ? std::string()
+          : absl::StrCat("(", absl::StrJoin(quoted_cols, ", "), ")");
+  return absl::StrCat(
+      internal::QuoteIdent(query_name), cols_clause, " AS (", body_sql, ")");
+}
+
+int FindRecursionDepthColumnIndex(
+    const ::googlesql::ResolvedRecursiveScan* node,
+    const ::googlesql::ResolvedRecursionDepthModifier* depth_mod) {
+  if (depth_mod == nullptr || depth_mod->recursion_depth_column() == nullptr) {
+    return -1;
+  }
+  const int depth_id =
+      depth_mod->recursion_depth_column()->column().column_id();
+  for (int j = 0; j < node->column_list_size(); ++j) {
+    if (node->column_list(j).column_id() == depth_id) {
+      return j;
+    }
+  }
+  return -2;
+}
+
+std::string RecursiveChildEmitColumnName(
+    const ::googlesql::ResolvedScan* child,
+    const ::googlesql::ResolvedColumn& out_col,
+    int index) {
+  if (child != nullptr) {
+    for (int k = 0; k < child->column_list_size(); ++k) {
+      if (child->column_list(k).column_id() == out_col.column_id()) {
+        return std::string(child->column_list(k).name());
+      }
+    }
+    if (index >= 0 && index < child->column_list_size()) {
+      return std::string(child->column_list(index).name());
+    }
+  }
+  return std::string(out_col.name());
+}
+
+struct RecursiveArmContext {
+  const ::googlesql::ResolvedRecursiveScan* node;
+  const std::vector<std::string>& anchor_names;
+  int depth_col_idx;
+  const ::googlesql::ResolvedRecursionDepthModifier* depth_mod;
+  const EmitExprFn& emit_expr;
+  const EmitScanFn& emit_scan;
+};
+
+std::string BuildRecursiveNormalizedSelect(
+    const RecursiveArmContext& ctx,
+    const ::googlesql::ResolvedSetOperationItem* item, bool is_recursive_arm,
+    std::string inner) {
+  std::vector<std::string> normalized;
+  normalized.reserve(ctx.node->column_list_size());
+  const ::googlesql::ResolvedScan* child = item->scan();
+  for (int j = 0; j < ctx.node->column_list_size(); ++j) {
+    if (j == ctx.depth_col_idx && !is_recursive_arm) {
+      continue;
+    }
+    const ::googlesql::ResolvedColumn& out_col = item->output_column_list(j);
+    const ::googlesql::ResolvedColumn& cte_col = ctx.node->column_list(j);
+    const std::string src_name =
+        RecursiveChildEmitColumnName(child, out_col, j);
+    std::string src_q = internal::QuoteIdent(src_name);
+    if (src_name == cte_col.name()) {
+      normalized.push_back(std::move(src_q));
+    } else {
+      normalized.push_back(
+          absl::StrCat(src_q, " AS ", internal::QuoteIdent(cte_col.name())));
+    }
+  }
+  return absl::StrCat(
+      "SELECT ", absl::StrJoin(normalized, ", "), " FROM (", inner, ")");
+}
+
+std::string BuildRecursiveDepthExpr(const RecursiveArmContext& ctx,
+                                    const ::googlesql::ResolvedColumn& cte_col,
+                                    bool is_recursive_arm) {
+  if (is_recursive_arm) {
+    return absl::StrCat(internal::QuoteIdent(cte_col.name()), " + 1");
+  }
+  if (ctx.depth_mod != nullptr && ctx.depth_mod->lower_bound() != nullptr) {
+    return ctx.emit_expr(ctx.depth_mod->lower_bound());
+  }
+  return "0";
+}
+
+std::string BuildRecursiveAnchorSelect(const RecursiveArmContext& ctx,
+                                       bool is_recursive_arm,
+                                       absl::string_view normalized_sql) {
+  std::vector<std::string> anchor_projs;
+  anchor_projs.reserve(ctx.node->column_list_size());
+  for (int j = 0; j < ctx.node->column_list_size(); ++j) {
+    const ::googlesql::ResolvedColumn& cte_col = ctx.node->column_list(j);
+    std::string dst_q = internal::QuoteIdent(ctx.anchor_names[j]);
+    if (j == ctx.depth_col_idx) {
+      std::string depth_expr =
+          BuildRecursiveDepthExpr(ctx, cte_col, is_recursive_arm);
+      if (depth_expr.empty()) return "";
+      anchor_projs.push_back(absl::StrCat(depth_expr, " AS ", dst_q));
+      continue;
+    }
+    std::string src_q = internal::QuoteIdent(cte_col.name());
+    anchor_projs.push_back(cte_col.name() == ctx.anchor_names[j]
+                               ? src_q
+                               : absl::StrCat(src_q, " AS ", dst_q));
+  }
+  return absl::StrCat("SELECT ",
+                      absl::StrJoin(anchor_projs, ", "),
+                      " FROM (",
+                      normalized_sql,
+                      ")");
+}
+
+std::string BuildRecursiveScanArm(
+    const RecursiveArmContext& ctx,
+    const ::googlesql::ResolvedSetOperationItem* item,
+    bool is_recursive_arm) {
+  if (item == nullptr || item->scan() == nullptr) return "";
+  if (item->output_column_list_size() != ctx.node->column_list_size()) {
+    return "";
+  }
+  std::string inner = ctx.emit_scan(item->scan());
+  if (inner.empty()) return "";
+  std::string normalized_sql =
+      BuildRecursiveNormalizedSelect(ctx, item, is_recursive_arm, inner);
+  return BuildRecursiveAnchorSelect(ctx, is_recursive_arm, normalized_sql);
+}
+
+}  // namespace
 
 std::string Transpiler::EmitSampleScan(
     const ::googlesql::ResolvedSampleScan* node) {
@@ -130,10 +334,8 @@ std::string Transpiler::EmitSampleScan(
 // name out of the BigQuery user-name namespace (BQ column names
 // cannot start with `_cte_`-style internal prefixes in user SQL,
 // and even if they did, the analyzer's name dedup would not pick
-// the same form).
-static std::string WithScanColumnAnchor(int idx) {
-  return absl::StrCat("_cte_", idx);
-}
+// the same form). See `WithScanColumnAnchor` in the anonymous
+// namespace above.
 
 std::string Transpiler::EmitWithScan(
     const ::googlesql::ResolvedWithScan* node) {
@@ -175,6 +377,9 @@ std::string Transpiler::EmitWithScan(
   bool any_cte_has_rn = false;
   std::vector<std::string> ctes;
   ctes.reserve(node->with_entry_list_size());
+  const EmitScanFn emit_scan = [this](const ::googlesql::ResolvedScan* scan) {
+    return EmitScan(scan);
+  };
   for (int i = 0; i < node->with_entry_list_size(); ++i) {
     const bool saved_rn_in_cte = input_rn_ordering_;
     input_rn_ordering_ = false;
@@ -187,10 +392,6 @@ std::string Transpiler::EmitWithScan(
     const bool entry_is_recursive =
         sub_scan->node_kind() == ::googlesql::RESOLVED_RECURSIVE_SCAN;
     if (entry_is_recursive) {
-      // Stage the per-CTE context (name + anchor column names) so
-      // any `ResolvedRecursiveRefScan` reached from the recursive
-      // term's scan walks emits with the right CTE name and
-      // anchor-to-ref rename.
       const auto* rec_scan =
           sub_scan->GetAs<::googlesql::ResolvedRecursiveScan>();
       std::vector<std::string> anchor_names;
@@ -202,68 +403,14 @@ std::string Transpiler::EmitWithScan(
       std::string body_sql = EmitRecursiveScan(rec_scan);
       recursive_cte_stack_.pop_back();
       if (body_sql.empty()) return "";
-      // DuckDB's WITH RECURSIVE column list lives between the CTE
-      // name and the `AS (...)`; emit it explicitly so the DuckDB
-      // planner does not have to infer names from the anchor's
-      // first SELECT (which could differ from the analyzer's
-      // expected names).
-      std::vector<std::string> quoted_cols;
-      quoted_cols.reserve(anchor_names.size());
-      for (const std::string& name : anchor_names) {
-        quoted_cols.push_back(internal::QuoteIdent(name));
-      }
-      std::string cols_clause =
-          quoted_cols.empty()
-              ? std::string()
-              : absl::StrCat("(", absl::StrJoin(quoted_cols, ", "), ")");
-      ctes.push_back(
-          absl::StrCat(internal::QuoteIdent(entry->with_query_name()),
-                       cols_clause,
-                       " AS (",
-                       body_sql,
-                       ")"));
+      ctes.push_back(FormatRecursiveWithEntry(
+          entry->with_query_name(), anchor_names, body_sql));
     } else {
-      bool cte_has_rn = false;
-      std::string sub = EmitScan(sub_scan);
-      if (sub.empty()) return "";
-      if (body_needs_input_rn &&
-          sub_scan->node_kind() == ::googlesql::RESOLVED_SET_OPERATION_SCAN &&
-          sub_scan->GetAs<::googlesql::ResolvedSetOperationScan>()->op_type() ==
-              ::googlesql::ResolvedSetOperationScan::UNION_ALL) {
-        sub = absl::StrCat("SELECT *, row_number() OVER () AS ",
-                           internal::QuoteIdent(internal::kBqInputRnCol),
-                           " FROM (",
-                           sub,
-                           ")");
-        cte_has_rn = true;
-      }
-      std::vector<std::string> cols;
-      cols.reserve(sub_scan->column_list_size());
-      for (int j = 0; j < sub_scan->column_list_size(); ++j) {
-        cols.push_back(
-            absl::StrCat(internal::QuoteIdent(sub_scan->column_list(j).name()),
-                         " AS ",
-                         internal::QuoteIdent(WithScanColumnAnchor(j))));
-      }
-      std::string projected;
-      if (cols.empty()) {
-        projected = absl::StrCat("SELECT * FROM (", sub, ")");
-      } else {
-        projected = absl::StrCat(
-            "SELECT ", absl::StrJoin(cols, ", "), " FROM (", sub, ")");
-      }
-      if (cte_has_rn && !cols.empty()) {
-        projected = absl::StrCat(projected.substr(0, projected.find(" FROM ")),
-                                 ", ",
-                                 internal::QuoteIdent(internal::kBqInputRnCol),
-                                 projected.substr(projected.find(" FROM ")));
-      }
-      ctes.push_back(
-          absl::StrCat(internal::QuoteIdent(entry->with_query_name()),
-                       " AS (",
-                       projected,
-                       ")"));
-      any_cte_has_rn = any_cte_has_rn || cte_has_rn;
+      WithEntryEmitResult emitted = EmitNonRecursiveWithEntry(
+          entry, sub_scan, body_needs_input_rn, emit_scan);
+      if (emitted.cte_sql.empty()) return "";
+      ctes.push_back(std::move(emitted.cte_sql));
+      any_cte_has_rn = any_cte_has_rn || emitted.has_rn;
     }
     input_rn_ordering_ = saved_rn_in_cte;
   }
@@ -296,106 +443,23 @@ std::string Transpiler::EmitRecursiveScan(
   }
   const ::googlesql::ResolvedRecursionDepthModifier* depth_mod =
       node->recursion_depth_modifier();
-  int depth_col_idx = -1;
-  if (depth_mod != nullptr && depth_mod->recursion_depth_column() != nullptr) {
-    const int depth_id =
-        depth_mod->recursion_depth_column()->column().column_id();
-    for (int j = 0; j < node->column_list_size(); ++j) {
-      if (node->column_list(j).column_id() == depth_id) {
-        depth_col_idx = j;
-        break;
-      }
-    }
-    if (depth_col_idx < 0) return "";
-  }
+  const int depth_col_idx = FindRecursionDepthColumnIndex(node, depth_mod);
+  if (depth_col_idx == -2) return "";
 
-  // Build one recursive-CTE arm. Each item's `output_column_list[j]`
-  // names the recursive scan's `column_list(j)` CTE column; the
-  // child scan may still emit the analyzer's internal `$colN` aliases.
-  // Resolve the child emit name (by `column_id`, then position) before
-  // projecting onto the CTE schema name, then rename those CTE columns
-  // onto the stable anchor names (`_cte_<idx>`) DuckDB's
-  // `WITH RECURSIVE` column list expects.
-  auto child_emit_column_name = [](const ::googlesql::ResolvedScan* child,
-                                   const ::googlesql::ResolvedColumn& out_col,
-                                   int index) -> std::string {
-    if (child != nullptr) {
-      for (int k = 0; k < child->column_list_size(); ++k) {
-        if (child->column_list(k).column_id() == out_col.column_id()) {
-          return std::string(child->column_list(k).name());
-        }
-      }
-      if (index >= 0 && index < child->column_list_size()) {
-        return std::string(child->column_list(index).name());
-      }
-    }
-    return std::string(out_col.name());
+  const EmitExprFn emit_expr = [this](const ::googlesql::ResolvedExpr* expr) {
+    return EmitExpr(expr);
   };
-  auto build_arm = [&](const ::googlesql::ResolvedSetOperationItem* item,
-                       bool is_recursive_arm) -> std::string {
-    if (item == nullptr || item->scan() == nullptr) return "";
-    if (item->output_column_list_size() != node->column_list_size()) {
-      return "";
-    }
-    const ::googlesql::ResolvedScan* child = item->scan();
-    std::string inner = EmitScan(child);
-    if (inner.empty()) return "";
-    std::vector<std::string> normalized;
-    normalized.reserve(node->column_list_size());
-    for (int j = 0; j < node->column_list_size(); ++j) {
-      if (j == depth_col_idx && !is_recursive_arm) {
-        continue;
-      }
-      const ::googlesql::ResolvedColumn& out_col = item->output_column_list(j);
-      const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
-      const std::string src_name = child_emit_column_name(child, out_col, j);
-      std::string src_q = internal::QuoteIdent(src_name);
-      if (src_name == cte_col.name()) {
-        normalized.push_back(std::move(src_q));
-      } else {
-        normalized.push_back(
-            absl::StrCat(src_q, " AS ", internal::QuoteIdent(cte_col.name())));
-      }
-    }
-    std::string normalized_sql = absl::StrCat(
-        "SELECT ", absl::StrJoin(normalized, ", "), " FROM (", inner, ")");
-    std::vector<std::string> anchor_projs;
-    anchor_projs.reserve(node->column_list_size());
-    for (int j = 0; j < node->column_list_size(); ++j) {
-      const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
-      std::string dst_q = internal::QuoteIdent(ctx.column_names[j]);
-      if (j == depth_col_idx) {
-        std::string depth_expr;
-        if (is_recursive_arm) {
-          depth_expr =
-              absl::StrCat(internal::QuoteIdent(cte_col.name()), " + 1");
-        } else if (depth_mod != nullptr &&
-                   depth_mod->lower_bound() != nullptr) {
-          depth_expr = EmitExpr(depth_mod->lower_bound());
-          if (depth_expr.empty()) return "";
-        } else {
-          depth_expr = "0";
-        }
-        anchor_projs.push_back(absl::StrCat(depth_expr, " AS ", dst_q));
-        continue;
-      }
-      std::string src_q = internal::QuoteIdent(cte_col.name());
-      anchor_projs.push_back(cte_col.name() == ctx.column_names[j]
-                                 ? src_q
-                                 : absl::StrCat(src_q, " AS ", dst_q));
-    }
-    return absl::StrCat("SELECT ",
-                        absl::StrJoin(anchor_projs, ", "),
-                        " FROM (",
-                        normalized_sql,
-                        ")");
+  const EmitScanFn emit_scan = [this](const ::googlesql::ResolvedScan* scan) {
+    return EmitScan(scan);
   };
+  const RecursiveArmContext arm_ctx{
+      node, ctx.column_names, depth_col_idx, depth_mod, emit_expr, emit_scan};
 
-  std::string anchor = build_arm(node->non_recursive_term(),
-                                 /*is_recursive_arm=*/false);
+  std::string anchor =
+      BuildRecursiveScanArm(arm_ctx, node->non_recursive_term(), false);
   if (anchor.empty()) return "";
-  std::string recursive_arm = build_arm(node->recursive_term(),
-                                        /*is_recursive_arm=*/true);
+  std::string recursive_arm =
+      BuildRecursiveScanArm(arm_ctx, node->recursive_term(), true);
   if (recursive_arm.empty()) return "";
 
   absl::string_view op;

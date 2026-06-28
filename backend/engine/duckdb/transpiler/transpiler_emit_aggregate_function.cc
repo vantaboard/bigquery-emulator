@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -36,46 +37,23 @@ namespace engine {
 namespace duckdb {
 namespace transpiler {
 
-std::string Transpiler::EmitAggregateFunctionCall(
-    const ::googlesql::ResolvedAggregateFunctionCall* node) {
-  // Aggregate dispatch lives in the same disposition table the scalar
-  // emit consults; we just guard the unsupported modifier set first.
-  // `$count_star` is the analyzer's representation of `COUNT(*)` -- we
-  // emit it directly rather than going through a kDuckdbNative entry
-  // because
-  // the dispatch passes zero argument expressions (not even a single
-  // `*` placeholder), so the standard `<NAME>(<args>)` shape wouldn't
-  // apply.
-  //
-  // ORDER BY / LIMIT inside `array_agg`, `string_agg`, and
-  // `array_concat_agg` lower to DuckDB's ordered-aggregate syntax.
-  // HAVING MAX/MIN, multi-level GROUP BY, and aggregate filtering
-  // still surface UNIMPLEMENTED.
-  // `SAFE.<agg>(...)` (`SAFE_ERROR_MODE`) reroutes to semantic_executor
-  // (DuckDB rejects aggregates inside TRY).
-  if (node == nullptr || node->function() == nullptr) return "";
-  if (const auto* sql_fn =
-          dynamic_cast<const ::googlesql::SQLFunction*>(node->function());
-      sql_fn != nullptr && sql_fn->IsAggregate()) {
-    LOG(INFO) << "duckdb transpiler: SQL UDAF '" << node->function()->Name()
-              << "' routes to semantic executor; surfacing UNIMPLEMENTED";
-    return "";
-  }
-  const std::string name = internal::ResolveFunctionName(node->function());
-  const bool ordered_agg = internal::SupportsOrderedAggregateModifiers(name);
+namespace {
+
+using EmitExprFn = std::function<std::string(const ::googlesql::ResolvedExpr*)>;
+using EmitColumnRefFn =
+    std::function<std::string(const ::googlesql::ResolvedColumnRef*)>;
+
+bool RejectUnsupportedAggregateModifiers(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    absl::string_view name,
+    bool ordered_agg) {
   if (node->having_modifier() != nullptr || node->group_by_list_size() > 0 ||
       node->group_by_aggregate_list_size() > 0 ||
       node->having_expr() != nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
               << "' uses a modifier (HAVING / GROUP BY / filtering) that has "
                  "no DuckDB analog yet; surfacing UNIMPLEMENTED";
-    return "";
-  }
-  std::string filter_suffix;
-  if (node->where_expr() != nullptr) {
-    std::string filter_expr = EmitExpr(node->where_expr());
-    if (filter_expr.empty()) return "";
-    filter_suffix = absl::StrCat(" FILTER (WHERE ", filter_expr, ")");
+    return true;
   }
   if (!ordered_agg &&
       (node->order_by_item_list_size() > 0 || node->limit() != nullptr ||
@@ -86,138 +64,200 @@ std::string Transpiler::EmitAggregateFunctionCall(
               << "' uses a modifier (HAVING / ORDER BY / LIMIT / GROUP BY / "
                  "NULL-handling) that has no DuckDB analog yet; surfacing "
                  "UNIMPLEMENTED";
-    return "";
+    return true;
   }
   if (ordered_agg &&
       node->null_handling_modifier() ==
           ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << node->function()->Name()
               << "' uses RESPECT NULLS; surfacing UNIMPLEMENTED";
-    return "";
+    return true;
   }
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
     LOG(INFO) << "duckdb transpiler: SAFE aggregate surfaces UNIMPLEMENTED "
                  "(function="
               << node->function()->Name() << ")";
-    return "";
+    return true;
   }
-  auto append_filter = [&filter_suffix](std::string body) {
-    if (filter_suffix.empty()) return body;
-    return absl::StrCat(std::move(body), filter_suffix);
-  };
-  if (name == "$count_star") {
-    if (node->argument_list_size() != 0) return "";
-    return append_filter("COUNT(*)");
-  }
-  std::vector<std::string> args;
-  args.reserve(node->argument_list_size());
-  for (int i = 0; i < node->argument_list_size(); ++i) {
-    std::string a = EmitExpr(node->argument_list(i));
-    if (a.empty()) return "";
-    args.push_back(std::move(a));
-  }
+  return false;
+}
+
+std::string BuildAggregateFilterSuffix(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  if (node->where_expr() == nullptr) return "";
+  std::string filter_expr = emit_expr(node->where_expr());
+  if (filter_expr.empty()) return std::string();
+  return absl::StrCat(" FILTER (WHERE ", filter_expr, ")");
+}
+
+struct OrderedAggParts {
   std::string order_suffix;
   std::string limit_expr;
+};
+
+OrderedAggParts BuildOrderedAggParts(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    bool ordered_agg,
+    const EmitExprFn& emit_expr,
+    const EmitColumnRefFn& emit_col,
+    bool* ok) {
+  OrderedAggParts parts;
+  *ok = true;
   if (node->limit() != nullptr) {
-    limit_expr = EmitExpr(node->limit());
-    if (limit_expr.empty()) return "";
-  }
-  if (ordered_agg && node->order_by_item_list_size() > 0) {
-    std::vector<std::string> order_items;
-    order_items.reserve(node->order_by_item_list_size());
-    for (int i = 0; i < node->order_by_item_list_size(); ++i) {
-      const ::googlesql::ResolvedOrderByItem* item =
-          node->order_by_item_list(i);
-      if (item == nullptr || item->column_ref() == nullptr) return "";
-      if (item->collation_name() != nullptr) return "";
-      std::string col = EmitColumnRef(item->column_ref());
-      if (col.empty()) return "";
-      order_items.push_back(absl::StrCat(
-          col,
-          internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
-    }
-    if (!order_items.empty()) {
-      order_suffix =
-          absl::StrCat(" ORDER BY ", absl::StrJoin(order_items, ", "));
+    parts.limit_expr = emit_expr(node->limit());
+    if (parts.limit_expr.empty()) {
+      *ok = false;
+      return parts;
     }
   }
-  const bool ignore_nulls =
-      node->null_handling_modifier() ==
-      ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
-  const bool has_limit = !limit_expr.empty();
-  const bool has_order = !order_suffix.empty();
-  if (name == "array_concat_agg") {
-    std::string prefix = node->distinct() ? "DISTINCT " : "";
-    if (!has_order) {
-      order_suffix = absl::StrCat(
-          " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol), " ASC");
-    }
-    std::string list_body = absl::StrCat(
-        "list(", prefix, absl::StrJoin(args, ", "), order_suffix, ")");
-    if (!args.empty()) {
-      list_body =
-          absl::StrCat(list_body, " FILTER (WHERE ", args[0], " IS NOT NULL)");
-      list_body =
-          internal::AppendArrayAggNullFilter(list_body, args[0], ignore_nulls);
-    }
-    if (has_limit) {
-      list_body =
-          absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
-    }
-    return append_filter(absl::StrCat("flatten(", list_body, ")"));
+  if (!ordered_agg || node->order_by_item_list_size() == 0) {
+    return parts;
   }
-  std::vector<std::string> call_args = args;
-  if (name == "string_agg" && call_args.size() == 1) {
-    // BigQuery STRING_AGG(x ORDER BY ...) defaults the delimiter to ','.
-    call_args.push_back("','");
+  std::vector<std::string> order_items;
+  order_items.reserve(node->order_by_item_list_size());
+  for (int i = 0; i < node->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item = node->order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) {
+      *ok = false;
+      return parts;
+    }
+    if (item->collation_name() != nullptr) {
+      *ok = false;
+      return parts;
+    }
+    std::string col = emit_col(item->column_ref());
+    if (col.empty()) {
+      *ok = false;
+      return parts;
+    }
+    order_items.push_back(absl::StrCat(
+        col,
+        internal::OrderByItemSuffix(item, /*bigquery_null_defaults=*/true)));
   }
-  // DuckDB has no BigQuery-style LIMIT inside STRING_AGG; ARRAY_AGG
-  // modifiers lower to `list(... ORDER BY ...)` + optional
-  // `list_slice(..., 1, n)`. STRING_AGG LIMIT (with or without ORDER
-  // BY) uses the same list staging + `array_to_string`.
-  if (name == "array_agg" && (has_order || has_limit)) {
+  if (!order_items.empty()) {
+    parts.order_suffix =
+        absl::StrCat(" ORDER BY ", absl::StrJoin(order_items, ", "));
+  }
+  return parts;
+}
+
+std::string EmitArrayConcatAggCall(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const std::vector<std::string>& args,
+    const OrderedAggParts& ordered,
+    bool ignore_nulls,
+    const std::string& filter_suffix) {
+  const bool has_limit = !ordered.limit_expr.empty();
+  const bool has_order = !ordered.order_suffix.empty();
+  std::string prefix = node->distinct() ? "DISTINCT " : "";
+  std::string order_suffix = ordered.order_suffix;
+  if (!has_order) {
+    order_suffix = absl::StrCat(
+        " ORDER BY ", internal::QuoteIdent(internal::kBqInputRnCol), " ASC");
+  }
+  std::string list_body = absl::StrCat(
+      "list(", prefix, absl::StrJoin(args, ", "), order_suffix, ")");
+  if (!args.empty()) {
+    list_body =
+        absl::StrCat(list_body, " FILTER (WHERE ", args[0], " IS NOT NULL)");
+    list_body =
+        internal::AppendArrayAggNullFilter(list_body, args[0], ignore_nulls);
+  }
+  if (has_limit) {
+    list_body = absl::StrCat(
+        "list_slice(", list_body, ", 1, ", ordered.limit_expr, ")");
+  }
+  std::string body = absl::StrCat("flatten(", list_body, ")");
+  if (!filter_suffix.empty()) {
+    body = absl::StrCat(body, filter_suffix);
+  }
+  return body;
+}
+
+std::string EmitArrayAggCall(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const std::vector<std::string>& args,
+    const OrderedAggParts& ordered,
+    bool ignore_nulls,
+    bool input_rn_ordering,
+    const std::string& filter_suffix) {
+  const bool has_limit = !ordered.limit_expr.empty();
+  const bool has_order = !ordered.order_suffix.empty();
+  if (has_order || has_limit) {
     std::string prefix = node->distinct() ? "DISTINCT " : "";
     std::string body =
-        absl::StrCat("list(", prefix, args[0], order_suffix, ")");
+        absl::StrCat("list(", prefix, args[0], ordered.order_suffix, ")");
     body = internal::AppendArrayAggNullFilter(body, args[0], ignore_nulls);
     if (has_limit) {
-      body = absl::StrCat("list_slice(", body, ", 1, ", limit_expr, ")");
+      body =
+          absl::StrCat("list_slice(", body, ", 1, ", ordered.limit_expr, ")");
     }
     if (!ignore_nulls) {
       body = internal::WrapArrayAggRespectNulls(body, args[0]);
     }
-    return append_filter(std::move(body));
-  }
-  if (name == "array_agg" && !has_order && !has_limit) {
-    const std::string rn_order =
-        input_rn_ordering_
-            ? absl::StrCat(" ORDER BY ",
-                           internal::QuoteIdent(internal::kBqInputRnCol),
-                           " ASC")
-            : "";
-    std::string body = node->distinct()
-                           ? absl::StrCat("array_agg(DISTINCT ", args[0], ")")
-                           : absl::StrCat("list(", args[0], rn_order, ")");
-    body = internal::AppendArrayAggNullFilter(body, args[0], ignore_nulls);
-    if (!ignore_nulls) {
-      body = internal::WrapArrayAggRespectNulls(body, args[0]);
+    if (!filter_suffix.empty()) {
+      body = absl::StrCat(body, filter_suffix);
     }
-    return append_filter(std::move(body));
+    return body;
   }
-  if (name == "string_agg" && node->distinct() && !has_order && !has_limit) {
+  const std::string rn_order =
+      input_rn_ordering
+          ? absl::StrCat(" ORDER BY ",
+                         internal::QuoteIdent(internal::kBqInputRnCol),
+                         " ASC")
+          : "";
+  std::string body = node->distinct()
+                         ? absl::StrCat("array_agg(DISTINCT ", args[0], ")")
+                         : absl::StrCat("list(", args[0], rn_order, ")");
+  body = internal::AppendArrayAggNullFilter(body, args[0], ignore_nulls);
+  if (!ignore_nulls) {
+    body = internal::WrapArrayAggRespectNulls(body, args[0]);
+  }
+  if (!filter_suffix.empty()) {
+    body = absl::StrCat(body, filter_suffix);
+  }
+  return body;
+}
+
+std::string EmitStringAggCall(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const std::vector<std::string>& args,
+    const OrderedAggParts& ordered,
+    const std::string& filter_suffix) {
+  const bool has_limit = !ordered.limit_expr.empty();
+  const bool has_order = !ordered.order_suffix.empty();
+  std::vector<std::string> call_args = args;
+  if (call_args.size() == 1) {
+    call_args.push_back("','");
+  }
+  if (node->distinct() && !has_order && !has_limit) {
     return "";
   }
-  if (name == "string_agg" && has_limit) {
-    std::string prefix = node->distinct() ? "DISTINCT " : "";
-    std::string list_body =
-        absl::StrCat("list(", prefix, args[0], order_suffix, ")");
-    list_body =
-        absl::StrCat("list_slice(", list_body, ", 1, ", limit_expr, ")");
-    return append_filter(
-        absl::StrCat("array_to_string(", list_body, ", ", call_args[1], ")"));
+  if (!has_limit) {
+    return "";
   }
-  const auto* entry = LookupFunction(name);
+  std::string prefix = node->distinct() ? "DISTINCT " : "";
+  std::string list_body =
+      absl::StrCat("list(", prefix, args[0], ordered.order_suffix, ")");
+  list_body =
+      absl::StrCat("list_slice(", list_body, ", 1, ", ordered.limit_expr, ")");
+  std::string body =
+      absl::StrCat("array_to_string(", list_body, ", ", call_args[1], ")");
+  if (!filter_suffix.empty()) {
+    body = absl::StrCat(body, filter_suffix);
+  }
+  return body;
+}
+
+std::string EmitDispositionAggregateCall(
+    absl::string_view name,
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const std::vector<std::string>& args,
+    absl::string_view order_suffix,
+    const FnEntry* entry,
+    const std::string& filter_suffix) {
   if (entry == nullptr) {
     LOG(INFO) << "duckdb transpiler: aggregate '" << name
               << "' has no disposition; surfacing UNIMPLEMENTED";
@@ -230,24 +270,26 @@ std::string Transpiler::EmitAggregateFunctionCall(
       std::string body = absl::StrCat(entry->duckdb_name,
                                       "(",
                                       prefix,
-                                      absl::StrJoin(call_args, ", "),
+                                      absl::StrJoin(args, ", "),
                                       order_suffix,
                                       ")");
       if (name == "countif") {
         body = absl::StrCat("coalesce(", body, ", 0)");
       }
-      return append_filter(std::move(body));
+      if (!filter_suffix.empty()) {
+        body = absl::StrCat(body, filter_suffix);
+      }
+      return body;
     }
     case Disposition::kDuckdbUdf:
-      // Same ready/planned dispatch as scalar `EmitFunctionCall`. A
-      // ready `duckdb_udf` aggregate row is rare (aggregates are
-      // either pure DuckDB or routed to the semantic executor) but
-      // is supported here for symmetry; the YAML generator still
-      // refuses a ready row without `duckdb_name=`.
       if (!entry->planned && !entry->duckdb_name.empty()) {
         std::string prefix = node->distinct() ? "DISTINCT " : "";
-        return append_filter(absl::StrCat(
-            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")"));
+        std::string body = absl::StrCat(
+            entry->duckdb_name, "(", prefix, absl::StrJoin(args, ", "), ")");
+        if (!filter_suffix.empty()) {
+          body = absl::StrCat(body, filter_suffix);
+        }
+        return body;
       }
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
                 << "' route=duckdb_udf (planned=" << entry->planned
@@ -256,12 +298,6 @@ std::string Transpiler::EmitAggregateFunctionCall(
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
     case Disposition::kLocalStub:
-      // Aggregates today have no `kLocalStub` rows in
-      // `functions.yaml`, but the switch must be exhaustive over
-      // the disposition enum. Behave like `kSemanticExecutor` /
-      // `kControlOp`: surface the empty-string contract so the
-      // engine returns UNIMPLEMENTED rather than the transpiler
-      // emitting a guess.
       LOG(INFO) << "duckdb transpiler: aggregate '" << name
                 << "' route=" << DispositionToString(entry->disposition)
                 << " (planned=" << entry->planned
@@ -275,23 +311,129 @@ std::string Transpiler::EmitAggregateFunctionCall(
   return "";
 }
 
+std::optional<std::string> TryEmitNamedAggregateCall(
+    absl::string_view name,
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    const std::vector<std::string>& args,
+    const OrderedAggParts& ordered,
+    bool ignore_nulls,
+    bool input_rn_ordering,
+    const std::string& filter_suffix) {
+  if (name == "array_concat_agg") {
+    return EmitArrayConcatAggCall(
+        node, args, ordered, ignore_nulls, filter_suffix);
+  }
+  if (name == "array_agg") {
+    return EmitArrayAggCall(
+        node, args, ordered, ignore_nulls, input_rn_ordering, filter_suffix);
+  }
+  if (name == "string_agg") {
+    if (std::string body =
+            EmitStringAggCall(node, args, ordered, filter_suffix);
+        !body.empty()) {
+      return body;
+    }
+    if (node->distinct() && ordered.order_suffix.empty() &&
+        ordered.limit_expr.empty()) {
+      return std::string();
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> TryEmitAggregateEarlyExit(
+    const ::googlesql::ResolvedAggregateFunctionCall* node,
+    absl::string_view name,
+    const EmitExprFn& emit_expr,
+    std::string* filter_suffix) {
+  if (const auto* sql_fn =
+          dynamic_cast<const ::googlesql::SQLFunction*>(node->function());
+      sql_fn != nullptr && sql_fn->IsAggregate()) {
+    LOG(INFO) << "duckdb transpiler: SQL UDAF '" << node->function()->Name()
+              << "' routes to semantic executor; surfacing UNIMPLEMENTED";
+    return std::string();
+  }
+  const bool ordered_agg = internal::SupportsOrderedAggregateModifiers(name);
+  if (RejectUnsupportedAggregateModifiers(node, name, ordered_agg)) {
+    return std::string();
+  }
+  *filter_suffix = BuildAggregateFilterSuffix(node, emit_expr);
+  if (node->where_expr() != nullptr && filter_suffix->empty()) {
+    return std::string();
+  }
+  if (name == "$count_star") {
+    if (node->argument_list_size() != 0) return std::string();
+    return filter_suffix->empty() ? std::optional<std::string>("COUNT(*)")
+                                  : std::optional<std::string>(absl::StrCat(
+                                        "COUNT(*)", *filter_suffix));
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+std::string Transpiler::EmitAggregateFunctionCall(
+    const ::googlesql::ResolvedAggregateFunctionCall* node) {
+  if (node == nullptr || node->function() == nullptr) return "";
+  const std::string name = internal::ResolveFunctionName(node->function());
+  const EmitExprFn emit_expr = [this](const ::googlesql::ResolvedExpr* expr) {
+    return EmitExpr(expr);
+  };
+  std::string filter_suffix;
+  if (auto early =
+          TryEmitAggregateEarlyExit(node, name, emit_expr, &filter_suffix);
+      early.has_value()) {
+    return *early;
+  }
+  const bool ordered_agg = internal::SupportsOrderedAggregateModifiers(name);
+
+  const EmitColumnRefFn emit_col =
+      [this](const ::googlesql::ResolvedColumnRef* ref) {
+        return EmitColumnRef(ref);
+      };
+
+  std::vector<std::string> args;
+  args.reserve(node->argument_list_size());
+  for (int i = 0; i < node->argument_list_size(); ++i) {
+    std::string a = emit_expr(node->argument_list(i));
+    if (a.empty()) return "";
+    args.push_back(std::move(a));
+  }
+
+  bool ordered_ok = true;
+  OrderedAggParts ordered =
+      BuildOrderedAggParts(node, ordered_agg, emit_expr, emit_col, &ordered_ok);
+  if (!ordered_ok) return "";
+
+  const bool ignore_nulls =
+      node->null_handling_modifier() ==
+      ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
+
+  if (auto named = TryEmitNamedAggregateCall(name,
+                                             node,
+                                             args,
+                                             ordered,
+                                             ignore_nulls,
+                                             input_rn_ordering_,
+                                             filter_suffix);
+      named.has_value()) {
+    return *named;
+  }
+
+  std::vector<std::string> call_args = args;
+  if (name == "string_agg" && call_args.size() == 1) {
+    call_args.push_back("','");
+  }
+  return EmitDispositionAggregateCall(name,
+                                      node,
+                                      call_args,
+                                      ordered.order_suffix,
+                                      LookupFunction(name),
+                                      filter_suffix);
+}
+
 std::string Transpiler::EmitAnalyticFunctionCall(
     const ::googlesql::ResolvedAnalyticFunctionCall* node) {
-  // Window functions: route the name through the disposition table
-  // and emit `<NAME>(<args>)` for the analytic call body. The OVER
-  // clause (PARTITION BY, ORDER BY, frame) is stitched on by
-  // `EmitAnalyticScan` since those live on the surrounding group.
-  //
-  // The function table flags ROW_NUMBER / RANK / DENSE_RANK / CUME_DIST
-  // / PERCENT_RANK / NTILE / LAG / LEAD / FIRST_VALUE / LAST_VALUE /
-  // NTH_VALUE as `kDuckdbNative` so they fall through here;
-  // aggregate-over-window calls (SUM / COUNT / AVG / MIN / MAX OVER
-  // (...)) flow through the same map entries the scalar aggregate
-  // emit uses.
-  //
-  // We share the SAFE-mode / modifier-rejection contract with
-  // `EmitAggregateFunctionCall` because GoogleSQL hands us the same
-  // base class for both.
   if (node == nullptr || node->function() == nullptr) return "";
   if (node->error_mode() ==
       ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {
@@ -341,10 +483,6 @@ std::string Transpiler::EmitAnalyticFunctionCall(
       return body;
     }
     case Disposition::kDuckdbUdf:
-      // Symmetric to `EmitFunctionCall` /
-      // `EmitAggregateFunctionCall`. A ready row's `duckdb_name`
-      // points at the registered UDF / macro; a planned row
-      // surfaces UNIMPLEMENTED until the wrapper lands.
       if (!entry->planned && !entry->duckdb_name.empty()) {
         std::string prefix = node->distinct() ? "DISTINCT " : "";
         return absl::StrCat(
@@ -357,10 +495,6 @@ std::string Transpiler::EmitAnalyticFunctionCall(
     case Disposition::kSemanticExecutor:
     case Disposition::kControlOp:
     case Disposition::kLocalStub:
-      // Analytic functions have no `kLocalStub` rows in
-      // `functions.yaml`, but the switch must be exhaustive over
-      // the disposition enum. Surface UNIMPLEMENTED so the
-      // engine never lowers a stub family through the fast path.
       LOG(INFO) << "duckdb transpiler: analytic function '" << name
                 << "' route=" << DispositionToString(entry->disposition)
                 << " (planned=" << entry->planned
