@@ -1,0 +1,172 @@
+# Bazel coverage workflow for the BigQuery emulator's C++ engine.
+#
+# Triggered after a successful `build-engine` run on push to `main` only.
+# PRs skip this workflow (Go coverage from `ci` gates merges; C++ coverage
+# is informational and runs post-merge). Reuses the `engine-v2` Bazel disk
+# cache that `build-engine` just populated instead of cold-starting in parallel.
+#
+# Runs `bazel coverage` over every first-party `cc_test` target discovered
+# via a scoped `bazel query` (see the Enumerate step). The aggregated lcov
+# report at `.cache/coverage/_coverage_report.dat` is uploaded as the
+# `cpp-bazel-coverage` workflow artifact, which
+# `.github/workflows/coverage-publish.yml` aggregates with the
+# `go-coverage` artifact from ci.yml and publishes to the
+# self-hosted gh-pages coverage page.
+#
+# Why a separate workflow (not folded into build-engine):
+#   * Instrumented `bazel coverage` roughly doubles the link cost of the
+#     engine build; folding it into build-engine blocked downstream
+#     `workflow_run` consumers and exceeded the 180 min job ceiling when
+#     combined with engine compile + cc_test.
+#   * `build-engine` on main skips cc_test; this job executes the same
+#     targets under instrumentation (tests + coverage in one pass).
+#   * A coverage regression should not block the build/test merge gate.
+#
+# amd64-only for the same reason ci.yml's Bazel build is amd64-only:
+# the GoogleSQL hermetic LLVM toolchain only ships amd64 binaries today.
+
+name: coverage-bazel
+
+on:
+  workflow_run:
+    workflows: [build-engine]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-bazel-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  bazel-coverage:
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
+    name: bazel-coverage
+    runs-on: ubuntu-latest
+    # Cold disk cache is the long pole on the first main push after a
+    # cache flush. After `build-engine` on the same SHA, this job restores
+    # the warm `engine-v2` disk cache and typically lands in the 15-40 min
+    # range. Timeout mirrors release.yml's 180 min ceiling.
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Go is installed only so `go-task/setup-task` can run Task wrappers
+      # (`task bazel:coverage`, optional `task googlesql:fetch-prebuilt`).
+      # This job never runs `go mod download` / `go test` / `go build`, so
+      # enabling setup-go's module cache restores a hit then post-job cleanup
+      # warns that GOMODCACHE was never created on disk.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: false
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            llvm \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc \
+            lcov
+          # .bazelrc pins BAZEL_LLVM_{COV,PROFDATA} at unversioned names.
+          # Noble's llvm metapackage may only ship llvm-cov-18, etc.
+          for tool in llvm-cov llvm-profdata; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              ver="$(basename "$(ls -1 /usr/bin/${tool}-* 2>/dev/null | sort -V | tail -1)")"
+              if [ -n "$ver" ]; then
+                sudo ln -sf "/usr/bin/$ver" "/usr/bin/$tool"
+              fi
+            fi
+          done
+
+      - name: Restore GoogleSQL prebuilt cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/googlesql-prebuilt
+          key: googlesql-prebuilt-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
+
+      # Shares `disk-cache: engine-v2` with build-engine so coverage reuses
+      # action outputs from the engine build on the same SHA. Bazel keys by
+      # action hash; instrumented coverage compiles do not incorrectly reuse
+      # non-instrumented objects.
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: engine-v2
+          cache-version: 2
+          repository-cache: true
+
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
+
+      - name: Enumerate cc_test targets
+        id: targets
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          set -euo pipefail
+          case "${GOOGLESQL_SOURCE:-prebuilt}" in
+            prebuilt) gsq_cfg=googlesql-prebuilt ;;
+            local|source) gsq_cfg=googlesql-source ;;
+            *) echo "Unexpected GOOGLESQL_SOURCE='${GOOGLESQL_SOURCE}'" >&2; exit 2 ;;
+          esac
+          query='kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)'
+          targets="$(bazel query --config="$gsq_cfg" "$query" | tr '\n' ' ')"
+          if [ -z "${targets// }" ]; then
+            echo "no cc_test targets found via bazel query: $query" >&2
+            exit 1
+          fi
+          echo "targets=${targets}" >> "$GITHUB_OUTPUT"
+
+      - name: Run bazel coverage
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: |
+          case "${GOOGLESQL_SOURCE:-prebuilt}" in
+            prebuilt) gsq_cfg=googlesql-prebuilt ;;
+            local|source) gsq_cfg=googlesql-source ;;
+          esac
+          echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          chmod +x .github/scripts/bazel_task_with_disk_cache_retry.sh
+          .github/scripts/bazel_task_with_disk_cache_retry.sh \
+            task bazel:coverage \
+            TARGETS="${{ steps.targets.outputs.targets }}" \
+            COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
+
+      - name: Upload C++ (Bazel) coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: cpp-bazel-coverage
+          path: .cache/coverage/_coverage_report.dat
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: timeout 60 bazel shutdown || true

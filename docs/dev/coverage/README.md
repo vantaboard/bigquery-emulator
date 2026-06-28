@@ -17,15 +17,15 @@ The implementation lives in:
   — `workflow_run` consumer that gates PRs and publishes to
   `gh-pages` on push-to-main.
 - Producers: [`ci.yml`](../../../.github/workflows/ci.yml) (uploads
-  `go-coverage`) and [`build-engine.yml`](../../../.github/workflows/build-engine.yml)
-  (uploads `cpp-bazel-coverage` on push to `main`).
+  `go-coverage`) and [`coverage-bazel.yml`](../../../.github/workflows/coverage-bazel.yml)
+  (uploads `cpp-bazel-coverage` on push to `main`, after `build-engine`).
 
 ## Pipeline shape
 
 ```mermaid
 flowchart LR
   buildEngine[build-engine push/PR] --> ci[ci.yml: go test -coverprofile]
-  buildEngine -->|"main push only"| cpp[build-engine: bazel coverage]
+  buildEngine -->|"main push only"| cpp[coverage-bazel: bazel coverage]
   ci -->|go-coverage artifact| pub[coverage-publish.yml]
   cpp -->|cpp-bazel-coverage artifact| pub
   pub -->|"head_branch == main"| gh[gh-pages branch]
@@ -34,11 +34,11 @@ flowchart LR
   gh -->|GitHub Pages| browse["browsable reports"]
 ```
 
-On **pull requests**, `build-engine` does not upload C++ coverage;
-`coverage-publish` gates on Go coverage only (the C++ row shows
-`skipped (missing data)`). On **push to `main`**, instrumented Bazel
-coverage runs in the same `build-engine` job after `cc_test`, reusing
-the warm `engine` disk cache.
+On **pull requests**, `build-engine` runs `cc_test` and does not upload C++
+coverage; `coverage-publish` gates on Go coverage only (the C++ row shows
+`skipped (missing data)`). On **push to `main`**, `build-engine` skips
+`cc_test`; instrumented Bazel coverage runs in `coverage-bazel` after
+`build-engine` succeeds, reusing the warm `engine-v2` disk cache.
 
 ## Operator runbook
 
@@ -117,9 +117,9 @@ publish creates it. Merge a no-op PR to `main`, wait for
 
 **After merge to `main`:**
 
-5. Wait for `build-engine` (includes C++ coverage on main) and `ci` to complete.
+5. Wait for `build-engine`, `coverage-bazel`, and `ci` to complete.
 6. After the post-merge `coverage-publish` finishes (triggered by `ci`
-   and/or `build-engine`), the `gh-pages` branch should have:
+   and/or `coverage-bazel`), the `gh-pages` branch should have:
    - `summary.json`, `baseline.json` (identical for this commit),
      `badge.json`, `badge-go.json`, `badge-cpp.json`
    - `go.html`, `cpp/index.html`, `index.html`
@@ -168,7 +168,7 @@ workflow will compute.
 
 - **gh-pages over a third-party SaaS** keeps the pipeline free and
   fully in this repo. No tokens to rotate, no quota to monitor.
-- **Two artifacts, one consumer** keeps `ci.yml` and `build-engine.yml`
+- **Two artifacts, one consumer** keeps `ci.yml` and `coverage-bazel.yml`
   ignorant of badge layout / gate thresholds. Either producer can change
   without touching the publish workflow.
 - **`workflow_run` trigger** lets the consumer run with `contents:
@@ -185,9 +185,9 @@ workflow will compute.
 |---------|-------|-----|
 | Badge shows `resource not found` | `badge.json` absent on `gh-pages`, or publish step skipped | Confirm `coverage-publish` ran **Publish to gh-pages** on main; re-run the workflow if needed. Wait ~5 min for shields.io cache. |
 | Badge shows `n/a` | Producer artifact missing for the published SHA | Re-run the failing producer; the next workflow_run will refresh the badge. |
-| C++ badge/HTML shows `0.0%` / "summary only" | Bazel's in-test `llvm-profdata merge` fails on large profraw sets (LF:0/LH:0 combined report) | Ensure `.bazelrc` sets `LCOV_MERGER=/usr/bin/true` and `build-engine` runs `tools/coverage/aggregate_profraw_lcov.sh` after `bazel coverage`. |
-| `aggregate_profraw_lcov.sh: no per-test lcov data` | Per-test profraws not materialized under `bazel-testlogs` (cached test results or missing fetch) | Confirm `.bazelrc` sets `--experimental_fetch_all_coverage_outputs` and `--nocache_test_results` on the `coverage` config; re-run `build-engine` on main. |
-| Go badge `n/a` right after a main push | `build-engine` published before `ci` finished (cpp-only partial) | Wait for the `ci`-triggered `coverage-publish` run, or check the deferral notice in the build-engine publish logs. |
+| C++ badge/HTML shows `0.0%` / "summary only" | Bazel's in-test `llvm-profdata merge` fails on large profraw sets (LF:0/LH:0 combined report) | Ensure `.bazelrc` sets `LCOV_MERGER=/usr/bin/true` and `coverage-bazel` runs `tools/coverage/aggregate_profraw_lcov.sh` after `bazel coverage`. |
+| `aggregate_profraw_lcov.sh: no per-test lcov data` | Per-test profraws not materialized under `bazel-testlogs` (cached test results or missing fetch) | Confirm `.bazelrc` sets `--experimental_fetch_all_coverage_outputs` and `--nocache_test_results` on the `coverage` config; re-run `coverage-bazel` on main. |
+| Go badge `n/a` right after a main push | `coverage-bazel` published before `ci` finished (cpp-only partial) | Wait for the `ci`-triggered `coverage-publish` run, or check the deferral notice in the coverage-bazel publish logs. |
 | Gate reports "Baseline missing" | `gh-pages` branch or its `baseline.json` not yet published | Wait for the first push-to-main publish, or pre-seed via step 1 above. |
 | Gate fails on a PR you expected to pass | Current run dropped > `COVERAGE_TOLERANCE` percentage points | Inspect the step-summary table; either fix the regression or, if the threshold is wrong, tighten/relax `COVERAGE_TOLERANCE` in the workflow. |
 | Pages 404 after enabling | `gh-pages` branch contents still in flight | Wait for the post-merge `coverage-publish` run to finish; GitHub serves the branch on a short delay. |

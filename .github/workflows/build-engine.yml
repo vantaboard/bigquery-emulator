@@ -1,16 +1,17 @@
 # Canonical C++ engine build for CI.
 #
-# Runs once per push/PR: builds `engine-binaries`, runs first-party
-# `cc_test`, and (main push only) emits `cpp-bazel-coverage`. Downstream
-# workflows (ci, conformance, googlesql-corpus, docker-smoke,
-# coverage-publish, thirdparty live lanes) consume artifacts via
-# `workflow_run` + `setup-engine-from-artifact` / artifact download.
+# Runs once per push/PR: builds `engine-binaries` and runs first-party
+# `cc_test` on pull requests. Main pushes skip cc_test (coverage-bazel runs
+# the same targets under instrumentation after this workflow succeeds).
+# Downstream workflows (ci, conformance, googlesql-corpus, docker-smoke,
+# thirdparty live lanes) consume artifacts via `workflow_run` +
+# `setup-engine-from-artifact` / artifact download.
 #
 # Caching layers:
 #   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin (exact
 #     hit only; no restore-keys prefix — see docs/dev/ci-engine-build.md)
 #   * `actions/cache` on `.cache/googlesql-prebuilt/` keyed by prebuilt SHA256
-#   * Unified Bazel `disk-cache: engine-v2` (shared with cc_test consumers)
+#   * Unified Bazel `disk-cache: engine-v2` (shared with cc_test / coverage-bazel)
 #
 # Local equivalent: `task emulator:build-engine:bazel` (see taskfiles/ci.yml).
 
@@ -44,8 +45,8 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    # cc_test + main-only instrumented coverage can exceed 120 min on a
-    # cold `engine` disk cache; mirrors release.yml's 180 min ceiling.
+    # PR: engine + cc_test can exceed 120 min on a cold disk cache.
+    # Main: engine-only (cc_test deferred to coverage-bazel).
     timeout-minutes: 180
     outputs:
       googlesql-mode: ${{ steps.googlesql.outputs.mode }}
@@ -133,61 +134,16 @@ jobs:
             task emulator:build-engine:bazel
           fi
 
+      # Main skips cc_test: coverage-bazel runs the same targets under
+      # instrumentation after build-engine succeeds (avoids running tests
+      # twice and keeps this job under the timeout ceiling).
       - name: Run first-party cc_test targets via Bazel
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
         env:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: |
           chmod +x .github/scripts/bazel_task_with_disk_cache_retry.sh
           .github/scripts/bazel_task_with_disk_cache_retry.sh task lint:cpp:test
-
-      - name: Install coverage tooling (main push only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          sudo apt-get install -y --no-install-recommends llvm lcov
-          for tool in llvm-cov llvm-profdata; do
-            if ! command -v "$tool" >/dev/null 2>&1; then
-              ver="$(basename "$(ls -1 /usr/bin/${tool}-* 2>/dev/null | sort -V | tail -1)")"
-              if [ -n "$ver" ]; then
-                sudo ln -sf "/usr/bin/$ver" "/usr/bin/$tool"
-              fi
-            fi
-          done
-
-      - name: Enumerate cc_test targets (main push only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: coverage-targets
-        env:
-          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: |
-          set -euo pipefail
-          case "${GOOGLESQL_SOURCE:-prebuilt}" in
-            prebuilt) gsq_cfg=googlesql-prebuilt ;;
-            local|source) gsq_cfg=googlesql-source ;;
-            *) echo "Unexpected GOOGLESQL_SOURCE='${GOOGLESQL_SOURCE}'" >&2; exit 2 ;;
-          esac
-          query='kind(cc_test, //backend/... + //binaries/... + //frontend/... + //tools/googlesql-prebuilt/smoke/...)'
-          targets="$(bazel query --config="$gsq_cfg" "$query" | tr '\n' ' ')"
-          if [ -z "${targets// }" ]; then
-            echo "no cc_test targets found via bazel query: $query" >&2
-            exit 1
-          fi
-          echo "targets=${targets}" >> "$GITHUB_OUTPUT"
-
-      - name: Run bazel coverage (main push only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: |
-          case "${GOOGLESQL_SOURCE:-prebuilt}" in
-            prebuilt) gsq_cfg=googlesql-prebuilt ;;
-            local|source) gsq_cfg=googlesql-source ;;
-          esac
-          echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
-          chmod +x .github/scripts/bazel_task_with_disk_cache_retry.sh
-          .github/scripts/bazel_task_with_disk_cache_retry.sh \
-            task bazel:coverage \
-            TARGETS="${{ steps.coverage-targets.outputs.targets }}" \
-            COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
 
       - name: Build Go gateway (gateway_main)
         run: |
@@ -242,15 +198,6 @@ jobs:
             bin/libduckdb.so
             bin/gateway_main
             engine-provenance.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload C++ (Bazel) coverage artifact
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v6
-        with:
-          name: cpp-bazel-coverage
-          path: .cache/coverage/_coverage_report.dat
           if-no-files-found: error
           retention-days: 14
 

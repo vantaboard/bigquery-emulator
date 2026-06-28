@@ -2,9 +2,11 @@
 
 GitHub Actions builds the C++ engine (`emulator_main` + `libduckdb.so`) **once**
 per push/PR in the [`build-engine`](../../.github/workflows/build-engine.yml)
-workflow, runs first-party `cc_test` in the same job, and (on push to `main`
-only) emits instrumented Bazel coverage. Downstream lanes download
-`engine-binaries` instead of compiling GoogleSQL again.
+workflow. Pull requests also run first-party `cc_test` in the same job; main
+pushes skip `cc_test` (the same targets run under instrumentation in
+[`coverage-bazel`](../../.github/workflows/coverage-bazel.yml) after
+`build-engine` succeeds). Downstream lanes download `engine-binaries` instead
+of compiling GoogleSQL again.
 
 ## Flow
 
@@ -12,7 +14,7 @@ only) emits instrumented Bazel coverage. Downstream lanes download
 push / pull_request
         │
         ├─► build-engine / build          ──► engine-binaries artifact
-        │                                   └──► cpp-bazel-coverage (main push)
+        │       └── (PR only) cc_test
         ├─► ci-cpp-analysis / cpp-analysis (parallel, no engine)
         ├─► conformance-routing-matrix / routing-matrix (parallel)
         └─► thirdparty-golang-compile / golang compile (parallel)
@@ -27,7 +29,9 @@ push / pull_request
                 ├─► thirdparty-samples / node Mocha
                 ├─► thirdparty-samples / golang live
                 ├─► thirdparty-samples / bigframes snippet gate
-                └─► coverage-publish (after ci or build-engine)
+                ├─► coverage-bazel / bazel-coverage (main push only)
+                │       └──► cpp-bazel-coverage artifact
+                └─► coverage-publish (after ci or coverage-bazel)
 ```
 
 Consumer workflows (`ci`, `conformance`, `docker-smoke`, `thirdparty-samples`)
@@ -36,9 +40,9 @@ with skipped gate jobs. If `build-engine` fails, each consumer runs an
 `engine-build-failed` job that exits non-zero.
 
 [`coverage-publish`](../../.github/workflows/coverage-publish.yml) aggregates
-Go coverage from `ci` and C++ coverage from the same `build-engine` run on
-push to `main`. PR coverage gates use Go coverage from `ci` only; C++ Bazel
-coverage is informational and runs post-merge inside `build-engine`.
+Go coverage from `ci` and C++ coverage from `coverage-bazel` on push to
+`main`. PR coverage gates use Go coverage from `ci` only; C++ Bazel coverage
+is informational and runs post-merge in `coverage-bazel`.
 
 Cheap push/PR workflows (no engine):
 
@@ -52,7 +56,7 @@ Cheap push/PR workflows (no engine):
 |-------|--------|---------|
 | `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged **and** the cache key matches exactly |
 | `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine` | Skip tarball download when prebuilt SHA256 pin unchanged |
-| Bazel `disk-cache: engine-v2` | `build-engine` | Shared incremental compile cache for engine, cc_test, and coverage |
+| Bazel `disk-cache: engine-v2` | `build-engine`, `coverage-bazel` | Shared incremental compile cache for engine, cc_test, and coverage |
 | `engine-binaries` artifact | per successful `build-engine` run | Consumers + re-runs download without rebuilding |
 
 ### `bin/` cache safety (exact hit only)
@@ -87,8 +91,8 @@ Re-running the workflow without invalidating the cache repeats the failure.
    `bazel-contrib/setup-bazel` (bump again only when invalidating a poisoned
    tree).
 2. **Retry wrapper** — `.github/scripts/bazel_task_with_disk_cache_retry.sh`
-   clears `$HOME/.cache/bazel-disk` and retries `lint:cpp:test` / coverage once
-   when the log contains `CacheNotFoundException`.
+   clears `$HOME/.cache/bazel-disk` and retries `lint:cpp:test` / `bazel:coverage`
+   once when the log contains `CacheNotFoundException`.
 
 When the cache key does not match exactly, the workflow removes any restored
 `bin/emulator_main` / `bin/libduckdb.so` and runs
@@ -130,9 +134,9 @@ it to **`ci-cpp-analysis / cpp-analysis (cppcheck)`** (workflow was split out).
 
 ## Local development
 
-# CI splits build, cc_test, and (on main) C++ coverage into `build-engine`;
-# `task ci:run` still runs them sequentially on one machine. Local dev
-# keeps the single-process mirror.
+# CI splits build and cc_test into `build-engine` (PR) and defers main-only
+# C++ coverage to `coverage-bazel`; `task ci:run` still runs them sequentially
+# on one machine. Local dev keeps the single-process mirror.
 
 Docker lanes locally continue to use `task docker:smoke` (full build). CI
 docker-smoke sets `DOCKER_SMOKE_SKIP_BUILD=1` after loading a pre-built image

@@ -1,7 +1,7 @@
 # Coverage publish/gate workflow for the BigQuery emulator.
 #
 # This is the self-hosted Codecov replacement: when the upstream
-# `ci.yml` (Go test coverage) or `build-engine.yml` (C++ Bazel coverage on
+# `ci.yml` (Go test coverage) or `coverage-bazel.yml` (C++ Bazel coverage on
 # main push) workflows finish, this workflow looks for both partner runs on
 # in-repo `tools/coverage` binary, and either:
 #
@@ -42,14 +42,14 @@
 # Publish vs gate routing uses `workflow_run.head_branch`, not
 # `workflow_run.event`: ci is triggered by build-engine's workflow_run, so
 # its own event is always `workflow_run` even when the original trigger
-# was a push to main. C++ coverage artifacts come from the same
-# `build-engine` run that produced `engine-binaries`.
+# was a push to main. C++ coverage artifacts come from `coverage-bazel`
+# (triggered after build-engine succeeds on main).
 
 name: coverage-publish
 
 on:
   workflow_run:
-    workflows: [ci, build-engine]
+    workflows: [ci, coverage-bazel]
     types: [completed]
 
 permissions:
@@ -78,13 +78,13 @@ jobs:
     # red CI run does not produce trustworthy coverage data, and we
     # do not want a stale-by-accident publish to overwrite the
     # baseline. Only react to the real coverage producers (ci after
-    # build-engine workflow_run, or build-engine on push to main for C++).
+    # build-engine workflow_run, or coverage-bazel on push to main for C++).
     if: >-
       github.event.workflow_run.conclusion == 'success'
       && (
         github.event.workflow_run.name == 'ci'
         || (
-          github.event.workflow_run.name == 'build-engine'
+          github.event.workflow_run.name == 'coverage-bazel'
           && github.event.workflow_run.head_branch == 'main'
         )
       )
@@ -139,10 +139,10 @@ jobs:
               return String(matches[0].id);
             }
             const ciId = latestSuccess('ci', { requireWorkflowRun: true });
-            const buildEngineId = latestSuccess('build-engine');
-            core.info(`ci_run_id=${ciId} build_engine_run_id=${buildEngineId}`);
+            const coverageBazelId = latestSuccess('coverage-bazel');
+            core.info(`ci_run_id=${ciId} coverage_bazel_run_id=${coverageBazelId}`);
             core.setOutput('ci_run_id', ciId);
-            core.setOutput('build_engine_run_id', buildEngineId);
+            core.setOutput('coverage_bazel_run_id', coverageBazelId);
 
       - name: Download Go coverage artifact
         if: steps.locate.outputs.ci_run_id != ''
@@ -155,12 +155,12 @@ jobs:
         continue-on-error: true
 
       - name: Download C++ Bazel coverage artifact
-        if: steps.locate.outputs.build_engine_run_id != ''
+        if: steps.locate.outputs.coverage_bazel_run_id != ''
         uses: actions/download-artifact@v8
         with:
           name: cpp-bazel-coverage
           path: artifacts/cpp
-          run-id: ${{ steps.locate.outputs.build_engine_run_id }}
+          run-id: ${{ steps.locate.outputs.coverage_bazel_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
@@ -199,11 +199,11 @@ jobs:
             echo "::warning::No coverage artifacts found for ${{ github.event.workflow_run.head_sha }}; skipping publish."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
-          # build-engine often finishes before ci on the same SHA.
+          # coverage-bazel often finishes before ci on the same SHA.
           # Publishing cpp-only data to gh-pages briefly overwrote badges
           # with go=n/a until ci's follow-up publish; defer main publish.
           publish_main=true
-          if [ "$TRIGGER_NAME" = "build-engine" ] && [ "$has_go" = false ]; then
+          if [ "$TRIGGER_NAME" = "coverage-bazel" ] && [ "$has_go" = false ]; then
             echo "::notice::Deferring gh-pages publish until go-coverage artifact is available from ci."
             publish_main=false
           fi
