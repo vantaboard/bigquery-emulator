@@ -71,6 +71,41 @@ absl::Status ApplyStringMaxLength(const Value& value, int64_t max_length) {
   return absl::OkStatus();
 }
 
+absl::StatusOr<Value> ApplyBignumericPrecisionScale(
+    const ::googlesql::BigNumericValue& in,
+    const ::googlesql::NumericTypeParametersProto& params,
+    bool return_null_on_error) {
+  auto out = in;
+  if (out.HasFractionalPart()) {
+    auto rounded = out.Round(params.scale());
+    if (!rounded.ok()) {
+      if (return_null_on_error) return Value::NullBigNumeric();
+      return rounded.status();
+    }
+    out = *rounded;
+  }
+  return Value::BigNumeric(out);
+}
+
+absl::StatusOr<Value> ApplyNumericTypeModifiers(
+    Value value,
+    const ::googlesql::NumericTypeParametersProto& params,
+    bool return_null_on_error) {
+  if (value.type_kind() == ::googlesql::TYPE_NUMERIC) {
+    auto adjusted = ApplyNumericPrecisionScale(value.numeric_value(), params);
+    if (!adjusted.ok()) {
+      if (return_null_on_error) return Value::NullNumeric();
+      return adjusted.status();
+    }
+    return *adjusted;
+  }
+  if (value.type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
+    return ApplyBignumericPrecisionScale(
+        value.bignumeric_value(), params, return_null_on_error);
+  }
+  return value;
+}
+
 }  // namespace
 
 absl::StatusOr<Value> ApplyCastTypeModifiers(
@@ -96,28 +131,9 @@ absl::StatusOr<Value> ApplyCastTypeModifiers(
     return value;
   }
   if (params.IsNumericTypeParameters()) {
-    if (value.type_kind() == ::googlesql::TYPE_NUMERIC) {
-      auto adjusted = ApplyNumericPrecisionScale(
-          value.numeric_value(), params.numeric_type_parameters());
-      if (!adjusted.ok()) {
-        if (return_null_on_error) return Value::NullNumeric();
-        return adjusted.status();
-      }
-      return *adjusted;
-    }
-    if (value.type_kind() == ::googlesql::TYPE_BIGNUMERIC) {
-      auto out = value.bignumeric_value();
-      const auto& numeric_params = params.numeric_type_parameters();
-      if (out.HasFractionalPart()) {
-        auto rounded = out.Round(numeric_params.scale());
-        if (!rounded.ok()) {
-          if (return_null_on_error) return Value::NullBigNumeric();
-          return rounded.status();
-        }
-        out = *rounded;
-      }
-      return Value::BigNumeric(out);
-    }
+    return ApplyNumericTypeModifiers(std::move(value),
+                                     params.numeric_type_parameters(),
+                                     return_null_on_error);
   }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,

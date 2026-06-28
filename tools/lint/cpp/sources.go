@@ -221,6 +221,18 @@ func IsTestFile(path string) bool {
 	return strings.HasSuffix(base, "_test.cc") || strings.HasSuffix(base, "_test.cpp")
 }
 
+// IsClangTidyTranslationUnit returns true for `.cc` / `.cpp` / `.cxx`
+// files that clang-tidy should analyze as standalone translation units.
+// Headers are excluded: `compile_commands.json` lists only source
+// files, so linting a header synthesizes a TU without Bazel's include
+// paths and produces bogus `clang-diagnostic-error` findings (notably
+// on `*_test_fixture.h` and other header-only helpers).
+func IsClangTidyTranslationUnit(path string) bool {
+	return strings.HasSuffix(path, ".cc") ||
+		strings.HasSuffix(path, ".cpp") ||
+		strings.HasSuffix(path, ".cxx")
+}
+
 // runList is the `cpp-lint list` subcommand. It prints the
 // first-party C++ source list, one path per line, suitable for
 // piping into `xargs clang-format`, `xargs clang-tidy`, or any
@@ -228,6 +240,7 @@ func IsTestFile(path string) bool {
 func runList(args []string, stdout, stderr io.Writer) error {
 	fs := flagSet("list", stderr)
 	withTests := fs.Bool("tests", true, "include *_test.cc files in the output")
+	tidyOnly := fs.Bool("tidy", false, "emit only .cc/.cpp/.cxx translation units (for clang-tidy)")
 	if err := fs.Parse(args); err != nil {
 		return errUsage
 	}
@@ -250,6 +263,9 @@ func runList(args []string, stdout, stderr io.Writer) error {
 	files = filterExistingOnDisk(root, files)
 	for _, f := range files {
 		if !*withTests && IsTestFile(f) {
+			continue
+		}
+		if *tidyOnly && !IsClangTidyTranslationUnit(f) {
 			continue
 		}
 		_, _ = fmt.Fprintln(stdout, f)

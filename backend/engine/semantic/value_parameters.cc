@@ -146,6 +146,43 @@ absl::StatusOr<const ::googlesql::Type*> ArrayElementTypeFromTypeJson(
   return PrimitiveTypeForKind(ParseTypeKindName(desc_or->type_kind));
 }
 
+bool AppendNextJsonArrayElement(absl::string_view json,
+                                size_t* index,
+                                std::vector<std::string>* out) {
+  size_t i = *index;
+  while (i < json.size() && absl::ascii_isspace(json[i])) {
+    ++i;
+  }
+  if (i >= json.size() || json[i] == ']') {
+    *index = i;
+    return false;
+  }
+  const size_t start = i;
+  if (json[i] == '"') {
+    ++i;
+    while (i < json.size()) {
+      if (json[i] == '\\') {
+        i += 2;
+        continue;
+      }
+      if (json[i] == '"') {
+        ++i;
+        break;
+      }
+      ++i;
+    }
+  } else {
+    while (i < json.size() && json[i] != ',') {
+      if (json[i] == ']') break;
+      ++i;
+    }
+  }
+  out->push_back(
+      std::string(absl::StripAsciiWhitespace(json.substr(start, i - start))));
+  *index = i;
+  return true;
+}
+
 absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
     absl::string_view json) {
   json = absl::StripAsciiWhitespace(json);
@@ -158,35 +195,10 @@ absl::StatusOr<std::vector<std::string>> ParseJsonArrayElements(
   }
   std::vector<std::string> out;
   size_t i = 1;
-  while (i < json.size()) {
-    while (i < json.size() && absl::ascii_isspace(json[i]))
+  while (AppendNextJsonArrayElement(json, &i, &out)) {
+    while (i < json.size() && absl::ascii_isspace(json[i])) {
       ++i;
-    if (i >= json.size()) break;
-    if (json[i] == ']') break;
-    const size_t start = i;
-    if (json[i] == '"') {
-      ++i;
-      while (i < json.size()) {
-        if (json[i] == '\\') {
-          i += 2;
-          continue;
-        }
-        if (json[i] == '"') {
-          ++i;
-          break;
-        }
-        ++i;
-      }
-    } else {
-      while (i < json.size() && json[i] != ',') {
-        if (json[i] == ']') break;
-        ++i;
-      }
     }
-    out.push_back(
-        std::string(absl::StripAsciiWhitespace(json.substr(start, i - start))));
-    while (i < json.size() && absl::ascii_isspace(json[i]))
-      ++i;
     if (i < json.size() && json[i] == ',') ++i;
   }
   return out;
@@ -251,6 +263,90 @@ absl::StatusOr<Value> ParseTimestampParameter(absl::string_view body) {
   return ParseTimestampWireString(body);
 }
 
+absl::StatusOr<Value> ParseNullParameterValue(
+    ::googlesql::TypeKind kind, absl::string_view type_kind_name) {
+  switch (kind) {
+    case ::googlesql::TYPE_BOOL:
+      return Value::NullBool();
+    case ::googlesql::TYPE_INT64:
+      return Value::NullInt64();
+    case ::googlesql::TYPE_DOUBLE:
+      return Value::NullDouble();
+    case ::googlesql::TYPE_STRING:
+      return Value::NullString();
+    case ::googlesql::TYPE_BYTES:
+      return Value::NullBytes();
+    case ::googlesql::TYPE_DATE:
+      return Value::NullDate();
+    case ::googlesql::TYPE_TIME:
+      return Value::NullTime();
+    case ::googlesql::TYPE_DATETIME:
+      return Value::NullDatetime();
+    case ::googlesql::TYPE_TIMESTAMP:
+      return Value::NullTimestamp();
+    case ::googlesql::TYPE_NUMERIC:
+      return Value::NullNumeric();
+    case ::googlesql::TYPE_BIGNUMERIC:
+      return Value::NullBigNumeric();
+    case ::googlesql::TYPE_JSON:
+      return Value::NullJson();
+    default:
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          absl::StrCat("semantic: NULL parameter for type kind '",
+                       type_kind_name,
+                       "' is not yet implemented"));
+  }
+}
+
+absl::StatusOr<Value> ParseArrayParameterValue(absl::string_view trimmed,
+                                               absl::string_view type_json) {
+  auto elem_type_or = ArrayElementTypeFromTypeJson(type_json);
+  if (!elem_type_or.ok()) return elem_type_or.status();
+  auto desc_or = ArrayElementDescriptorFromTypeJson(type_json);
+  if (!desc_or.ok()) return desc_or.status();
+  auto elems_or = ParseJsonArrayElements(trimmed);
+  if (!elems_or.ok()) return elems_or.status();
+  std::vector<Value> elements;
+  elements.reserve(elems_or->size());
+  for (const std::string& elem : *elems_or) {
+    auto field_or =
+        ParseParameterValue(elem, desc_or->type_kind, desc_or->type_json);
+    if (!field_or.ok()) return field_or.status();
+    elements.push_back(*std::move(field_or));
+  }
+  const ::googlesql::ArrayType* array_type = nullptr;
+  absl::Status make =
+      ParameterTypeFactory().MakeArrayType(*elem_type_or, &array_type);
+  if (!make.ok()) return make;
+  return Value::Array(array_type, std::move(elements));
+}
+
+absl::StatusOr<Value> ParseStructParameterValue(absl::string_view trimmed,
+                                                absl::string_view type_json) {
+  auto specs = ParseStructFieldSpecs(type_json);
+  auto struct_type_or = StructTypeFromFieldSpecs(specs);
+  if (!struct_type_or.ok()) return struct_type_or.status();
+  auto elems_or = ParseJsonArrayElements(trimmed);
+  if (!elems_or.ok()) return elems_or.status();
+  if (elems_or->size() != specs.size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "semantic: STRUCT parameter field count mismatch: type_json has ",
+        specs.size(),
+        " fields but value_json has ",
+        elems_or->size(),
+        " elements"));
+  }
+  std::vector<Value> fields;
+  fields.reserve(specs.size());
+  for (size_t i = 0; i < specs.size(); ++i) {
+    auto field_or = ParseParameterValue((*elems_or)[i], specs[i].type_kind, {});
+    if (!field_or.ok()) return field_or.status();
+    fields.push_back(*std::move(field_or));
+  }
+  return Value::Struct(*struct_type_or, std::move(fields));
+}
+
 }  // namespace
 
 bool IsSyntheticPositionalParameterName(absl::string_view name) {
@@ -280,38 +376,7 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
   }
   absl::string_view trimmed = absl::StripAsciiWhitespace(value_json);
   if (trimmed.empty() || trimmed == "null") {
-    switch (kind) {
-      case ::googlesql::TYPE_BOOL:
-        return Value::NullBool();
-      case ::googlesql::TYPE_INT64:
-        return Value::NullInt64();
-      case ::googlesql::TYPE_DOUBLE:
-        return Value::NullDouble();
-      case ::googlesql::TYPE_STRING:
-        return Value::NullString();
-      case ::googlesql::TYPE_BYTES:
-        return Value::NullBytes();
-      case ::googlesql::TYPE_DATE:
-        return Value::NullDate();
-      case ::googlesql::TYPE_TIME:
-        return Value::NullTime();
-      case ::googlesql::TYPE_DATETIME:
-        return Value::NullDatetime();
-      case ::googlesql::TYPE_TIMESTAMP:
-        return Value::NullTimestamp();
-      case ::googlesql::TYPE_NUMERIC:
-        return Value::NullNumeric();
-      case ::googlesql::TYPE_BIGNUMERIC:
-        return Value::NullBigNumeric();
-      case ::googlesql::TYPE_JSON:
-        return Value::NullJson();
-      default:
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            absl::StrCat("semantic: NULL parameter for type kind '",
-                         type_kind_name,
-                         "' is not yet implemented"));
-    }
+    return ParseNullParameterValue(kind, type_kind_name);
   }
   absl::string_view body = StripJsonQuotes(trimmed);
   switch (kind) {
@@ -379,51 +444,10 @@ absl::StatusOr<Value> ParseParameterValue(absl::string_view value_json,
                                             "docs/ENGINE_POLICY.md"));
     case ::googlesql::TYPE_TIMESTAMP:
       return ParseTimestampParameter(body);
-    case ::googlesql::TYPE_ARRAY: {
-      auto elem_type_or = ArrayElementTypeFromTypeJson(type_json);
-      if (!elem_type_or.ok()) return elem_type_or.status();
-      auto desc_or = ArrayElementDescriptorFromTypeJson(type_json);
-      if (!desc_or.ok()) return desc_or.status();
-      auto elems_or = ParseJsonArrayElements(trimmed);
-      if (!elems_or.ok()) return elems_or.status();
-      std::vector<Value> elements;
-      elements.reserve(elems_or->size());
-      for (const std::string& elem : *elems_or) {
-        auto field_or =
-            ParseParameterValue(elem, desc_or->type_kind, desc_or->type_json);
-        if (!field_or.ok()) return field_or.status();
-        elements.push_back(*std::move(field_or));
-      }
-      const ::googlesql::ArrayType* array_type = nullptr;
-      absl::Status make =
-          ParameterTypeFactory().MakeArrayType(*elem_type_or, &array_type);
-      if (!make.ok()) return make;
-      return Value::Array(array_type, std::move(elements));
-    }
-    case ::googlesql::TYPE_STRUCT: {
-      auto specs = ParseStructFieldSpecs(type_json);
-      auto struct_type_or = StructTypeFromFieldSpecs(specs);
-      if (!struct_type_or.ok()) return struct_type_or.status();
-      auto elems_or = ParseJsonArrayElements(trimmed);
-      if (!elems_or.ok()) return elems_or.status();
-      if (elems_or->size() != specs.size()) {
-        return absl::InvalidArgumentError(absl::StrCat(
-            "semantic: STRUCT parameter field count mismatch: type_json has ",
-            specs.size(),
-            " fields but value_json has ",
-            elems_or->size(),
-            " elements"));
-      }
-      std::vector<Value> fields;
-      fields.reserve(specs.size());
-      for (size_t i = 0; i < specs.size(); ++i) {
-        auto field_or =
-            ParseParameterValue((*elems_or)[i], specs[i].type_kind, {});
-        if (!field_or.ok()) return field_or.status();
-        fields.push_back(*std::move(field_or));
-      }
-      return Value::Struct(*struct_type_or, std::move(fields));
-    }
+    case ::googlesql::TYPE_ARRAY:
+      return ParseArrayParameterValue(trimmed, type_json);
+    case ::googlesql::TYPE_STRUCT:
+      return ParseStructParameterValue(trimmed, type_json);
     default:
       return absl::InvalidArgumentError(absl::StrCat(
           "semantic: unsupported parameter type kind '", type_kind_name, "'"));

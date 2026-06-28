@@ -254,6 +254,36 @@ absl::StatusOr<Value> Div(const std::vector<Value>& args) {
   return Value::Int64(dividend / divisor);
 }
 
+namespace {
+
+absl::StatusOr<Value> ModBigNumericValues(const Value& lhs_value,
+                                          const Value& rhs_value) {
+  auto lhs = ValueToBigNumeric(lhs_value);
+  if (!lhs.ok()) return lhs.status();
+  auto rhs = ValueToBigNumeric(rhs_value);
+  if (!rhs.ok()) return rhs.status();
+  if (*rhs == BigNumericValue(0)) {
+    return MakeSemanticError(SemanticErrorReason::kDivisionByZero,
+                             "semantic: division by zero: MOD");
+  }
+  return WrapNumericResult(lhs->Mod(*rhs));
+}
+
+absl::StatusOr<Value> ModNumericValues(const Value& lhs_value,
+                                       const Value& rhs_value) {
+  auto lhs = ValueToNumeric(lhs_value);
+  if (!lhs.ok()) return lhs.status();
+  auto rhs = ValueToNumeric(rhs_value);
+  if (!rhs.ok()) return rhs.status();
+  if (*rhs == NumericValue(0)) {
+    return MakeSemanticError(SemanticErrorReason::kDivisionByZero,
+                             "semantic: division by zero: MOD");
+  }
+  return WrapNumericResult(lhs->Mod(*rhs));
+}
+
+}  // namespace
+
 absl::StatusOr<Value> Mod(const std::vector<Value>& args) {
   if (args.size() != 2) {
     return absl::InvalidArgumentError(
@@ -266,27 +296,11 @@ absl::StatusOr<Value> Mod(const std::vector<Value>& args) {
   const auto kind1 = args[1].type_kind();
   if (kind0 == ::googlesql::TYPE_BIGNUMERIC ||
       kind1 == ::googlesql::TYPE_BIGNUMERIC) {
-    auto lhs = ValueToBigNumeric(args[0]);
-    if (!lhs.ok()) return lhs.status();
-    auto rhs = ValueToBigNumeric(args[1]);
-    if (!rhs.ok()) return rhs.status();
-    if (*rhs == BigNumericValue(0)) {
-      return MakeSemanticError(SemanticErrorReason::kDivisionByZero,
-                               "semantic: division by zero: MOD");
-    }
-    return WrapNumericResult(lhs->Mod(*rhs));
+    return ModBigNumericValues(args[0], args[1]);
   }
   if (kind0 == ::googlesql::TYPE_NUMERIC ||
       kind1 == ::googlesql::TYPE_NUMERIC) {
-    auto lhs = ValueToNumeric(args[0]);
-    if (!lhs.ok()) return lhs.status();
-    auto rhs = ValueToNumeric(args[1]);
-    if (!rhs.ok()) return rhs.status();
-    if (*rhs == NumericValue(0)) {
-      return MakeSemanticError(SemanticErrorReason::kDivisionByZero,
-                               "semantic: division by zero: MOD");
-    }
-    return WrapNumericResult(lhs->Mod(*rhs));
+    return ModNumericValues(args[0], args[1]);
   }
   if (kind0 != ::googlesql::TYPE_INT64 || kind1 != ::googlesql::TYPE_INT64) {
     return absl::InvalidArgumentError(

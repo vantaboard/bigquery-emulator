@@ -239,81 +239,77 @@ absl::StatusOr<Value> ArithmeticAdd(const Value& a, const Value& b) {
   }
 }
 
-absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
-  if (a.type_kind() == ::googlesql::TYPE_DATE &&
-      b.type_kind() == ::googlesql::TYPE_INT64) {
-    int32_t out = 0;
-    if (auto s = ::googlesql::functions::SubDate(
-            a.date_value(),
-            ::googlesql::functions::DateTimestampPart::DAY,
-            b.int64_value(),
-            &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Date(out);
+namespace {
+
+absl::StatusOr<Value> SubDateMinusInt64(const Value& a, const Value& b) {
+  int32_t out = 0;
+  if (auto s = ::googlesql::functions::SubDate(
+          a.date_value(),
+          ::googlesql::functions::DateTimestampPart::DAY,
+          b.int64_value(),
+          &out);
+      !s.ok()) {
+    return s;
   }
-  if (a.type_kind() == ::googlesql::TYPE_DATE &&
-      b.type_kind() == ::googlesql::TYPE_DATE) {
-    auto iv = ::googlesql::functions::IntervalDiffDates(a.date_value(),
-                                                        b.date_value());
-    if (!iv.ok()) return iv.status();
-    return Value::Interval(*iv);
+  return Value::Date(out);
+}
+
+absl::StatusOr<Value> SubDateMinusDate(const Value& a, const Value& b) {
+  auto iv =
+      ::googlesql::functions::IntervalDiffDates(a.date_value(), b.date_value());
+  if (!iv.ok()) return iv.status();
+  return Value::Interval(*iv);
+}
+
+absl::StatusOr<Value> SubDatetimeMinusDatetime(const Value& a, const Value& b) {
+  absl::Time ta;
+  absl::Time tb;
+  if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+          a.datetime_value(), absl::UTCTimeZone(), &ta);
+      !s.ok()) {
+    return s;
   }
-  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
-      b.type_kind() == ::googlesql::TYPE_DATETIME) {
-    absl::Time ta;
-    absl::Time tb;
-    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-            a.datetime_value(), absl::UTCTimeZone(), &ta);
-        !s.ok()) {
-      return s;
-    }
-    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-            b.datetime_value(), absl::UTCTimeZone(), &tb);
-        !s.ok()) {
-      return s;
-    }
-    auto iv = ::googlesql::functions::IntervalDiffTimestamps(ta, tb);
-    if (!iv.ok()) return iv.status();
-    return Value::Interval(*iv);
+  if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+          b.datetime_value(), absl::UTCTimeZone(), &tb);
+      !s.ok()) {
+    return s;
   }
-  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
-      b.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
-    auto iv =
-        ::googlesql::functions::IntervalDiffTimestamps(a.ToTime(), b.ToTime());
-    if (!iv.ok()) return iv.status();
-    return Value::Interval(*iv);
+  auto iv = ::googlesql::functions::IntervalDiffTimestamps(ta, tb);
+  if (!iv.ok()) return iv.status();
+  return Value::Interval(*iv);
+}
+
+absl::StatusOr<Value> SubTimestampMinusTimestamp(const Value& a,
+                                                 const Value& b) {
+  auto iv =
+      ::googlesql::functions::IntervalDiffTimestamps(a.ToTime(), b.ToTime());
+  if (!iv.ok()) return iv.status();
+  return Value::Interval(*iv);
+}
+
+absl::StatusOr<Value> SubDatetimeMinusInterval(const Value& a, const Value& b) {
+  auto negated = b.interval_value().Multiply(-1);
+  if (!negated.ok()) return negated.status();
+  ::googlesql::DatetimeValue datetime;
+  if (auto s = ::googlesql::functions::AddDatetime(
+          a.datetime_value(), *negated, &datetime);
+      !s.ok()) {
+    return s;
   }
-  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
-      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
-    auto negated = b.interval_value().Multiply(-1);
-    if (!negated.ok()) return negated.status();
-    ::googlesql::DatetimeValue datetime;
-    if (auto s = ::googlesql::functions::AddDatetime(
-            a.datetime_value(), *negated, &datetime);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Datetime(datetime);
-  }
-  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
-      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
-    auto negated = b.interval_value().Multiply(-1);
-    if (!negated.ok()) return negated.status();
-    auto out = ::googlesql::functions::AddTimestamp(
-        a.ToUnixPicos().ToPicoTime(), *negated);
-    if (!out.ok()) return out.status();
-    return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
-  }
-  if (auto promoted = TryPromotedNumericSub(a, b)) return *promoted;
-  if (a.type_kind() != b.type_kind()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("semantic: '-' operands have mismatched kinds: ",
-                     a.type()->DebugString(),
-                     " vs ",
-                     b.type()->DebugString()));
-  }
+  return Value::Datetime(datetime);
+}
+
+absl::StatusOr<Value> SubTimestampMinusInterval(const Value& a,
+                                                const Value& b) {
+  auto negated = b.interval_value().Multiply(-1);
+  if (!negated.ok()) return negated.status();
+  auto out = ::googlesql::functions::AddTimestamp(a.ToUnixPicos().ToPicoTime(),
+                                                  *negated);
+  if (!out.ok()) return out.status();
+  return Value::Timestamp(::googlesql::TimestampPicosValue(*out));
+}
+
+absl::StatusOr<Value> SubSameKindNumeric(const Value& a, const Value& b) {
   switch (a.type_kind()) {
     case ::googlesql::TYPE_INT64:
       return SubInt64(a.int64_value(), b.int64_value());
@@ -329,6 +325,44 @@ absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
       return absl::InvalidArgumentError(absl::StrCat(
           "semantic: '-' not implemented for ", a.type()->DebugString()));
   }
+}
+
+}  // namespace
+
+absl::StatusOr<Value> ArithmeticSub(const Value& a, const Value& b) {
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_INT64) {
+    return SubDateMinusInt64(a, b);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATE &&
+      b.type_kind() == ::googlesql::TYPE_DATE) {
+    return SubDateMinusDate(a, b);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
+      b.type_kind() == ::googlesql::TYPE_DATETIME) {
+    return SubDatetimeMinusDatetime(a, b);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      b.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+    return SubTimestampMinusTimestamp(a, b);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_DATETIME &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    return SubDatetimeMinusInterval(a, b);
+  }
+  if (a.type_kind() == ::googlesql::TYPE_TIMESTAMP &&
+      b.type_kind() == ::googlesql::TYPE_INTERVAL) {
+    return SubTimestampMinusInterval(a, b);
+  }
+  if (auto promoted = TryPromotedNumericSub(a, b)) return *promoted;
+  if (a.type_kind() != b.type_kind()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: '-' operands have mismatched kinds: ",
+                     a.type()->DebugString(),
+                     " vs ",
+                     b.type()->DebugString()));
+  }
+  return SubSameKindNumeric(a, b);
 }
 
 absl::StatusOr<Value> ArithmeticMul(const Value& a, const Value& b) {

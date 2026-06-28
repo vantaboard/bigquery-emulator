@@ -69,54 +69,87 @@ absl::Status ProjectRowCells(
   return absl::OkStatus();
 }
 
-absl::StatusOr<::googlesql::Value> ConvertScalar(
+absl::StatusOr<::googlesql::Value> ConvertStringTypedScalar(
+    absl::string_view string_value,
+    const ::googlesql::Type* type,
+    absl::string_view column_name) {
+  if (type->kind() == ::googlesql::TYPE_NUMERIC) {
+    auto n = ::googlesql::NumericValue::FromString(string_value);
+    if (!n.ok()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("StorageTable iterator: column '",
+                       column_name,
+                       "': invalid NUMERIC value '",
+                       string_value,
+                       "': ",
+                       n.status().message()));
+    }
+    return ::googlesql::Value::Numeric(*n);
+  }
+  if (type->kind() == ::googlesql::TYPE_BIGNUMERIC) {
+    auto n = ::googlesql::BigNumericValue::FromString(string_value);
+    if (!n.ok()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("StorageTable iterator: column '",
+                       column_name,
+                       "': invalid BIGNUMERIC value '",
+                       string_value,
+                       "': ",
+                       n.status().message()));
+    }
+    return ::googlesql::Value::BigNumeric(*n);
+  }
+  if (type->kind() == ::googlesql::TYPE_TIMESTAMP) {
+    auto parsed = engine::semantic::ParseTimestampWireString(string_value);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    return *parsed;
+  }
+  return ::googlesql::Value::StringValue(string_value);
+}
+
+absl::StatusOr<::googlesql::Value> ConvertStructScalar(
+    const storage::Value& value,
+    const ::googlesql::Type* type,
+    const schema::ColumnSchema& column) {
+  if (type == nullptr || !type->IsStruct()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("StorageTable iterator: column '",
+                     column.name,
+                     "' carries a STRUCT cell but the GoogleSQL type is ",
+                     type == nullptr ? "<null>" : type->DebugString()));
+  }
+  const ::googlesql::StructType* st = type->AsStruct();
+  const std::vector<storage::Value>& fields = value.struct_value();
+  if (static_cast<int>(fields.size()) != st->num_fields() ||
+      fields.size() != column.fields.size()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("StorageTable iterator: column '",
+                     column.name,
+                     "' STRUCT has ",
+                     fields.size(),
+                     " field(s) but schema has ",
+                     column.fields.size(),
+                     " and analyzer Type has ",
+                     st->num_fields()));
+  }
+  std::vector<::googlesql::Value> converted;
+  converted.reserve(fields.size());
+  for (int i = 0; i < st->num_fields(); ++i) {
+    absl::StatusOr<::googlesql::Value> field_value =
+        ConvertCell(fields[i], st->field(i).type, column.fields[i]);
+    if (!field_value.ok()) return field_value.status();
+    converted.push_back(std::move(field_value).value());
+  }
+  return ::googlesql::Value::Struct(st, converted);
+}
+
+absl::StatusOr<::googlesql::Value> ConvertSimpleScalarKind(
     const storage::Value& value,
     const ::googlesql::Type* type,
     const schema::ColumnSchema& column) {
   using Kind = storage::Value::Kind;
-  // NUMERIC / BIGNUMERIC are persisted as decimal text (DuckDB
-  // VARCHAR storage type preserves the full magnitude), so the
-  // storage cell arrives as kString. The semantic executor's
-  // decimal path (arithmetic, AVG, MIN/MAX) needs a real
-  // NumericValue / BigNumericValue, not a STRING, so parse against
-  // the analyzer's target type here rather than mis-typing the cell
-  // as STRING.
-  if (type != nullptr && value.kind() == Kind::kString) {
-    if (type->kind() == ::googlesql::TYPE_NUMERIC) {
-      auto n = ::googlesql::NumericValue::FromString(value.string_value());
-      if (!n.ok()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("StorageTable iterator: column '",
-                         column.name,
-                         "': invalid NUMERIC value '",
-                         value.string_value(),
-                         "': ",
-                         n.status().message()));
-      }
-      return ::googlesql::Value::Numeric(*n);
-    }
-    if (type->kind() == ::googlesql::TYPE_BIGNUMERIC) {
-      auto n = ::googlesql::BigNumericValue::FromString(value.string_value());
-      if (!n.ok()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("StorageTable iterator: column '",
-                         column.name,
-                         "': invalid BIGNUMERIC value '",
-                         value.string_value(),
-                         "': ",
-                         n.status().message()));
-      }
-      return ::googlesql::Value::BigNumeric(*n);
-    }
-    if (type->kind() == ::googlesql::TYPE_TIMESTAMP) {
-      auto parsed =
-          engine::semantic::ParseTimestampWireString(value.string_value());
-      if (!parsed.ok()) {
-        return parsed.status();
-      }
-      return *parsed;
-    }
-  }
   switch (value.kind()) {
     case Kind::kNull:
       return ::googlesql::Value::Null(type);
@@ -139,42 +172,9 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
                                          absl::Cord(value.string_value()));
       }
       return ::googlesql::Value::Bytes(value.string_value());
-    case Kind::kStruct: {
-      if (type == nullptr || !type->IsStruct()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("StorageTable iterator: column '",
-                         column.name,
-                         "' carries a STRUCT cell but the GoogleSQL type is ",
-                         type == nullptr ? "<null>" : type->DebugString()));
-      }
-      const ::googlesql::StructType* st = type->AsStruct();
-      const std::vector<storage::Value>& fields = value.struct_value();
-      if (static_cast<int>(fields.size()) != st->num_fields() ||
-          fields.size() != column.fields.size()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("StorageTable iterator: column '",
-                         column.name,
-                         "' STRUCT has ",
-                         fields.size(),
-                         " field(s) but schema has ",
-                         column.fields.size(),
-                         " and analyzer Type has ",
-                         st->num_fields()));
-      }
-      std::vector<::googlesql::Value> converted;
-      converted.reserve(fields.size());
-      for (int i = 0; i < st->num_fields(); ++i) {
-        absl::StatusOr<::googlesql::Value> field_value =
-            ConvertCell(fields[i], st->field(i).type, column.fields[i]);
-        if (!field_value.ok()) return field_value.status();
-        converted.push_back(std::move(field_value).value());
-      }
-      return ::googlesql::Value::Struct(st, converted);
-    }
+    case Kind::kStruct:
+      return ConvertStructScalar(value, type, column);
     case Kind::kArray:
-      // ARRAY cell with a non-ARRAY column type is a schema/data
-      // mismatch; the caller must wrap the ARRAY case before
-      // recursing for STRUCT field types.
       return absl::InvalidArgumentError(
           absl::StrCat("StorageTable iterator: column '",
                        column.name,
@@ -186,6 +186,24 @@ absl::StatusOr<::googlesql::Value> ConvertScalar(
                    column.name,
                    "': unhandled storage::Value::Kind ",
                    static_cast<int>(value.kind())));
+}
+
+absl::StatusOr<::googlesql::Value> ConvertScalar(
+    const storage::Value& value,
+    const ::googlesql::Type* type,
+    const schema::ColumnSchema& column) {
+  using Kind = storage::Value::Kind;
+  // NUMERIC / BIGNUMERIC are persisted as decimal text (DuckDB
+  // VARCHAR storage type preserves the full magnitude), so the
+  // storage cell arrives as kString. The semantic executor's
+  // decimal path (arithmetic, AVG, MIN/MAX) needs a real
+  // NumericValue / BigNumericValue, not a STRING, so parse against
+  // the analyzer's target type here rather than mis-typing the cell
+  // as STRING.
+  if (type != nullptr && value.kind() == Kind::kString) {
+    return ConvertStringTypedScalar(value.string_value(), type, column.name);
+  }
+  return ConvertSimpleScalarKind(value, type, column);
 }
 
 absl::StatusOr<::googlesql::Value> ConvertCell(

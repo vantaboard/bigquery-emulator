@@ -158,6 +158,62 @@ absl::StatusOr<ViewRecord> ViewRecordFromSidecar(absl::string_view data_dir,
   return rec;
 }
 
+std::string ViewRecordKey(const ViewId& id) {
+  return absl::StrCat(id.project_id, "\x1f", id.dataset_id, "\x1f", id.view_id);
+}
+
+void MergeViewSidecars(absl::string_view data_dir,
+                       std::vector<ViewRecord>* views,
+                       absl::flat_hash_set<std::string>* seen) {
+  for (ViewRecord& rec : *views) {
+    seen->insert(ViewRecordKey(rec.id));
+    TableId tid{rec.id.project_id, rec.id.dataset_id, rec.id.view_id};
+    if (auto sidecar_or = ViewRecordFromSidecar(data_dir, tid);
+        sidecar_or.ok()) {
+      if (rec.view_query.empty()) {
+        rec.view_query = sidecar_or->view_query;
+      }
+      if (rec.schema.columns.empty()) {
+        rec.schema = std::move(sidecar_or->schema);
+      }
+    }
+  }
+}
+
+void CollectOrphanViewsFromFilesystem(absl::string_view data_dir,
+                                      absl::flat_hash_set<std::string>* seen,
+                                      std::vector<ViewRecord>* out) {
+  const fs::path root(data_dir);
+  std::error_code ec;
+  if (!fs::exists(root, ec)) {
+    return;
+  }
+  for (const auto& project_entry : fs::directory_iterator(root, ec)) {
+    if (ec || !project_entry.is_directory(ec)) continue;
+    const std::string project_id = project_entry.path().filename().string();
+    for (const auto& dataset_entry :
+         fs::directory_iterator(project_entry.path(), ec)) {
+      if (ec || !dataset_entry.is_directory(ec)) continue;
+      const std::string dataset_id = dataset_entry.path().filename().string();
+      for (const auto& table_entry :
+           fs::directory_iterator(dataset_entry.path(), ec)) {
+        if (ec) break;
+        const std::string name = table_entry.path().filename().string();
+        if (name.size() <= internal::kTableMetaSuffix.size()) continue;
+        if (!absl::EndsWith(name, internal::kTableMetaSuffix)) continue;
+        const std::string table_id =
+            name.substr(0, name.size() - internal::kTableMetaSuffix.size());
+        ViewId vid{project_id, dataset_id, table_id};
+        if (!seen->insert(ViewRecordKey(vid)).second) continue;
+        TableId tid{project_id, dataset_id, table_id};
+        auto rec_or = ViewRecordFromSidecar(data_dir, tid);
+        if (!rec_or.ok()) continue;
+        out->push_back(std::move(*rec_or));
+      }
+    }
+  }
+}
+
 }  // namespace
 
 absl::Status DuckDBStorage::UpsertView(const ViewRecord& record) {
@@ -217,57 +273,11 @@ absl::StatusOr<std::vector<ViewRecord>> DuckDBStorage::ListAllViews() const {
     return absl::InternalError("DuckDBStorage::ListAllViews: not open");
   }
   absl::flat_hash_set<std::string> seen;
-  auto key = [](const ViewId& id) {
-    return absl::StrCat(
-        id.project_id, "\x1f", id.dataset_id, "\x1f", id.view_id);
-  };
-
   absl::StatusOr<std::vector<ViewRecord>> from_db = QueryViews(impl_.get(), "");
   if (!from_db.ok()) return from_db.status();
   std::vector<ViewRecord> out = std::move(*from_db);
-  for (ViewRecord& rec : out) {
-    seen.insert(key(rec.id));
-    TableId tid{rec.id.project_id, rec.id.dataset_id, rec.id.view_id};
-    if (auto sidecar_or = ViewRecordFromSidecar(data_dir_, tid);
-        sidecar_or.ok()) {
-      if (rec.view_query.empty()) {
-        rec.view_query = sidecar_or->view_query;
-      }
-      if (rec.schema.columns.empty()) {
-        rec.schema = std::move(sidecar_or->schema);
-      }
-    }
-  }
-
-  const fs::path root(data_dir_);
-  std::error_code ec;
-  if (!fs::exists(root, ec)) {
-    return out;
-  }
-  for (const auto& project_entry : fs::directory_iterator(root, ec)) {
-    if (ec || !project_entry.is_directory(ec)) continue;
-    const std::string project_id = project_entry.path().filename().string();
-    for (const auto& dataset_entry :
-         fs::directory_iterator(project_entry.path(), ec)) {
-      if (ec || !dataset_entry.is_directory(ec)) continue;
-      const std::string dataset_id = dataset_entry.path().filename().string();
-      for (const auto& table_entry :
-           fs::directory_iterator(dataset_entry.path(), ec)) {
-        if (ec) break;
-        const std::string name = table_entry.path().filename().string();
-        if (name.size() <= internal::kTableMetaSuffix.size()) continue;
-        if (!absl::EndsWith(name, internal::kTableMetaSuffix)) continue;
-        const std::string table_id =
-            name.substr(0, name.size() - internal::kTableMetaSuffix.size());
-        ViewId vid{project_id, dataset_id, table_id};
-        if (!seen.insert(key(vid)).second) continue;
-        TableId tid{project_id, dataset_id, table_id};
-        auto rec_or = ViewRecordFromSidecar(data_dir_, tid);
-        if (!rec_or.ok()) continue;
-        out.push_back(std::move(*rec_or));
-      }
-    }
-  }
+  MergeViewSidecars(data_dir_, &out, &seen);
+  CollectOrphanViewsFromFilesystem(data_dir_, &seen, &out);
   std::sort(
       out.begin(), out.end(), [](const ViewRecord& a, const ViewRecord& b) {
         if (a.id.project_id != b.id.project_id) {

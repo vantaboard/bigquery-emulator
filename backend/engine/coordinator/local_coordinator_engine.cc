@@ -72,6 +72,129 @@ bool NeedsAllStatements(const QueryRequest& request) {
          ContainsSetKeyword(request.sql);
 }
 
+catalog::GoogleSqlCatalog* GetRegistrationCatalog(
+    catalog::GoogleSqlCatalog* bq_catalog, const QueryRequest& request) {
+  ::googlesql::TypeFactory* reg_tf =
+      catalog::EnsureProjectTypeFactory(request.project_id);
+  const ::googlesql::LanguageOptions language =
+      catalog::MakeCatalogLanguageOptions();
+  return catalog::GetOrCreateRegistrationCatalog(request.project_id,
+                                                 bq_catalog->storage(),
+                                                 reg_tf,
+                                                 language,
+                                                 request.default_dataset_id);
+}
+
+absl::Status ExecuteCreateFunctionDdl(const QueryRequest& request,
+                                      catalog::GoogleSqlCatalog* bq_catalog) {
+  catalog::GoogleSqlCatalog* reg_catalog =
+      GetRegistrationCatalog(bq_catalog, request);
+  if (reg_catalog == nullptr) {
+    return absl::InternalError(
+        "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION registration "
+        "catalog unavailable");
+  }
+  absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
+      reg_output =
+          AnalyzeStatementImpl(request, reg_catalog, /*all_statements=*/true);
+  if (!reg_output.ok()) return reg_output.status();
+  const ::googlesql::ResolvedStatement* reg_stmt =
+      (*reg_output)->resolved_statement();
+  const auto* create_fn =
+      reg_stmt->GetAs<::googlesql::ResolvedCreateFunctionStmt>();
+  if (create_fn == nullptr) {
+    return absl::InternalError(
+        "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION has null "
+        "resolved stmt");
+  }
+  absl::StatusOr<std::unique_ptr<const ::googlesql::Function>> fn_or =
+      catalog::MakeFunctionFromCreateFunction(*create_fn,
+                                              /*function_options=*/nullptr);
+  if (!fn_or.ok()) return fn_or.status();
+  const bool is_temp = create_fn->create_scope() ==
+                       ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
+  const storage::RoutineId routine_id = catalog::RoutineIdFromNamePath(
+      create_fn->name_path(), request.project_id, request.default_dataset_id);
+  absl::Status registered =
+      catalog::RegisterProjectFunction(request.project_id,
+                                       routine_id.dataset_id,
+                                       is_temp,
+                                       std::move(*reg_output),
+                                       std::move(*fn_or));
+  if (!registered.ok()) return registered;
+  absl::Status js_registered =
+      catalog::RegisterJsUdfFromCreateFunction(request.project_id, *create_fn);
+  if (!js_registered.ok()) return js_registered;
+  absl::Status py_registered = catalog::RegisterPythonUdfFromCreateFunction(
+      request.project_id, *create_fn);
+  if (!py_registered.ok()) return py_registered;
+  return catalog::PersistRoutineDdl(bq_catalog->storage(), request, *reg_stmt);
+}
+
+absl::Status ExecuteCreateViewTvfProcedureDdl(
+    const QueryRequest& request,
+    catalog::GoogleSqlCatalog* bq_catalog,
+    const ::googlesql::ResolvedStatement& stmt) {
+  catalog::GoogleSqlCatalog* reg_catalog =
+      GetRegistrationCatalog(bq_catalog, request);
+  if (reg_catalog == nullptr) {
+    return absl::InternalError(
+        "LocalCoordinatorEngine::ExecuteDdl: registration catalog "
+        "unavailable");
+  }
+  ::googlesql::TypeFactory* reg_tf =
+      catalog::EnsureProjectTypeFactory(request.project_id);
+  absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
+      reg_output =
+          AnalyzeStatementImpl(request, reg_catalog, /*all_statements=*/true);
+  if (!reg_output.ok()) return reg_output.status();
+  const ::googlesql::ResolvedStatement* reg_stmt =
+      (*reg_output)->resolved_statement();
+  if (stmt.node_kind() == ::googlesql::RESOLVED_CREATE_VIEW_STMT) {
+    const auto* create_view =
+        reg_stmt->GetAs<::googlesql::ResolvedCreateViewStmt>();
+    if (create_view == nullptr) {
+      return absl::InternalError(
+          "LocalCoordinatorEngine::ExecuteDdl: CREATE VIEW has null "
+          "resolved stmt");
+    }
+    absl::Status registered =
+        catalog::RegisterProjectView(request.project_id,
+                                     request.default_dataset_id,
+                                     *create_view,
+                                     std::move(*reg_output),
+                                     reg_tf);
+    if (!registered.ok()) return registered;
+    return catalog::PersistViewDdl(
+        bq_catalog->storage(), request, *create_view);
+  }
+  if (stmt.node_kind() == ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT) {
+    const auto* create_tvf =
+        reg_stmt->GetAs<::googlesql::ResolvedCreateTableFunctionStmt>();
+    if (create_tvf == nullptr) {
+      return absl::InternalError(
+          "LocalCoordinatorEngine::ExecuteDdl: CREATE TABLE FUNCTION has null "
+          "resolved stmt");
+    }
+    absl::Status registered = catalog::RegisterProjectTvf(
+        request.project_id, *create_tvf, std::move(*reg_output));
+    if (!registered.ok()) return registered;
+    return catalog::PersistRoutineDdl(
+        bq_catalog->storage(), request, *reg_stmt);
+  }
+  const auto* create_proc =
+      reg_stmt->GetAs<::googlesql::ResolvedCreateProcedureStmt>();
+  if (create_proc == nullptr) {
+    return absl::InternalError(
+        "LocalCoordinatorEngine::ExecuteDdl: CREATE PROCEDURE has null "
+        "resolved stmt");
+  }
+  absl::Status registered = catalog::RegisterProjectProcedure(
+      request.project_id, *create_proc, std::move(*reg_output));
+  if (!registered.ok()) return registered;
+  return catalog::PersistRoutineDdl(bq_catalog->storage(), request, *reg_stmt);
+}
+
 }  // namespace
 
 Executor* LocalCoordinatorEngine::RouteFor(
@@ -217,57 +340,7 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
           "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION requires "
           "GoogleSqlCatalog");
     }
-    ::googlesql::TypeFactory* reg_tf =
-        catalog::EnsureProjectTypeFactory(request.project_id);
-    const ::googlesql::LanguageOptions language =
-        catalog::MakeCatalogLanguageOptions();
-    catalog::GoogleSqlCatalog* reg_catalog =
-        catalog::GetOrCreateRegistrationCatalog(request.project_id,
-                                                bq_catalog->storage(),
-                                                reg_tf,
-                                                language,
-                                                request.default_dataset_id);
-    if (reg_catalog == nullptr) {
-      return absl::InternalError(
-          "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION registration "
-          "catalog unavailable");
-    }
-    absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-        reg_output =
-            AnalyzeStatementImpl(request, reg_catalog, /*all_statements=*/true);
-    if (!reg_output.ok()) return reg_output.status();
-    const ::googlesql::ResolvedStatement* reg_stmt =
-        (*reg_output)->resolved_statement();
-    const auto* create_fn =
-        reg_stmt->GetAs<::googlesql::ResolvedCreateFunctionStmt>();
-    if (create_fn == nullptr) {
-      return absl::InternalError(
-          "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION has null "
-          "resolved stmt");
-    }
-    absl::StatusOr<std::unique_ptr<const ::googlesql::Function>> fn_or =
-        catalog::MakeFunctionFromCreateFunction(*create_fn,
-                                                /*function_options=*/nullptr);
-    if (!fn_or.ok()) return fn_or.status();
-    const bool is_temp = create_fn->create_scope() ==
-                         ::googlesql::ResolvedCreateStatementEnums::CREATE_TEMP;
-    const storage::RoutineId routine_id = catalog::RoutineIdFromNamePath(
-        create_fn->name_path(), request.project_id, request.default_dataset_id);
-    absl::Status registered =
-        catalog::RegisterProjectFunction(request.project_id,
-                                         routine_id.dataset_id,
-                                         is_temp,
-                                         std::move(*reg_output),
-                                         std::move(*fn_or));
-    if (!registered.ok()) return registered;
-    absl::Status js_registered = catalog::RegisterJsUdfFromCreateFunction(
-        request.project_id, *create_fn);
-    if (!js_registered.ok()) return js_registered;
-    absl::Status py_registered = catalog::RegisterPythonUdfFromCreateFunction(
-        request.project_id, *create_fn);
-    if (!py_registered.ok()) return py_registered;
-    return catalog::PersistRoutineDdl(
-        bq_catalog->storage(), request, *reg_stmt);
+    return ExecuteCreateFunctionDdl(request, bq_catalog);
   }
   if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_VIEW_STMT ||
       stmt->node_kind() == ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT ||
@@ -278,72 +351,7 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
           "LocalCoordinatorEngine::ExecuteDdl: view/TVF DDL requires "
           "GoogleSqlCatalog");
     }
-    ::googlesql::TypeFactory* reg_tf =
-        catalog::EnsureProjectTypeFactory(request.project_id);
-    const ::googlesql::LanguageOptions language =
-        catalog::MakeCatalogLanguageOptions();
-    catalog::GoogleSqlCatalog* reg_catalog =
-        catalog::GetOrCreateRegistrationCatalog(request.project_id,
-                                                bq_catalog->storage(),
-                                                reg_tf,
-                                                language,
-                                                request.default_dataset_id);
-    if (reg_catalog == nullptr) {
-      return absl::InternalError(
-          "LocalCoordinatorEngine::ExecuteDdl: registration catalog "
-          "unavailable");
-    }
-    absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-        reg_output =
-            AnalyzeStatementImpl(request, reg_catalog, /*all_statements=*/true);
-    if (!reg_output.ok()) return reg_output.status();
-    const ::googlesql::ResolvedStatement* reg_stmt =
-        (*reg_output)->resolved_statement();
-    if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_VIEW_STMT) {
-      const auto* create_view =
-          reg_stmt->GetAs<::googlesql::ResolvedCreateViewStmt>();
-      if (create_view == nullptr) {
-        return absl::InternalError(
-            "LocalCoordinatorEngine::ExecuteDdl: CREATE VIEW has null "
-            "resolved stmt");
-      }
-      absl::Status registered =
-          catalog::RegisterProjectView(request.project_id,
-                                       request.default_dataset_id,
-                                       *create_view,
-                                       std::move(*reg_output),
-                                       reg_tf);
-      if (!registered.ok()) return registered;
-      return catalog::PersistViewDdl(
-          bq_catalog->storage(), request, *create_view);
-    }
-    if (stmt->node_kind() == ::googlesql::RESOLVED_CREATE_TABLE_FUNCTION_STMT) {
-      const auto* create_tvf =
-          reg_stmt->GetAs<::googlesql::ResolvedCreateTableFunctionStmt>();
-      if (create_tvf == nullptr) {
-        return absl::InternalError(
-            "LocalCoordinatorEngine::ExecuteDdl: CREATE TABLE FUNCTION has "
-            "null "
-            "resolved stmt");
-      }
-      absl::Status registered = catalog::RegisterProjectTvf(
-          request.project_id, *create_tvf, std::move(*reg_output));
-      if (!registered.ok()) return registered;
-      return catalog::PersistRoutineDdl(
-          bq_catalog->storage(), request, *reg_stmt);
-    }
-    const auto* create_proc =
-        reg_stmt->GetAs<::googlesql::ResolvedCreateProcedureStmt>();
-    if (create_proc == nullptr) {
-      return absl::InternalError(
-          "LocalCoordinatorEngine::ExecuteDdl: CREATE PROCEDURE has null "
-          "resolved stmt");
-    }
-    absl::Status registered = catalog::RegisterProjectProcedure(
-        request.project_id, *create_proc, std::move(*reg_output));
-    if (!registered.ok()) return registered;
-    return catalog::PersistRoutineDdl(
-        bq_catalog->storage(), request, *reg_stmt);
+    return ExecuteCreateViewTvfProcedureDdl(request, bq_catalog, *stmt);
   }
   if (stmt->node_kind() == ::googlesql::RESOLVED_CALL_STMT) {
     semantic::script::ScriptDriver driver;

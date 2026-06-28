@@ -117,10 +117,8 @@ uint64_t SampleSeed(const ::googlesql::ResolvedSampleScan& scan,
   return 0;
 }
 
-absl::StatusOr<std::vector<ColumnBindings>> BernoulliPercentSample(
-    const ::googlesql::ResolvedSampleScan& scan,
-    std::vector<ColumnBindings> rows,
-    EvalContext& ctx) {
+absl::StatusOr<double> ParseSamplePercent(
+    const ::googlesql::ResolvedSampleScan& scan, EvalContext& ctx) {
   if (scan.size() == nullptr) {
     return absl::InvalidArgumentError("semantic: TABLESAMPLE missing size");
   }
@@ -143,41 +141,67 @@ absl::StatusOr<std::vector<ColumnBindings>> BernoulliPercentSample(
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "semantic: TABLESAMPLE percent out of range");
   }
-  const double fraction = percent / 100.0;
-  const uint64_t seed = SampleSeed(scan, ctx);
-  std::mt19937_64 rng(seed);
+  return percent;
+}
 
+absl::StatusOr<absl::flat_hash_map<std::string, double>> BuildStratumMaxWeights(
+    const ::googlesql::ResolvedSampleScan& scan,
+    const std::vector<ColumnBindings>& rows,
+    EvalContext& ctx) {
   absl::flat_hash_map<std::string, double> stratum_max_weight;
-  for (size_t r = 0; r < rows.size(); ++r) {
-    auto keys_or = StratifyKeys(scan, rows[r], ctx);
+  for (const ColumnBindings& row : rows) {
+    auto keys_or = StratifyKeys(scan, row, ctx);
     if (!keys_or.ok()) return keys_or.status();
-    auto weight_or = EvalSampleWeight(scan, rows[r], ctx);
+    auto weight_or = EvalSampleWeight(scan, row, ctx);
     if (!weight_or.ok()) return weight_or.status();
     const std::string fp = StratifyFingerprint(*keys_or);
     stratum_max_weight[fp] = std::max(stratum_max_weight[fp], *weight_or);
   }
+  return stratum_max_weight;
+}
+
+bool KeepBernoulliRow(double fraction,
+                      double max_w,
+                      double row_weight,
+                      bool has_weight_column,
+                      std::mt19937_64* rng) {
+  double probability = fraction;
+  if (fraction < 1.0 && max_w > 0.0 && has_weight_column) {
+    probability = fraction * (row_weight / max_w);
+  }
+  if (probability >= 1.0) return true;
+  if (probability <= 0.0) return false;
+  std::uniform_real_distribution<double> dist(0.0, 1.0);
+  return dist(*rng) < probability;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> BernoulliPercentSample(
+    const ::googlesql::ResolvedSampleScan& scan,
+    std::vector<ColumnBindings> rows,
+    EvalContext& ctx) {
+  absl::StatusOr<double> percent = ParseSamplePercent(scan, ctx);
+  if (!percent.ok()) return percent.status();
+  const double fraction = *percent / 100.0;
+  std::mt19937_64 rng(SampleSeed(scan, ctx));
+  absl::StatusOr<absl::flat_hash_map<std::string, double>> stratum_max_weight =
+      BuildStratumMaxWeights(scan, rows, ctx);
+  if (!stratum_max_weight.ok()) return stratum_max_weight.status();
 
   std::vector<ColumnBindings> out;
   out.reserve(rows.size());
-  for (size_t r = 0; r < rows.size(); ++r) {
-    auto keys_or = StratifyKeys(scan, rows[r], ctx);
+  const bool has_weight_column = scan.weight_column() != nullptr;
+  for (ColumnBindings& row : rows) {
+    auto keys_or = StratifyKeys(scan, row, ctx);
     if (!keys_or.ok()) return keys_or.status();
-    auto weight_or = EvalSampleWeight(scan, rows[r], ctx);
+    auto weight_or = EvalSampleWeight(scan, row, ctx);
     if (!weight_or.ok()) return weight_or.status();
     const std::string fp = StratifyFingerprint(*keys_or);
-    const double max_w = stratum_max_weight[fp];
-    double probability = fraction;
-    if (fraction < 1.0 && max_w > 0.0 && scan.weight_column() != nullptr) {
-      probability = fraction * (*weight_or / max_w);
-    }
-    if (probability >= 1.0) {
-      out.push_back(rows[r]);
-      continue;
-    }
-    if (probability <= 0.0) continue;
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-    if (dist(rng) < probability) {
-      out.push_back(rows[r]);
+    if (KeepBernoulliRow(fraction,
+                         (*stratum_max_weight)[fp],
+                         *weight_or,
+                         has_weight_column,
+                         &rng)) {
+      out.push_back(std::move(row));
     }
   }
   return out;

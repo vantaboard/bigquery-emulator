@@ -227,40 +227,18 @@ absl::string_view BigQueryTypeName(const ::googlesql::Type* type) {
   return ::googlesql::TYPE_UNKNOWN;
 }
 
-absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
-                                              const EvalContext* ctx) {
-  if (!value.is_valid()) {
-    return absl::InvalidArgumentError(
-        "semantic: cannot lower invalid Value onto storage::Value");
-  }
-  if (value.is_null()) return storage::Value::Null();
+namespace {
+
+absl::StatusOr<storage::Value> ToStorageTemporalValue(const Value& value) {
   switch (value.type_kind()) {
-    case ::googlesql::TYPE_BOOL:
-      return storage::Value::Bool(value.bool_value());
-    case ::googlesql::TYPE_INT64:
-      return storage::Value::Int64(value.int64_value());
-    case ::googlesql::TYPE_DOUBLE:
-      return storage::Value::Float64(value.double_value());
-    case ::googlesql::TYPE_STRING:
-      return storage::Value::String(value.string_value());
-    case ::googlesql::TYPE_BYTES:
-      return storage::Value::Bytes(value.bytes_value());
     case ::googlesql::TYPE_DATE: {
-      // BigQuery wire shape is "YYYY-MM-DD"; GoogleSQL stores DATE
-      // as int32 days since 1970-01-01.
       absl::CivilDay day = value.ToCivilDay();
       return storage::Value::String(absl::StrFormat(
           "%04d-%02d-%02d", day.year(), day.month(), day.day()));
     }
     case ::googlesql::TYPE_TIME:
-      // TimeValue::DebugString returns "HH:MM:SS[.ffffff]" with
-      // trailing zeros trimmed (and the dot itself trimmed when
-      // sub-second is zero), matching GoogleSQL's canonical TIME
-      // text form.
       return storage::Value::String(value.time_value().DebugString());
     case ::googlesql::TYPE_DATETIME: {
-      // BigQuery REST / query port parity uses
-      // "YYYY-MM-DDTHH:MM:SS[.ffffff]".
       std::string out = value.datetime_value().DebugString();
       const size_t sep = out.find(' ');
       if (sep != std::string::npos) {
@@ -270,6 +248,15 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
     }
     case ::googlesql::TYPE_TIMESTAMP:
       return storage::Value::String(FormatTimestampUtc(value.ToTime()));
+    default:
+      return absl::InvalidArgumentError(
+          "semantic: ToStorageTemporalValue called for non-temporal type");
+  }
+}
+
+absl::StatusOr<storage::Value> ToStorageExtendedScalar(const Value& value,
+                                                       const EvalContext* ctx) {
+  switch (value.type_kind()) {
     case ::googlesql::TYPE_NUMERIC:
       return storage::Value::String(value.numeric_value().ToString());
     case ::googlesql::TYPE_BIGNUMERIC: {
@@ -305,6 +292,45 @@ absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
       if (!uuid.ok()) return uuid.status();
       return storage::Value::String(uuid->ToString());
     }
+    default:
+      return absl::InvalidArgumentError(
+          "semantic: ToStorageExtendedScalar called for unsupported type");
+  }
+}
+
+}  // namespace
+
+absl::StatusOr<storage::Value> ToStorageValue(const Value& value,
+                                              const EvalContext* ctx) {
+  if (!value.is_valid()) {
+    return absl::InvalidArgumentError(
+        "semantic: cannot lower invalid Value onto storage::Value");
+  }
+  if (value.is_null()) return storage::Value::Null();
+  switch (value.type_kind()) {
+    case ::googlesql::TYPE_BOOL:
+      return storage::Value::Bool(value.bool_value());
+    case ::googlesql::TYPE_INT64:
+      return storage::Value::Int64(value.int64_value());
+    case ::googlesql::TYPE_DOUBLE:
+      return storage::Value::Float64(value.double_value());
+    case ::googlesql::TYPE_STRING:
+      return storage::Value::String(value.string_value());
+    case ::googlesql::TYPE_BYTES:
+      return storage::Value::Bytes(value.bytes_value());
+    case ::googlesql::TYPE_DATE:
+    case ::googlesql::TYPE_TIME:
+    case ::googlesql::TYPE_DATETIME:
+    case ::googlesql::TYPE_TIMESTAMP:
+      return ToStorageTemporalValue(value);
+    case ::googlesql::TYPE_NUMERIC:
+    case ::googlesql::TYPE_BIGNUMERIC:
+    case ::googlesql::TYPE_JSON:
+    case ::googlesql::TYPE_GEOGRAPHY:
+    case ::googlesql::TYPE_INTERVAL:
+    case ::googlesql::TYPE_RANGE:
+    case ::googlesql::TYPE_UUID:
+      return ToStorageExtendedScalar(value, ctx);
     case ::googlesql::TYPE_ARRAY: {
       std::vector<storage::Value> elements;
       elements.reserve(value.num_elements());

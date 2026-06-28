@@ -415,7 +415,7 @@ tasks:
           echo "  Fix: run 'task lint:cpp:compile-commands' first." >&2
           exit 1
         fi
-        files=$(go run ./tools/lint/cpp list)
+        files=$(go run ./tools/lint/cpp list --tidy)
         if [ -z "$files" ]; then
           echo 'lint:cpp:tidy: no first-party C++ files found' >&2
           exit 0
@@ -454,7 +454,7 @@ tasks:
           echo "lint:cpp:tidy-parallel: compile_commands.json missing; run task lint:cpp:compile-commands" >&2
           exit 1
         fi
-        files=$(go run ./tools/lint/cpp list)
+        files=$(go run ./tools/lint/cpp list --tidy)
         if [ -z "$files" ]; then
           echo "lint:cpp:tidy-parallel: no first-party C++ files found" >&2
           exit 0

@@ -63,6 +63,107 @@ absl::StatusOr<schema::TableSchema> ResolveLoadSchema(
       "existing destination table schema");
 }
 
+struct LoadDataFileOptions {
+  std::string format = "CSV";
+  std::vector<std::string> uris;
+};
+
+absl::StatusOr<LoadDataFileOptions> ParseLoadDataFileOptions(
+    const ::googlesql::ResolvedAuxLoadDataStmt* stmt) {
+  LoadDataFileOptions options;
+  for (int i = 0; i < stmt->from_files_option_list_size(); ++i) {
+    const ::googlesql::ResolvedOption* opt = stmt->from_files_option_list(i);
+    if (opt == nullptr) continue;
+    if (absl::EqualsIgnoreCase(opt->name(), "format")) {
+      auto fmt = OptionStringValue(opt);
+      if (!fmt.ok()) return fmt.status();
+      options.format = *fmt;
+      continue;
+    }
+    if (absl::EqualsIgnoreCase(opt->name(), "uris")) {
+      auto parsed = ExtractStringArrayLiteral(opt->value());
+      if (!parsed.ok()) return parsed.status();
+      options.uris = *std::move(parsed);
+    }
+  }
+  if (options.uris.empty()) {
+    return absl::InvalidArgumentError(
+        "control op executor: LOAD DATA requires FROM FILES (uris = [...])");
+  }
+  if (options.uris.size() != 1) {
+    return absl::UnimplementedError(
+        "control op executor: LOAD DATA multi-file uris are not implemented "
+        "yet");
+  }
+  return options;
+}
+
+absl::Status EnsureTargetTableForLoadMode(
+    storage::Storage& storage,
+    const storage::TableId& target,
+    const schema::TableSchema& bq_schema,
+    ::googlesql::ResolvedAuxLoadDataStmt::InsertionMode insertion_mode) {
+  if (insertion_mode == ::googlesql::ResolvedAuxLoadDataStmt::OVERWRITE) {
+    absl::Status dropped = storage.DropTable(target);
+    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
+      return dropped;
+    }
+    return storage.CreateTable(target, bq_schema);
+  }
+  auto existing = storage.GetSchema(target);
+  if (!existing.ok()) {
+    return storage.CreateTable(target, bq_schema);
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::vector<storage::Row>> LoadRowsFromUri(
+    absl::string_view uri,
+    absl::string_view format,
+    absl::string_view data_dir,
+    const schema::TableSchema& bq_schema) {
+  absl::StatusOr<std::string> path_or = LocalPathFromUri(uri, data_dir);
+  if (!path_or.ok()) return path_or.status();
+  ::duckdb_database db = nullptr;
+  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "control op executor: duckdb_open(in-memory) failed");
+  }
+  ::duckdb_connection conn = nullptr;
+  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
+    ::duckdb_close(&db);
+    return absl::InternalError("control op executor: duckdb_connect failed");
+  }
+  if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return reg;
+  }
+  absl::StatusOr<std::string> read_sql = BuildReadSql(*path_or, format);
+  if (!read_sql.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return read_sql.status();
+  }
+  const std::string staging = "__bqemu_load_staging";
+  absl::Status staged =
+      RunSqlNoResult(conn,
+                     absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
+                                  QuoteIdent(staging),
+                                  " AS ",
+                                  *read_sql));
+  if (!staged.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return staged;
+  }
+  absl::StatusOr<std::vector<storage::Row>> rows =
+      DrainTableRows(conn, QuoteIdent(staging), bq_schema);
+  ::duckdb_disconnect(&conn);
+  ::duckdb_close(&db);
+  return rows;
+}
+
 }  // namespace
 
 absl::Status RunLoadData(storage::Storage& storage,
@@ -83,97 +184,25 @@ absl::Status RunLoadData(storage::Storage& storage,
     return ds;
   }
 
-  std::string format = "CSV";
-  std::vector<std::string> uris;
-  for (int i = 0; i < stmt->from_files_option_list_size(); ++i) {
-    const ::googlesql::ResolvedOption* opt = stmt->from_files_option_list(i);
-    if (opt == nullptr) continue;
-    if (absl::EqualsIgnoreCase(opt->name(), "format")) {
-      auto fmt = OptionStringValue(opt);
-      if (!fmt.ok()) return fmt.status();
-      format = *fmt;
-      continue;
-    }
-    if (absl::EqualsIgnoreCase(opt->name(), "uris")) {
-      auto parsed = ExtractStringArrayLiteral(opt->value());
-      if (!parsed.ok()) return parsed.status();
-      uris = *std::move(parsed);
-    }
-  }
-  if (uris.empty()) {
-    return absl::InvalidArgumentError(
-        "control op executor: LOAD DATA requires FROM FILES (uris = [...])");
-  }
-  if (uris.size() != 1) {
-    return absl::UnimplementedError(
-        "control op executor: LOAD DATA multi-file uris are not implemented "
-        "yet");
-  }
-
-  absl::StatusOr<std::string> path_or =
-      LocalPathFromUri(uris[0], storage.data_dir());
-  if (!path_or.ok()) return path_or.status();
+  absl::StatusOr<LoadDataFileOptions> file_options =
+      ParseLoadDataFileOptions(stmt);
+  if (!file_options.ok()) return file_options.status();
 
   absl::StatusOr<schema::TableSchema> bq_schema =
       ResolveLoadSchema(storage, *target, stmt);
   if (!bq_schema.ok()) return bq_schema.status();
 
-  ::duckdb_database db = nullptr;
-  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
-    return absl::InternalError(
-        "control op executor: duckdb_open(in-memory) failed");
-  }
-  ::duckdb_connection conn = nullptr;
-  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
-    ::duckdb_close(&db);
-    return absl::InternalError("control op executor: duckdb_connect failed");
-  }
-  if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return reg;
-  }
-
-  absl::StatusOr<std::string> read_sql = BuildReadSql(*path_or, format);
-  if (!read_sql.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return read_sql.status();
-  }
-
-  const std::string staging = "__bqemu_load_staging";
-  absl::Status staged =
-      RunSqlNoResult(conn,
-                     absl::StrCat("CREATE OR REPLACE TEMP TABLE ",
-                                  QuoteIdent(staging),
-                                  " AS ",
-                                  *read_sql));
-  if (!staged.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return staged;
-  }
-
   absl::StatusOr<std::vector<storage::Row>> rows =
-      DrainTableRows(conn, QuoteIdent(staging), *bq_schema);
-  ::duckdb_disconnect(&conn);
-  ::duckdb_close(&db);
+      LoadRowsFromUri(file_options->uris[0],
+                      file_options->format,
+                      storage.data_dir(),
+                      *bq_schema);
   if (!rows.ok()) return rows.status();
 
-  if (stmt->insertion_mode() ==
-      ::googlesql::ResolvedAuxLoadDataStmt::OVERWRITE) {
-    absl::Status dropped = storage.DropTable(*target);
-    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
-      return dropped;
-    }
-    absl::Status created = storage.CreateTable(*target, *bq_schema);
-    if (!created.ok()) return created;
-  } else {
-    auto existing = storage.GetSchema(*target);
-    if (!existing.ok()) {
-      absl::Status created = storage.CreateTable(*target, *bq_schema);
-      if (!created.ok()) return created;
-    }
+  if (absl::Status table = EnsureTargetTableForLoadMode(
+          storage, *target, *bq_schema, stmt->insertion_mode());
+      !table.ok()) {
+    return table;
   }
 
   if (rows->empty()) return absl::OkStatus();

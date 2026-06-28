@@ -216,6 +216,66 @@ absl::StatusOr<Value> Upper(const std::vector<Value>& args) {
   return Value::String(std::move(out));
 }
 
+namespace {
+
+absl::StatusOr<Value> TrimSpacesOnly(absl::string_view name,
+                                     absl::string_view input) {
+  absl::Status error;
+  absl::string_view out;
+  if (name == "ltrim") {
+    if (!::googlesql::functions::LeftTrimSpacesUtf8(input, &out, &error)) {
+      return error;
+    }
+  } else if (name == "rtrim") {
+    if (!::googlesql::functions::RightTrimSpacesUtf8(input, &out, &error)) {
+      return error;
+    }
+  } else if (!::googlesql::functions::TrimSpacesUtf8(input, &out, &error)) {
+    return error;
+  }
+  return Value::String(std::string(out));
+}
+
+absl::StatusOr<Value> TrimBytesWithChars(absl::string_view name,
+                                         absl::string_view input,
+                                         absl::string_view chars) {
+  absl::Status error;
+  absl::string_view out;
+  if (name == "ltrim") {
+    if (!::googlesql::functions::LeftTrimBytes(input, chars, &out, &error)) {
+      return error;
+    }
+  } else if (name == "rtrim") {
+    if (!::googlesql::functions::RightTrimBytes(input, chars, &out, &error)) {
+      return error;
+    }
+  } else if (!::googlesql::functions::TrimBytes(input, chars, &out, &error)) {
+    return error;
+  }
+  return Value::Bytes(std::string(out));
+}
+
+absl::StatusOr<Value> TrimStringWithChars(absl::string_view name,
+                                          absl::string_view input,
+                                          absl::string_view chars) {
+  absl::Status error;
+  absl::string_view out;
+  if (name == "ltrim") {
+    if (!::googlesql::functions::LeftTrimUtf8(input, chars, &out, &error)) {
+      return error;
+    }
+  } else if (name == "rtrim") {
+    if (!::googlesql::functions::RightTrimUtf8(input, chars, &out, &error)) {
+      return error;
+    }
+  } else if (!::googlesql::functions::TrimUtf8(input, chars, &out, &error)) {
+    return error;
+  }
+  return Value::String(std::string(out));
+}
+
+}  // namespace
+
 absl::StatusOr<Value> TrimFamily(absl::string_view name,
                                  const std::vector<Value>& args) {
   if (args.empty() || args.size() > 2) {
@@ -224,66 +284,20 @@ absl::StatusOr<Value> TrimFamily(absl::string_view name,
   }
   if (args[0].is_null()) return Value::NullString();
   if (args.size() == 2 && args[1].is_null()) return Value::NullString();
-  absl::Status error;
-  absl::string_view out;
   const bool is_bytes = args[0].type_kind() == ::googlesql::TYPE_BYTES;
   if (args.size() == 1) {
     if (is_bytes) {
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                "semantic: TRIM on BYTES without chars NYI");
     }
-    if (name == "ltrim") {
-      if (!::googlesql::functions::LeftTrimSpacesUtf8(
-              args[0].string_value(), &out, &error)) {
-        return error;
-      }
-    } else if (name == "rtrim") {
-      if (!::googlesql::functions::RightTrimSpacesUtf8(
-              args[0].string_value(), &out, &error)) {
-        return error;
-      }
-    } else if (!::googlesql::functions::TrimSpacesUtf8(
-                   args[0].string_value(), &out, &error)) {
-      return error;
-    }
-    return Value::String(std::string(out));
+    return TrimSpacesOnly(name, args[0].string_value());
   }
   if (is_bytes) {
-    if (name == "ltrim") {
-      if (!::googlesql::functions::LeftTrimBytes(
-              args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
-        return error;
-      }
-    } else if (name == "rtrim") {
-      if (!::googlesql::functions::RightTrimBytes(
-              args[0].bytes_value(), args[1].bytes_value(), &out, &error)) {
-        return error;
-      }
-    } else if (!::googlesql::functions::TrimBytes(args[0].bytes_value(),
-                                                  args[1].bytes_value(),
-                                                  &out,
-                                                  &error)) {
-      return error;
-    }
-    return Value::Bytes(std::string(out));
+    return TrimBytesWithChars(
+        name, args[0].bytes_value(), args[1].bytes_value());
   }
-  if (name == "ltrim") {
-    if (!::googlesql::functions::LeftTrimUtf8(
-            args[0].string_value(), args[1].string_value(), &out, &error)) {
-      return error;
-    }
-  } else if (name == "rtrim") {
-    if (!::googlesql::functions::RightTrimUtf8(
-            args[0].string_value(), args[1].string_value(), &out, &error)) {
-      return error;
-    }
-  } else if (!::googlesql::functions::TrimUtf8(args[0].string_value(),
-                                               args[1].string_value(),
-                                               &out,
-                                               &error)) {
-    return error;
-  }
-  return Value::String(std::string(out));
+  return TrimStringWithChars(
+      name, args[0].string_value(), args[1].string_value());
 }
 
 absl::StatusOr<Value> Trim(const std::vector<Value>& args) {

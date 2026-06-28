@@ -114,6 +114,25 @@ func TestFilterFirstParty_DoesNotOverlapDirectoryPrefix(t *testing.T) {
 	}
 }
 
+// TestIsClangTidyTranslationUnit pins the clang-tidy file filter so
+// headers are not linted as standalone translation units.
+func TestIsClangTidyTranslationUnit(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"backend/engine/engine.cc", true},
+		{"backend/engine/engine.h", false},
+		{"backend/engine/coordinator/local_coordinator_engine_test_fixture.h", false},
+		{"tools/googlesql-prebuilt/smoke/smoke_wrappers.cc", true},
+	}
+	for _, c := range cases {
+		if got := IsClangTidyTranslationUnit(c.path); got != c.want {
+			t.Errorf("IsClangTidyTranslationUnit(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
 // TestIsTestFile pins the test-file convention so check rules that
 // loosen for tests stay aligned with the lint runner.
 func TestIsTestFile(t *testing.T) {

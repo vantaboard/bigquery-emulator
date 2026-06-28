@@ -214,6 +214,87 @@ absl::StatusOr<Value> Soundex(const std::vector<Value>& args) {
   return Value::String(std::move(out));
 }
 
+namespace {
+
+struct InstrSearchParams {
+  absl::string_view value;
+  absl::string_view sub;
+  int64_t position = 1;
+  int64_t occurrence = 1;
+};
+
+absl::StatusOr<InstrSearchParams> ParseInstrSearchParams(
+    const std::vector<Value>& args) {
+  InstrSearchParams params;
+  params.value = args[0].string_value();
+  params.sub = args[1].string_value();
+  if (args.size() >= 3) {
+    if (args[2].type_kind() != ::googlesql::TYPE_INT64) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic: INSTR position argument must be INT64");
+    }
+    params.position = args[2].int64_value();
+    if (params.position == 0) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: INSTR position must be non-zero");
+    }
+  }
+  if (args.size() == 4) {
+    if (args[3].type_kind() != ::googlesql::TYPE_INT64) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic: INSTR occurrence argument must be INT64");
+    }
+    params.occurrence = args[3].int64_value();
+    if (params.occurrence <= 0) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: INSTR occurrence must be positive");
+    }
+  }
+  return params;
+}
+
+Value InstrEmptySubvalueResult(const InstrSearchParams& params) {
+  int64_t len = static_cast<int64_t>(params.value.size());
+  int64_t start =
+      params.position > 0 ? params.position : (len + params.position + 1);
+  if (start < 1) start = 1;
+  if (start > len + 1) start = len + 1;
+  return Value::Int64(start);
+}
+
+Value InstrSearchForward(const InstrSearchParams& params) {
+  int64_t len = static_cast<int64_t>(params.value.size());
+  int64_t sub_len = static_cast<int64_t>(params.sub.size());
+  int64_t start_idx = params.position - 1;
+  if (start_idx >= len) return Value::Int64(0);
+  int64_t seen = 0;
+  for (int64_t i = start_idx; i + sub_len <= len; ++i) {
+    if (params.value.substr(i, sub_len) == params.sub) {
+      if (++seen == params.occurrence) return Value::Int64(i + 1);
+    }
+  }
+  return Value::Int64(0);
+}
+
+Value InstrSearchBackward(const InstrSearchParams& params) {
+  int64_t len = static_cast<int64_t>(params.value.size());
+  int64_t sub_len = static_cast<int64_t>(params.sub.size());
+  int64_t end_idx = len + params.position;
+  if (end_idx < 0) return Value::Int64(0);
+  int64_t seen = 0;
+  for (int64_t i = end_idx; i >= 0; --i) {
+    if (i + sub_len > len) continue;
+    if (params.value.substr(i, sub_len) == params.sub) {
+      if (++seen == params.occurrence) return Value::Int64(i + 1);
+    }
+  }
+  return Value::Int64(0);
+}
+
+}  // namespace
+
 absl::StatusOr<Value> Instr(const std::vector<Value>& args) {
   if (args.size() < 2 || args.size() > 4) {
     return absl::InvalidArgumentError(
@@ -228,34 +309,8 @@ absl::StatusOr<Value> Instr(const std::vector<Value>& args) {
         SemanticErrorReason::kInvalidArgument,
         "semantic: INSTR requires STRING value and STRING subvalue");
   }
-  absl::string_view value = args[0].string_value();
-  absl::string_view sub = args[1].string_value();
-  int64_t position = 1;
-  int64_t occurrence = 1;
-  if (args.size() >= 3) {
-    if (args[2].type_kind() != ::googlesql::TYPE_INT64) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: INSTR position argument must be INT64");
-    }
-    position = args[2].int64_value();
-    if (position == 0) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: INSTR position must be non-zero");
-    }
-  }
-  if (args.size() == 4) {
-    if (args[3].type_kind() != ::googlesql::TYPE_INT64) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: INSTR occurrence argument must be INT64");
-    }
-    occurrence = args[3].int64_value();
-    if (occurrence <= 0) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: INSTR occurrence must be positive");
-    }
-  }
+  absl::StatusOr<InstrSearchParams> params = ParseInstrSearchParams(args);
+  if (!params.ok()) return params.status();
 
   // BigQuery's INSTR semantics in terms of byte-level offsets:
   //   * empty `subvalue` always returns the starting position
@@ -267,40 +322,13 @@ absl::StatusOr<Value> Instr(const std::vector<Value>& args) {
   //     occurrences walking left.
   //   * Returns 1-based position of the Nth match, or 0 if not
   //     found.
-  int64_t len = static_cast<int64_t>(value.size());
-  if (sub.empty()) {
-    int64_t start = position > 0 ? position : (len + position + 1);
-    if (start < 1) start = 1;
-    if (start > len + 1) start = len + 1;
-    return Value::Int64(start);
+  if (params->sub.empty()) {
+    return InstrEmptySubvalueResult(*params);
   }
-
-  int64_t sub_len = static_cast<int64_t>(sub.size());
-  if (position > 0) {
-    int64_t start_idx = position - 1;
-    if (start_idx >= len) return Value::Int64(0);
-    int64_t seen = 0;
-    for (int64_t i = start_idx; i + sub_len <= len; ++i) {
-      if (value.substr(i, sub_len) == sub) {
-        if (++seen == occurrence) return Value::Int64(i + 1);
-      }
-    }
-    return Value::Int64(0);
+  if (params->position > 0) {
+    return InstrSearchForward(*params);
   }
-
-  // Negative position: 1-based end-relative anchor. Walking
-  // right-to-left counts non-overlapping occurrences; the
-  // returned index is still 1-based absolute.
-  int64_t end_idx = len + position;
-  if (end_idx < 0) return Value::Int64(0);
-  int64_t seen = 0;
-  for (int64_t i = end_idx; i >= 0; --i) {
-    if (i + sub_len > len) continue;
-    if (value.substr(i, sub_len) == sub) {
-      if (++seen == occurrence) return Value::Int64(i + 1);
-    }
-  }
-  return Value::Int64(0);
+  return InstrSearchBackward(*params);
 }
 
 std::string ResolveStructFieldNameForJson(const ::googlesql::StructType& st,

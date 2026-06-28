@@ -70,6 +70,145 @@ void AppendUniqueDataset(CatalogNames* names, absl::string_view dataset_id) {
   names->datasets.push_back(std::string(dataset_id));
 }
 
+void AppendTableWithAliases(CatalogNames* names,
+                            CatalogTableEntry entry,
+                            absl::string_view project_id,
+                            absl::string_view dataset_id,
+                            absl::string_view table_id,
+                            absl::string_view default_dataset_id) {
+  const std::string qualified = absl::StrCat(dataset_id, ".", table_id);
+  const std::string fqn =
+      absl::StrCat(project_id, ".", dataset_id, ".", table_id);
+  entry.label = qualified;
+  entry.fqn = fqn;
+  AppendUniqueTable(names, entry);
+  CatalogTableEntry fqn_entry = entry;
+  fqn_entry.label = fqn;
+  AppendUniqueTable(names, std::move(fqn_entry));
+  if (!default_dataset_id.empty() && dataset_id == default_dataset_id) {
+    CatalogTableEntry unqualified;
+    unqualified.label = table_id;
+    unqualified.fqn = fqn;
+    unqualified.kind = entry.kind;
+    unqualified.detail = entry.detail;
+    AppendUniqueTable(names, unqualified);
+  }
+}
+
+void AppendRoutineWithAliases(CatalogNames* names,
+                              CatalogRoutineEntry entry,
+                              absl::string_view project_id,
+                              absl::string_view dataset_id,
+                              absl::string_view routine_id,
+                              absl::string_view default_dataset_id) {
+  const std::string qualified = absl::StrCat(dataset_id, ".", routine_id);
+  const std::string fqn =
+      absl::StrCat(project_id, ".", dataset_id, ".", routine_id);
+  entry.label = qualified;
+  entry.fqn = fqn;
+  AppendUniqueRoutine(names, entry);
+  CatalogRoutineEntry fqn_entry = entry;
+  fqn_entry.label = fqn;
+  AppendUniqueRoutine(names, std::move(fqn_entry));
+  if (!default_dataset_id.empty() && dataset_id == default_dataset_id) {
+    CatalogRoutineEntry unqualified;
+    unqualified.label = routine_id;
+    unqualified.fqn = fqn;
+    unqualified.kind = entry.kind;
+    unqualified.detail = entry.detail;
+    AppendUniqueRoutine(names, unqualified);
+  }
+}
+
+absl::Status PopulateDatasetTables(
+    CatalogNames* names,
+    storage::Storage* storage,
+    absl::string_view project_id,
+    absl::string_view dataset_id,
+    absl::string_view default_dataset_id,
+    const absl::flat_hash_set<std::string>& view_keys) {
+  absl::StatusOr<std::vector<storage::TableId>> tables =
+      storage->ListTables(storage::DatasetId{project_id, dataset_id});
+  if (!tables.ok()) {
+    return tables.status();
+  }
+  for (const storage::TableId& table : *tables) {
+    const std::string qualified = absl::StrCat(dataset_id, ".", table.table_id);
+    const bool is_view = view_keys.contains(qualified);
+    CatalogTableEntry entry;
+    entry.kind = is_view ? "view" : "table";
+    entry.detail = is_view ? "view" : "table";
+    AppendTableWithAliases(names,
+                           entry,
+                           project_id,
+                           dataset_id,
+                           table.table_id,
+                           default_dataset_id);
+
+    absl::StatusOr<schema::TableSchema> schema_or = storage->GetSchema(table);
+    if (!schema_or.ok()) {
+      continue;
+    }
+    std::vector<CatalogColumnEntry> columns;
+    for (const schema::ColumnSchema& column : schema_or->columns) {
+      CatalogColumnEntry col;
+      col.name = column.name;
+      col.type = ColumnTypeLabel(column);
+      columns.push_back(col);
+      names->columns.push_back(col);
+    }
+    const std::string fqn =
+        absl::StrCat(project_id, ".", dataset_id, ".", table.table_id);
+    names->columns_by_table[qualified] = columns;
+    names->columns_by_table[fqn] = columns;
+    if (!default_dataset_id.empty() && dataset_id == default_dataset_id) {
+      names->columns_by_table[table.table_id] = columns;
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status PopulateDatasetRoutines(CatalogNames* names,
+                                     storage::Storage* storage,
+                                     absl::string_view project_id,
+                                     absl::string_view dataset_id,
+                                     absl::string_view default_dataset_id) {
+  absl::StatusOr<std::vector<storage::RoutineRecord>> routines =
+      storage->ListRoutines(storage::DatasetId{project_id, dataset_id});
+  if (!routines.ok()) {
+    return routines.status();
+  }
+  for (const storage::RoutineRecord& routine : *routines) {
+    CatalogRoutineEntry entry;
+    entry.kind = RoutineKindWire(routine.kind);
+    entry.detail = RoutineDetail(routine);
+    AppendRoutineWithAliases(names,
+                             entry,
+                             project_id,
+                             dataset_id,
+                             routine.id.routine_id,
+                             default_dataset_id);
+  }
+  return absl::OkStatus();
+}
+
+void AppendRegisteredViewEntries(CatalogNames* names,
+                                 absl::string_view project_id,
+                                 absl::string_view default_dataset_id) {
+  for (const catalog::RegisteredViewInfo& view :
+       catalog::ListProjectViews(project_id, "")) {
+    CatalogTableEntry entry;
+    entry.kind = "view";
+    entry.detail = "view";
+    AppendTableWithAliases(names,
+                           entry,
+                           project_id,
+                           view.dataset_id,
+                           view.view_name,
+                           default_dataset_id);
+  }
+}
+
 }  // namespace
 
 absl::Status PopulateCatalogNamesFromStorage(
@@ -107,111 +246,23 @@ absl::Status PopulateCatalogNamesFromStorage(
     AppendUniqueDataset(names, dataset.dataset_id);
     AppendUniqueDataset(names,
                         absl::StrCat(project_id, ".", dataset.dataset_id));
-    absl::StatusOr<std::vector<storage::TableId>> tables =
-        storage->ListTables(dataset);
-    if (!tables.ok()) {
-      return tables.status();
+    if (absl::Status tables = PopulateDatasetTables(names,
+                                                    storage,
+                                                    project_id,
+                                                    dataset.dataset_id,
+                                                    default_dataset_id,
+                                                    view_keys);
+        !tables.ok()) {
+      return tables;
     }
-    for (const storage::TableId& table : *tables) {
-      const std::string qualified =
-          absl::StrCat(dataset.dataset_id, ".", table.table_id);
-      const std::string fqn = absl::StrCat(
-          project_id, ".", dataset.dataset_id, ".", table.table_id);
-      const bool is_view = view_keys.contains(qualified);
-      CatalogTableEntry entry;
-      entry.label = qualified;
-      entry.fqn = fqn;
-      entry.kind = is_view ? "view" : "table";
-      entry.detail = is_view ? "view" : "table";
-      AppendUniqueTable(names, entry);
-      CatalogTableEntry fqn_entry = entry;
-      fqn_entry.label = fqn;
-      AppendUniqueTable(names, std::move(fqn_entry));
-      if (!default_dataset_id.empty() &&
-          dataset.dataset_id == default_dataset_id) {
-        CatalogTableEntry unqualified;
-        unqualified.label = table.table_id;
-        unqualified.fqn = fqn;
-        unqualified.kind = entry.kind;
-        unqualified.detail = entry.detail;
-        AppendUniqueTable(names, unqualified);
-      }
-
-      absl::StatusOr<schema::TableSchema> schema_or = storage->GetSchema(table);
-      if (!schema_or.ok()) {
-        continue;
-      }
-      std::vector<CatalogColumnEntry> columns;
-      for (const schema::ColumnSchema& column : schema_or->columns) {
-        CatalogColumnEntry col;
-        col.name = column.name;
-        col.type = ColumnTypeLabel(column);
-        columns.push_back(col);
-        names->columns.push_back(col);
-      }
-      names->columns_by_table[qualified] = columns;
-      names->columns_by_table[fqn] = columns;
-      if (!default_dataset_id.empty() &&
-          dataset.dataset_id == default_dataset_id) {
-        names->columns_by_table[table.table_id] = columns;
-      }
-    }
-
-    absl::StatusOr<std::vector<storage::RoutineRecord>> routines =
-        storage->ListRoutines(dataset);
-    if (!routines.ok()) {
-      return routines.status();
-    }
-    for (const storage::RoutineRecord& routine : *routines) {
-      const std::string qualified =
-          absl::StrCat(dataset.dataset_id, ".", routine.id.routine_id);
-      const std::string fqn = absl::StrCat(
-          project_id, ".", dataset.dataset_id, ".", routine.id.routine_id);
-      CatalogRoutineEntry entry;
-      entry.label = qualified;
-      entry.fqn = fqn;
-      entry.kind = RoutineKindWire(routine.kind);
-      entry.detail = RoutineDetail(routine);
-      AppendUniqueRoutine(names, entry);
-      CatalogRoutineEntry fqn_entry = entry;
-      fqn_entry.label = fqn;
-      AppendUniqueRoutine(names, std::move(fqn_entry));
-      if (!default_dataset_id.empty() &&
-          dataset.dataset_id == default_dataset_id) {
-        CatalogRoutineEntry unqualified;
-        unqualified.label = routine.id.routine_id;
-        unqualified.fqn = fqn;
-        unqualified.kind = entry.kind;
-        unqualified.detail = entry.detail;
-        AppendUniqueRoutine(names, unqualified);
-      }
+    if (absl::Status routines = PopulateDatasetRoutines(
+            names, storage, project_id, dataset.dataset_id, default_dataset_id);
+        !routines.ok()) {
+      return routines;
     }
   }
 
-  for (const catalog::RegisteredViewInfo& view :
-       catalog::ListProjectViews(project_id, "")) {
-    const std::string qualified =
-        absl::StrCat(view.dataset_id, ".", view.view_name);
-    const std::string fqn =
-        absl::StrCat(project_id, ".", view.dataset_id, ".", view.view_name);
-    CatalogTableEntry entry;
-    entry.label = qualified;
-    entry.fqn = fqn;
-    entry.kind = "view";
-    entry.detail = "view";
-    AppendUniqueTable(names, entry);
-    CatalogTableEntry fqn_entry = entry;
-    fqn_entry.label = fqn;
-    AppendUniqueTable(names, std::move(fqn_entry));
-    if (!default_dataset_id.empty() && view.dataset_id == default_dataset_id) {
-      CatalogTableEntry unqualified;
-      unqualified.label = view.view_name;
-      unqualified.fqn = fqn;
-      unqualified.kind = "view";
-      unqualified.detail = "view";
-      AppendUniqueTable(names, unqualified);
-    }
-  }
+  AppendRegisteredViewEntries(names, project_id, default_dataset_id);
 
   return absl::OkStatus();
 }

@@ -214,6 +214,73 @@ DmlStats DiffByPrimaryKey(absl::Span<const storage::Row> before,
   }
   return stats;
 }
+
+absl::StatusOr<std::vector<storage::Row>> SnapshotStorageRows(
+    storage::Storage* storage, const storage::TableId& table_id) {
+  absl::StatusOr<std::unique_ptr<storage::RowIterator>> before_iter =
+      storage->ScanRows(table_id);
+  if (!before_iter.ok()) return before_iter.status();
+  std::vector<storage::Row> before_rows;
+  std::unique_ptr<storage::RowIterator> iter = std::move(before_iter).value();
+  storage::Row row;
+  while (true) {
+    absl::StatusOr<bool> has = iter->Next(&row);
+    if (!has.ok()) return has.status();
+    if (!*has) break;
+    before_rows.push_back(row);
+  }
+  return before_rows;
+}
+
+absl::StatusOr<std::string> AttachMergeTableScans(
+    ::duckdb_connection conn,
+    storage::Storage* storage,
+    const TableScanCollector& collector,
+    const storage::TableId& target_id) {
+  std::string quoted_target;
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (storage_table == nullptr) {
+      return absl::FailedPreconditionError(absl::StrCat(
+          "DuckDbExecutor::ExecuteDml: cannot attach non-StorageTable '",
+          tbl->Name(),
+          "' for MERGE; rebuild against a "
+          "GoogleSqlCatalog-backed analyzer"));
+    }
+    const storage::TableId& id = storage_table->storage_table_id();
+    const std::string create_schema =
+        absl::StrCat("CREATE SCHEMA IF NOT EXISTS ", QuoteIdent(id.dataset_id));
+    absl::Status schema_status = RunSqlNoResult(conn, create_schema);
+    if (!schema_status.ok()) return schema_status;
+    const std::string qualified =
+        absl::StrCat(QuoteIdent(id.dataset_id), ".", QuoteIdent(id.table_id));
+    absl::Status attach =
+        AttachStorageTableAt(conn, storage, *storage_table, qualified);
+    if (!attach.ok()) return attach;
+    if (id == target_id) quoted_target = qualified;
+  }
+  if (quoted_target.empty()) {
+    return absl::InternalError(
+        "DuckDbExecutor::ExecuteDml: target table was not in the resolved "
+        "table-scan set");
+  }
+  return quoted_target;
+}
+
+absl::Status RunMergeSql(::duckdb_connection conn, absl::string_view sql) {
+  ::duckdb_result merge_result;
+  if (::duckdb_query(conn, std::string(sql).c_str(), &merge_result) !=
+      ::DuckDBSuccess) {
+    const char* err = ::duckdb_result_error(&merge_result);
+    std::string detail = err == nullptr ? std::string("") : std::string(err);
+    ::duckdb_destroy_result(&merge_result);
+    return absl::InvalidArgumentError(absl::StrCat(
+        "DuckDBEngine: DuckDB rejected MERGE: ", detail, " (sql=", sql, ")"));
+  }
+  ::duckdb_destroy_result(&merge_result);
+  return absl::OkStatus();
+}
+
 }  // namespace internal
 
 absl::StatusOr<DmlResult> DuckDbExecutor::ExecuteDml(
@@ -280,28 +347,10 @@ absl::StatusOr<DmlResult> DuckDbExecutor::ExecuteDml(
   }
   const storage::TableId target_id = target_table->storage_table_id();
 
-  // 3. Snapshot the target rows so we can diff post-MERGE to derive
-  // per-branch DmlStats counts (DuckDB's MERGE returns a single
-  // total via `duckdb_rows_changed`, but BigQuery's wire envelope
-  // distinguishes insertedRowCount / updatedRowCount /
-  // deletedRowCount).
-  absl::StatusOr<std::unique_ptr<storage::RowIterator>> before_iter =
-      storage_->ScanRows(target_id);
-  if (!before_iter.ok()) return before_iter.status();
-  std::vector<storage::Row> before_rows;
-  {
-    std::unique_ptr<storage::RowIterator> iter = std::move(before_iter).value();
-    storage::Row row;
-    while (true) {
-      absl::StatusOr<bool> has = iter->Next(&row);
-      if (!has.ok()) return has.status();
-      if (!*has) break;
-      before_rows.push_back(row);
-    }
-  }
+  absl::StatusOr<std::vector<storage::Row>> before_rows =
+      internal::SnapshotStorageRows(storage_, target_id);
+  if (!before_rows.ok()) return before_rows.status();
 
-  // 4. Open a fresh in-memory DuckDB. Per-query lifetime matches the
-  // SELECT path; the connection is torn down before we return.
   ::duckdb_database db = nullptr;
   if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
     return absl::InternalError(
@@ -313,93 +362,29 @@ absl::StatusOr<DmlResult> DuckDbExecutor::ExecuteDml(
     return absl::InternalError(
         "DuckDbExecutor::ExecuteDml: duckdb_connect failed");
   }
-  // Same polyfill registration as the SELECT path: the MERGE
-  // statement can carry BigQuery scalar / aggregate calls that
-  // route through `duckdb_udf`, so the UDFs must be installed
-  // before DuckDB sees the user-submitted SQL.
   if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
     return reg;
   }
 
-  // 5. Materialize each referenced storage table inside the DuckDB
-  // connection under its schema-qualified `"dataset"."table"` name so
-  // the user-submitted MERGE SQL (which typically writes
-  // `MERGE INTO ds.people ...`) resolves end-to-end. The target
-  // table's qualified name is captured so step 7 can read it back.
-  std::string quoted_target;
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (storage_table == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "DuckDbExecutor::ExecuteDml: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "' for MERGE; rebuild against a "
-          "GoogleSqlCatalog-backed analyzer"));
-    }
-    const storage::TableId& id = storage_table->storage_table_id();
-    const std::string create_schema = absl::StrCat(
-        "CREATE SCHEMA IF NOT EXISTS ", internal::QuoteIdent(id.dataset_id));
-    absl::Status schema_status = internal::RunSqlNoResult(conn, create_schema);
-    if (!schema_status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return schema_status;
-    }
-    const std::string qualified =
-        absl::StrCat(internal::QuoteIdent(id.dataset_id),
-                     ".",
-                     internal::QuoteIdent(id.table_id));
-    absl::Status attach = internal::AttachStorageTableAt(
-        conn, storage_, *storage_table, qualified);
-    if (!attach.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return attach;
-    }
-    if (id == target_id) quoted_target = qualified;
-  }
-  if (quoted_target.empty()) {
+  absl::StatusOr<std::string> quoted_target =
+      internal::AttachMergeTableScans(conn, storage_, collector, target_id);
+  if (!quoted_target.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
-    return absl::InternalError(
-        "DuckDbExecutor::ExecuteDml: target table was not in the resolved "
-        "table-scan set");
+    return quoted_target.status();
   }
 
-  // 6. Execute the MERGE. We pass the user-submitted SQL verbatim:
-  // DuckDB v1.2+ supports `MERGE INTO ... WHEN MATCHED / WHEN NOT
-  // MATCHED ...` with the same statement shape BigQuery exposes, so
-  // for the simple cases the conformance harness will seed in plans
-  // 40-42 we do not need a transpiler. Cases DuckDB rejects fold to
-  // INTERNAL (rather than UNIMPLEMENTED) because the DuckDB engine
-  // is the only path for MERGE today.
-  ::duckdb_result merge_result;
-  if (::duckdb_query(conn, request.sql.c_str(), &merge_result) !=
-      ::DuckDBSuccess) {
-    const char* err = ::duckdb_result_error(&merge_result);
-    std::string detail = err == nullptr ? std::string("") : std::string(err);
-    ::duckdb_destroy_result(&merge_result);
+  if (absl::Status merge = internal::RunMergeSql(conn, request.sql);
+      !merge.ok()) {
     ::duckdb_disconnect(&conn);
     ::duckdb_close(&db);
-    return absl::InvalidArgumentError(
-        absl::StrCat("DuckDBEngine: DuckDB rejected MERGE: ",
-                     detail,
-                     " (sql=",
-                     request.sql,
-                     ")"));
+    return merge;
   }
-  ::duckdb_destroy_result(&merge_result);
 
-  // 7. Read back the post-MERGE target rows so we can (a) ship them
-  // back into the storage backend via `OverwriteRows` and (b)
-  // classify the per-branch DmlStats counts by diffing against the
-  // pre-MERGE snapshot.
   absl::StatusOr<std::vector<storage::Row>> after_rows =
-      internal::ReadBackTable(conn, quoted_target, target_table->bq_schema());
+      internal::ReadBackTable(conn, *quoted_target, target_table->bq_schema());
   ::duckdb_disconnect(&conn);
   ::duckdb_close(&db);
   if (!after_rows.ok()) return after_rows.status();
@@ -409,7 +394,7 @@ absl::StatusOr<DmlResult> DuckDbExecutor::ExecuteDml(
   if (!applied.ok()) return applied;
 
   absl::StatusOr<DmlStats> stats = internal::DiffByPrimaryKey(
-      absl::MakeConstSpan(before_rows), absl::MakeConstSpan(*after_rows));
+      absl::MakeConstSpan(*before_rows), absl::MakeConstSpan(*after_rows));
   if (!stats.ok()) return stats.status();
   DmlResult out;
   out.stats = *std::move(stats);
