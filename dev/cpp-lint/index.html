@@ -1124,9 +1124,19 @@ ownership boundary is pinned by
 <td>File length, banned logging, status anti-patterns.</td>
 </tr>
 <tr>
-<td>clang-tidy (slow)</td>
+<td>clang-tidy (slow, sequential)</td>
 <td><code>task lint:cpp:tidy</code></td>
 <td>Requires <code>compile_commands.json</code>.</td>
+</tr>
+<tr>
+<td>clang-tidy (parallel batch)</td>
+<td><code>task lint:cpp:tidy-parallel</code></td>
+<td>Per-file parallel run; set <code>JOBS</code> (default 5) and <code>LOG</code> (default <code>lint-cpp-tidy.log</code>).</td>
+</tr>
+<tr>
+<td>Parse tidy batch log</td>
+<td><code>task lint:cpp:tidy-report</code></td>
+<td>Reads <code>LOG</code>, writes <code>lint-cpp-tidy.csv</code> + <code>docs/dev/cpp-lint-tidy-triage.md</code>.</td>
 </tr>
 <tr>
 <td>Generate compile DB</td>

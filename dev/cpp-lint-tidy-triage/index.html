@@ -1,0 +1,2134 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/dev/cpp-lint-tidy-triage/">
+      
+      
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>clang-tidy triage (first-party C++) - BigQuery Emulator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#clang-tidy-triage-first-party-c" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            BigQuery Emulator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              clang-tidy triage (first-party C++)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../DOCKER/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../REST_API/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../DEVELOPMENT/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    BigQuery Emulator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vantaboard/bigquery-emulator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vantaboard/bigquery-emulator
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DOCKER/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docker
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CLIENTS/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Client libraries
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/multi-language/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Languages & tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SEEDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Seeding data
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../RELEASES/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Releases & install
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../REST_API/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    REST API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ENGINE_POLICY/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Engine policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../features/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feature support
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Development
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Development
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../DEVELOPMENT/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Development setup
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cpp-lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    C++ lint policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Summary
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Summary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#findings-by-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      Findings by check
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failed-files-by-subsystem" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failed files by subsystem
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disposition-matrix" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disposition matrix
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remediation-waves" class="md-nav__link">
+    <span class="md-ellipsis">
+      Remediation waves
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="clang-tidy-triage-first-party-c">clang-tidy triage (first-party C++)<a class="headerlink" href="#clang-tidy-triage-first-party-c" title="Permanent link">&para;</a></h1>
+<p>Generated by <code>task lint:cpp:tidy-report</code> from <code>lint-cpp-tidy.log</code>.</p>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Files scanned</td>
+<td>447</td>
+</tr>
+<tr>
+<td>Files failed</td>
+<td>99</td>
+</tr>
+<tr>
+<td>Total findings</td>
+<td>195</td>
+</tr>
+<tr>
+<td>Cognitive-complexity findings</td>
+<td>99</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Check mix:</strong> Failures are <strong>not</strong> complexity-only. Cognitive-complexity is the largest bucket, but analyzer and cppcoreguidelines checks also fail the lane.</p>
+<h3 id="findings-by-check">Findings by check<a class="headerlink" href="#findings-by-check" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>readability-function-cognitive-complexity</code></td>
+<td>101</td>
+</tr>
+<tr>
+<td><code>clang-analyzer-cplusplus.NewDeleteLeaks</code></td>
+<td>43</td>
+</tr>
+<tr>
+<td><code>clang-analyzer-core.CallAndMessage</code></td>
+<td>11</td>
+</tr>
+<tr>
+<td><code>cppcoreguidelines-init-variables</code></td>
+<td>9</td>
+</tr>
+<tr>
+<td><code>cppcoreguidelines-narrowing-conversions</code></td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>cppcoreguidelines-pro-type-static-cast-downcast</code></td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>google-runtime-int</code></td>
+<td>8</td>
+</tr>
+<tr>
+<td><code>clang-diagnostic-error</code></td>
+<td>6</td>
+</tr>
+<tr>
+<td><code>cppcoreguidelines-pro-type-member-init</code></td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="failed-files-by-subsystem">Failed files by subsystem<a class="headerlink" href="#failed-files-by-subsystem" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Subsystem</th>
+<th>Files</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>semantic</td>
+<td>49</td>
+</tr>
+<tr>
+<td>duckdb</td>
+<td>18</td>
+</tr>
+<tr>
+<td>coordinator</td>
+<td>8</td>
+</tr>
+<tr>
+<td>catalog</td>
+<td>7</td>
+</tr>
+<tr>
+<td>control</td>
+<td>6</td>
+</tr>
+<tr>
+<td>storage</td>
+<td>5</td>
+</tr>
+<tr>
+<td>frontend</td>
+<td>3</td>
+</tr>
+<tr>
+<td>sqltools</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<h2 id="disposition-matrix">Disposition matrix<a class="headerlink" href="#disposition-matrix" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th style="text-align: right;">Findings</th>
+<th>Checks</th>
+<th style="text-align: right;">Worst complexity</th>
+<th>Subsystem</th>
+<th>Kind</th>
+<th>Disposition</th>
+<th style="text-align: right;">Wave</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backend/catalog/googlesql_catalog.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-pro-type-static-cast-downcast (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">35</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>FindTable, do not use static_cast to downcast fr...</td>
+</tr>
+<tr>
+<td><code>backend/catalog/info_schema_rows.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">28</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>AppendTableRows</td>
+</tr>
+<tr>
+<td><code>backend/catalog/info_schema_table.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>cppcoreguidelines-narrowing-conversions (1)</td>
+<td style="text-align: right;">0</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>narrowing conversion from 'size_t' (a...</td>
+</tr>
+<tr>
+<td><code>backend/catalog/measure_catalog.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-pro-type-static-cast-downcast (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">27</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>ExtractSingleMeasureExpression, do not use static_cast to downcast fr...</td>
+</tr>
+<tr>
+<td><code>backend/catalog/storage_table.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">40</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ConvertScalar</td>
+</tr>
+<tr>
+<td><code>backend/catalog/wildcard_table.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>cppcoreguidelines-narrowing-conversions (1)</td>
+<td style="text-align: right;">0</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>narrowing conversion from 'size_t' (a...</td>
+</tr>
+<tr>
+<td><code>backend/catalog/wildcard_table_util.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-analyzer-core.CallAndMessage (1)</td>
+<td style="text-align: right;">0</td>
+<td>catalog</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>2nd function call argument is an unin...</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_alter_table.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">29</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>RunAlterTable</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_ddl.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">30</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>RunCreateTableAsSelect, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_export_data.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-analyzer-core.CallAndMessage (1)</td>
+<td style="text-align: right;">0</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_literals.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">30</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>SubstituteDuckdbParameters, AttachStorageTableAt</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_load_data.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">39</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>RunLoadData</td>
+</tr>
+<tr>
+<td><code>backend/engine/control/control_op_materialized_view.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">30</td>
+<td>control</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>RunCreateMaterializedView, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/local_coordinator_analyze.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">30</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ParameterTypeForQueryParameter</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/local_coordinator_engine.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">50</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ExecuteDdl</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/local_coordinator_engine_test_fixture.h</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-diagnostic-error (1)</td>
+<td style="text-align: right;">0</td>
+<td>coordinator</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/public/evaluator_table_ite...</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/route_classifier_analytic.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">31</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>AnalyticScanHasDateTimestampNumericRangeFrame</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/route_classifier_test_fixture.h</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-diagnostic-error (1)</td>
+<td style="text-align: right;">0</td>
+<td>coordinator</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/public/simple_catalog.h' f...</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/route_classifier_visitor.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-analyzer-core.CallAndMessage (1)</td>
+<td style="text-align: right;">0</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/script_executor.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">29</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ExecuteScriptViaAnalyzeNext</td>
+</tr>
+<tr>
+<td><code>backend/engine/coordinator/sql_preprocess_rewrites.cc</code></td>
+<td style="text-align: right;">4</td>
+<td>readability-function-cognitive-complexity (4)</td>
+<td style="text-align: right;">129</td>
+<td>coordinator</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>RewriteAnonymousStructFieldAccess, RewriteFormatTypeLiteral, NormalizeCreateF...</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_attach.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">34</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>AttachStorageTableAt</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_dml.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">36</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ExecuteDml</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_insert_select.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">39</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>RunInsertSelect, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_internal.h</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-diagnostic-error (1)</td>
+<td style="text-align: right;">0</td>
+<td>duckdb</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/public/evaluator_table_ite...</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_literals.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">30</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>SubstituteDuckdbParameters</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_query.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">44</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>ExecuteQuery, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/duckdb_executor_test_fixture.h</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-diagnostic-error (1)</td>
+<td style="text-align: right;">0</td>
+<td>duckdb</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/public/evaluator_table_ite...</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_aggregate.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">91</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EmitAggregateScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_aggregate_function.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">88</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EmitAggregateFunctionCall</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_analytic.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">72</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>CaptureAnalyticOutputOrder, EmitAnalyticScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_datetime.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">52</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>TryEmitDateTimeFunctionCall</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_expr.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">31</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>EmitCast</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_function_call.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">137</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EmitFunctionCall</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_pivot.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">31</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>EmitPivotScan, EmitUnpivotScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_query.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">72</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EmitQueryStmt, EmitProjectScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_emit_with.cc</code></td>
+<td style="text-align: right;">3</td>
+<td>readability-function-cognitive-complexity (3)</td>
+<td style="text-align: right;">67</td>
+<td>duckdb</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EmitWithScan, EmitRecursiveScan, lambda has cognitive complexity of 26...</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_internal.h</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-diagnostic-error (1)</td>
+<td style="text-align: right;">0</td>
+<td>duckdb</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/public/type.h' file not found</td>
+</tr>
+<tr>
+<td><code>backend/engine/duckdb/transpiler/transpiler_test_fixture.h</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-diagnostic-error (1); cppcoreguidelines-init-variables (1)</td>
+<td style="text-align: right;">0</td>
+<td>duckdb</td>
+<td>fixture</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>'googlesql/resolved_ast/resolved_ast...., variable 'err' is not initialized</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/array_struct/array_scan.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">51</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EvaluateArrayScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/dml/dml_insert.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">69</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>ExecuteInsert</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/dml/dml_merge.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">128</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>ExecuteMerge</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/dml/dml_mutate.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">145</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>ExecuteDelete, ExecuteUpdate</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">126</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EvalExpr</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_calls.cc</code></td>
+<td style="text-align: right;">4</td>
+<td>cppcoreguidelines-pro-type-static-cast-downcast (3); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">72</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>do not use static_cast to downcast fr..., EvalFunctionCall</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_cast.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">221</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EvalResolvedCast</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_cast_format.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">123</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>TryEvalCastFormatAndTimezone</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_cast_helpers.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">47</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>TryCastValueToType, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_cast_modifiers.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">36</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ApplyCastTypeModifiers</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_fn_dispatch.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">92</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>DispatchFunctionByName</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_expr_operators.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">35</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ArithmeticSub</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_tvf.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">34</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>MaterializeTvfScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/eval_udaf.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">29</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>EvalSqlUdafBody</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/aggregate_safe_wrap.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">53</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EvalAggregateCall</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/aggregate_specialized.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">32</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ApproxQuantiles, ApproxTopSum</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/aggregate_sum_avg.cc</code></td>
+<td style="text-align: right;">3</td>
+<td>readability-function-cognitive-complexity (3)</td>
+<td style="text-align: right;">79</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>SumAggregateImpl, AvgAggregateImpl, MinMaxAggregateImpl</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/datetime_add_sub.cc</code></td>
+<td style="text-align: right;">4</td>
+<td>readability-function-cognitive-complexity (4)</td>
+<td style="text-align: right;">57</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>DateAddSubDiffTrunc, DatetimeAddSubDiffTrunc, TimestampAddSubDiffTrunc, TimeA...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/datetime_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">30</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>Extract, GenerateDateArray</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/datetime_funcs_constructors.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">33</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>TimestampConstructor</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/datetime_funcs_test.cc</code></td>
+<td style="text-align: right;">7</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (7)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/dispatch.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">165</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>Dispatch</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/geog_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (1); cppcoreguidelines-pro-type-member-init (1)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>constructor does not initialize these..., Potential leak of memory pointed to...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/hll_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-init-variables (2)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>variable 'out' is not initialized, variable 'result' is not initialized</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/hll_funcs_test.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (2)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/json_funcs.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">31</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ExtractArrayValues</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/json_funcs_test.cc</code></td>
+<td style="text-align: right;">5</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (5)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/kll_funcs_test.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (1)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/net_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-narrowing-conversions (2)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>narrowing conversion from 'int' to si...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/numeric_edges_test.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (1)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/operator_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-narrowing-conversions (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">42</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>DispatchBitwise, narrowing conversion from 'uint64_t' ...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/operator_math_funcs.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-init-variables (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">26</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>variable 'rounded' is not initialized, Mod</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/string_extra_core.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">36</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>TrimFamily</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/string_extra_regex_format.cc</code></td>
+<td style="text-align: right;">3</td>
+<td>readability-function-cognitive-complexity (2); clang-analyzer-core.CallAndMessage (1)</td>
+<td style="text-align: right;">26</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Lpad, Rpad, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/string_extra_unicode.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">80</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>ParseBignumeric, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/string_funcs.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">45</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>Instr</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/functions/string_funcs_test.cc</code></td>
+<td style="text-align: right;">19</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (19)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">86</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">1</td>
+<td>EvalSubqueryExpr</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_agg_list.cc</code></td>
+<td style="text-align: right;">3</td>
+<td>readability-function-cognitive-complexity (2); cppcoreguidelines-init-variables (1)</td>
+<td style="text-align: right;">63</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>variable 'nulls_first' is not initial..., EvalArrayAgg, EvalStringAgg</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_analytic.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-init-variables (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">217</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>variable 'nulls_first' is not initial..., MaterializeAnalyticScan</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_match_recognize.cc</code></td>
+<td style="text-align: right;">3</td>
+<td>readability-function-cognitive-complexity (2); cppcoreguidelines-init-variables (1)</td>
+<td style="text-align: right;">37</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>SortRowsByOrderBy, variable 'nulls_first' is not initial..., EvalMatchMeasures</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_materialize.cc</code></td>
+<td style="text-align: right;">4</td>
+<td>readability-function-cognitive-complexity (3); cppcoreguidelines-pro-type-static-cast-downcast (1)</td>
+<td style="text-align: right;">68</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>do not use static_cast to downcast fr..., ProjectRows, MaterializeJoinScan, M...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_measure_multi_level.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-pro-type-static-cast-downcast (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">54</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>do not use static_cast to downcast fr..., EvalMultiLevelAggregateForRows</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_sample.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">27</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>BernoulliPercentSample</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/scan_eval_scan_impl.cc</code></td>
+<td style="text-align: right;">6</td>
+<td>cppcoreguidelines-narrowing-conversions (2); readability-function-cognitive-complexity (2); cppcoreguidelines-init-variables (1); cppcoreguidelines-pro-type-static-cast-downcast (1)</td>
+<td style="text-align: right;">96</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>narrowing conversion from 'size_t' (a..., MaterializeScanImpl, lambda has cog...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/stubs/dispatch_test.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (2)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/stubs/keys_test.cc</code></td>
+<td style="text-align: right;">5</td>
+<td>clang-analyzer-cplusplus.NewDeleteLeaks (5)</td>
+<td style="text-align: right;">0</td>
+<td>semantic</td>
+<td>test</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>Potential leak of memory pointed to b...</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/value.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">27</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ToStorageValue</td>
+</tr>
+<tr>
+<td><code>backend/engine/semantic/value_parameters.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">46</td>
+<td>semantic</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ParseJsonArrayElements, ParseParameterValue</td>
+</tr>
+<tr>
+<td><code>backend/sqltools/catalog_names.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">41</td>
+<td>sqltools</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>PopulateCatalogNamesFromStorage</td>
+</tr>
+<tr>
+<td><code>backend/sqltools/sql_references.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>clang-analyzer-core.CallAndMessage (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">26</td>
+<td>sqltools</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>PopulateInScopeTablesFromHeuristic, Called C++ object pointer is null</td>
+</tr>
+<tr>
+<td><code>backend/sqltools/sql_tools_complete.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">29</td>
+<td>sqltools</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>InferCompletionContext</td>
+</tr>
+<tr>
+<td><code>backend/storage/duckdb/duckdb_storage_list_literals.cc</code></td>
+<td style="text-align: right;">4</td>
+<td>google-runtime-int (2); readability-function-cognitive-complexity (2)</td>
+<td style="text-align: right;">39</td>
+<td>storage</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>consider replacing 'long long' with '..., ParseDuckDBListVarchar, ParseDuckDB...</td>
+</tr>
+<tr>
+<td><code>backend/storage/duckdb/duckdb_storage_read_stream.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">28</td>
+<td>storage</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>CreateReadStream</td>
+</tr>
+<tr>
+<td><code>backend/storage/duckdb/duckdb_storage_rows.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">29</td>
+<td>storage</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>ReadCell</td>
+</tr>
+<tr>
+<td><code>backend/storage/duckdb/duckdb_storage_version_log.cc</code></td>
+<td style="text-align: right;">7</td>
+<td>google-runtime-int (6); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">27</td>
+<td>storage</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>ParseVersionEntries, consider replacing 'long long' with '...</td>
+</tr>
+<tr>
+<td><code>backend/storage/duckdb/duckdb_storage_views.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">49</td>
+<td>storage</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">2</td>
+<td>ListAllViews</td>
+</tr>
+<tr>
+<td><code>frontend/handlers/storage_read.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">27</td>
+<td>frontend</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">4</td>
+<td>CreateReadSession</td>
+</tr>
+<tr>
+<td><code>frontend/handlers/storage_read_streams.cc</code></td>
+<td style="text-align: right;">1</td>
+<td>cppcoreguidelines-narrowing-conversions (1)</td>
+<td style="text-align: right;">0</td>
+<td>frontend</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>narrowing conversion from 'std::int64...</td>
+</tr>
+<tr>
+<td><code>frontend/handlers/storage_write_append_rows.cc</code></td>
+<td style="text-align: right;">2</td>
+<td>cppcoreguidelines-init-variables (1); readability-function-cognitive-complexity (1)</td>
+<td style="text-align: right;">70</td>
+<td>frontend</td>
+<td>production</td>
+<td>fix</td>
+<td style="text-align: right;">3</td>
+<td>AppendRows, variable 'stream_type' is not initial...</td>
+</tr>
+</tbody>
+</table>
+<h2 id="remediation-waves">Remediation waves<a class="headerlink" href="#remediation-waves" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Wave 0</strong> — Tooling + <code>clang-tidy --fix</code> on rows dispositioned <code>autofix</code>.</li>
+<li><strong>Wave 1</strong> — P0 complexity (&gt;50): dedicated PRs with tests.</li>
+<li><strong>Wave 2</strong> — P1 complexity (35–50): one PR per subsystem.</li>
+<li><strong>Wave 3</strong> — Non-complexity correctness (<code>bugprone-*</code>, <code>clang-analyzer-*</code>).</li>
+<li><strong>Wave 4</strong> — P2 complexity (26–34), tests/fixtures, scoped NOLINT.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>
