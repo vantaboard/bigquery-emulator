@@ -449,15 +449,19 @@
 				
 				<option value="file196">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/checks.go (79.9%)</option>
 				
-				<option value="file197">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/main.go (31.8%)</option>
+				<option value="file197">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/main.go (30.4%)</option>
 				
 				<option value="file198">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/sources.go (73.5%)</option>
 				
-				<option value="file199">github.com/vantaboard/bigquery-emulator/tools/release/badge.go (83.3%)</option>
+				<option value="file199">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/tidy_report.go (79.8%)</option>
 				
-				<option value="file200">github.com/vantaboard/bigquery-emulator/tools/release/main.go (35.0%)</option>
+				<option value="file200">github.com/vantaboard/bigquery-emulator/tools/lint/cpp/tidy_report_triage.go (83.3%)</option>
 				
-				<option value="file201">github.com/vantaboard/bigquery-emulator/tools/release/readme_badge.go (66.7%)</option>
+				<option value="file201">github.com/vantaboard/bigquery-emulator/tools/release/badge.go (83.3%)</option>
+				
+				<option value="file202">github.com/vantaboard/bigquery-emulator/tools/release/main.go (35.0%)</option>
+				
+				<option value="file203">github.com/vantaboard/bigquery-emulator/tools/release/readme_badge.go (66.7%)</option>
 				
 				</select>
 			</div>
@@ -41977,20 +41981,20 @@ func (s *Store) New(req SeedRequest) *Operation <span class="cov7" title="8">{
 
 // Get returns a snapshot of the operation with the given ID.
 // Returns nil when no such operation exists.
-func (s *Store) Get(id string) *Operation <span class="cov8" title="13">{
+func (s *Store) Get(id string) *Operation <span class="cov8" title="11">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
         if !ok </span><span class="cov3" title="2">{
                 return nil
         }</span>
-        <span class="cov8" title="11">return cloneOperation(op)</span>
+        <span class="cov7" title="9">return cloneOperation(op)</span>
 }
 
 // MarkRunning records that the orchestrator has started processing
 // the operation. No-op (returns false) when the operation doesn't
 // exist or has already left PENDING.
-func (s *Store) MarkRunning(id string) bool <span class="cov6" title="7">{
+func (s *Store) MarkRunning(id string) bool <span class="cov7" title="7">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
@@ -42037,7 +42041,7 @@ func (s *Store) MarkFailed(id, errMsg string) bool <span class="cov3" title="2">
 // The struct is small and Result is repointed (we never mutate a
 // Result after passing it through MarkResult), so a shallow copy is
 // sufficient.
-func cloneOperation(op *Operation) *Operation <span class="cov10" title="19">{
+func cloneOperation(op *Operation) *Operation <span class="cov10" title="17">{
         cp := *op
         return &amp;cp
 }</span>
@@ -42585,7 +42589,7 @@ func PublicDataRefsFullySeeded(text string) bool <span class="cov5" title="10">{
         for _, t := range SeededPublicTables </span><span class="cov10" title="70">{
                 seeded[t] = struct{}{}
         }</span>
-        <span class="cov5" title="10">for ref := range refs </span><span class="cov5" title="10">{
+        <span class="cov5" title="10">for ref := range refs </span><span class="cov6" title="11">{
                 if _, ok := seeded[ref]; !ok </span><span class="cov2" title="2">{
                         return false
                 }</span>
@@ -46295,24 +46299,27 @@ import (
 // Subcommand names. Centralised so the dispatch in run() and the
 // table-driven tests stay aligned.
 const (
-        cmdList  = "list"
-        cmdCheck = "check"
+        cmdList         = "list"
+        cmdCheck        = "check"
+        cmdParseTidyLog = "parse-tidy-log"
 )
 
 // run is the testable entry point. It returns an error instead of
 // calling os.Exit so tests can drive the full code path with
 // table-driven fixtures without managing process lifetime.
-func run(args []string, stdout, stderr io.Writer) error <span class="cov10" title="2">{
+func run(args []string, stdout, stderr io.Writer) error <span class="cov6" title="2">{
         if len(args) &lt; 1 </span><span class="cov0" title="0">{
                 usage(stderr)
                 return errUsage
         }</span>
-        <span class="cov10" title="2">cmd, rest := args[0], args[1:]
+        <span class="cov6" title="2">cmd, rest := args[0], args[1:]
         switch cmd </span>{
-        case cmdList:<span class="cov10" title="2">
+        case cmdList:<span class="cov6" title="2">
                 return runList(rest, stdout, stderr)</span>
         case cmdCheck:<span class="cov0" title="0">
                 return runCheck(rest, stdout, stderr)</span>
+        case cmdParseTidyLog:<span class="cov0" title="0">
+                return runParseTidyLog(rest, stdout, stderr)</span>
         case "-h", "--help", "help":<span class="cov0" title="0">
                 usage(stdout)
                 return nil</span>
@@ -46337,8 +46344,9 @@ func usage(w io.Writer) <span class="cov0" title="0">{
         _, _ = fmt.Fprint(w, `cpp-lint - first-party C++ source-only lint runner.
 
 Subcommands:
-  list      Print the canonical first-party C++ source list (one path per line).
-  check     Run the source-only checks (file size, banned logging, status misuse).
+  list            Print the canonical first-party C++ source list (one path per line).
+  check           Run the source-only checks (file size, banned logging, status misuse).
+  parse-tidy-log  Parse lint-cpp-tidy.log into CSV + triage markdown.
 
 Run "cpp-lint &lt;subcommand&gt; -h" for per-subcommand flags.
 `)
@@ -46348,7 +46356,7 @@ Run "cpp-lint &lt;subcommand&gt; -h" for per-subcommand flags.
 // on the first error. Centralising this keeps every subcommand
 // behaving the same way (and keeps tests from being polluted by the
 // stdlib's default ExitOnError behaviour).
-func flagSet(name string, stderr io.Writer) *flag.FlagSet <span class="cov10" title="2">{
+func flagSet(name string, stderr io.Writer) *flag.FlagSet <span class="cov10" title="3">{
         fs := flag.NewFlagSet(name, flag.ContinueOnError)
         fs.SetOutput(stderr)
         return fs
@@ -46507,12 +46515,12 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
         <span class="cov1" title="2">scanner := bufio.NewScanner(strings.NewReader(string(out)))
         scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
         var files []string
-        for scanner.Scan() </span><span class="cov8" title="10550">{
+        for scanner.Scan() </span><span class="cov8" title="10560">{
                 line := strings.TrimSpace(scanner.Text())
                 if line == "" </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov8" title="10550">files = append(files, line)</span>
+                <span class="cov8" title="10560">files = append(files, line)</span>
         }
         <span class="cov1" title="2">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("scan ls-files: %w", err)
@@ -46525,7 +46533,7 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
 // the ownership boundary cannot drift silently.
 func filterFirstParty(all []string) []string <span class="cov2" title="5">{
         var out []string
-        for _, p := range all </span><span class="cov8" title="10583">{
+        for _, p := range all </span><span class="cov8" title="10593">{
                 // Normalise forward slashes early. `git ls-files` always
                 // uses `/` on every platform git supports, but a stray
                 // backslash from a hand-built test fixture or a Windows
@@ -46533,7 +46541,7 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
                 // so replace backslashes directly. (filepath.ToSlash is
                 // a no-op on linux.)
                 p = strings.ReplaceAll(p, `\`, "/")
-                if !hasCPPExtension(p) </span><span class="cov8" title="9664">{
+                if !hasCPPExtension(p) </span><span class="cov8" title="9674">{
                         continue</span>
                 }
                 <span class="cov6" title="919">if !underAnyPrefix(p, firstPartyIncludeRoots) </span><span class="cov2" title="10">{
@@ -46556,13 +46564,13 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
 // case-sensitive because every first-party file in this repo
 // already uses lowercase extensions and the surrounding tooling
 // (clang-format, clang-tidy) follows the same convention.
-func hasCPPExtension(path string) bool <span class="cov8" title="10583">{
-        for _, ext := range firstPartyExtensions </span><span class="cov10" title="59770">{
+func hasCPPExtension(path string) bool <span class="cov8" title="10593">{
+        for _, ext := range firstPartyExtensions </span><span class="cov10" title="59830">{
                 if strings.HasSuffix(path, ext) </span><span class="cov6" title="919">{
                         return true
                 }</span>
         }
-        <span class="cov8" title="9664">return false</span>
+        <span class="cov8" title="9674">return false</span>
 }
 
 // underAnyPrefix returns true when `path` lives under at least one
@@ -46708,6 +46716,556 @@ func readFile(path string) ([]byte, error) <span class="cov0" title="0">{
 		<pre class="file" id="file199" style="display: none">package main
 
 import (
+        "encoding/csv"
+        "fmt"
+        "io"
+        "os"
+        "path/filepath"
+        "regexp"
+        "strconv"
+        "strings"
+)
+
+// tidyFinding is one clang-tidy diagnostic extracted from a batch log.
+type tidyFinding struct {
+        BlockFile       string // first-party file block being linted
+        File            string // diagnostic path (normalized when possible)
+        Line            int
+        Column          int
+        Severity        string
+        Check           string
+        Symbol          string
+        Message         string
+        ComplexityScore int // 0 when not a complexity finding
+}
+
+const (
+        fileKindTest    = "test"
+        fileKindFixture = "fixture"
+        dispFix         = "fix"
+)
+
+var (
+        reFileBlock  = regexp.MustCompile(`^========== (.+) ==========$`)
+        reFailed     = regexp.MustCompile(`^FAILED: (.+)$`)
+        reProcessing = regexp.MustCompile(`^Error while processing (.+)\.$`)
+        // path:line:col: severity: message [check-name,...]
+        reDiagnostic = regexp.MustCompile(`^(.+?):(\d+):(\d+): (warning|error|note): (.+?)(?: \[(.+?)\])?$`)
+        reComplexity = regexp.MustCompile(`function '([^']+)' has cognitive complexity of (\d+)`)
+)
+
+func runParseTidyLog(args []string, stdout, stderr io.Writer) error <span class="cov1" title="1">{
+        fs := flagSet(cmdParseTidyLog, stderr)
+        logPath := fs.String("log", "lint-cpp-tidy.log", "clang-tidy batch log path")
+        csvPath := fs.String("csv", "lint-cpp-tidy.csv", "CSV output path")
+        mdPath := fs.String("markdown", "docs/dev/cpp-lint-tidy-triage.md", "triage markdown output path")
+        if err := fs.Parse(args); err != nil </span><span class="cov0" title="0">{
+                return errUsage
+        }</span>
+
+        <span class="cov1" title="1">f, err := os.Open(*logPath)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("open log: %w", err)
+        }</span>
+        <span class="cov1" title="1">defer func() </span><span class="cov1" title="1">{ _ = f.Close() }</span>()
+
+        <span class="cov1" title="1">findings, failedFiles, totalBlocks := parseTidyLog(f)
+        if err := writeTidyCSV(*csvPath, findings); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov1" title="1">if err := writeTriageMarkdown(*mdPath, findings, failedFiles, totalBlocks); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov1" title="1">printTidySummary(stdout, findings, failedFiles, totalBlocks, *csvPath, *mdPath)
+        return nil</span>
+}
+
+func parseTidyLog(r io.Reader) ([]tidyFinding, map[string]struct{}, int) <span class="cov3" title="3">{
+        content, err := io.ReadAll(r)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, nil, 0
+        }</span>
+        <span class="cov3" title="3">lines := strings.Split(string(content), "\n")
+
+        failedFiles := make(map[string]struct{})
+        totalBlocks := 0
+        for _, line := range lines </span><span class="cov10" title="35">{
+                if m := reFileBlock.FindStringSubmatch(line); m != nil </span><span class="cov6" title="8">{
+                        totalBlocks++
+                        continue</span>
+                }
+                <span class="cov9" title="27">if m := reFailed.FindStringSubmatch(line); m != nil </span><span class="cov6" title="8">{
+                        failedFiles[strings.TrimSpace(m[1])] = struct{}{}
+                }</span>
+        }
+
+        <span class="cov3" title="3">var findings []tidyFinding
+        lastFailed := -1
+        for i, line := range lines </span><span class="cov10" title="35">{
+                m := reFailed.FindStringSubmatch(line)
+                if m == nil </span><span class="cov9" title="27">{
+                        continue</span>
+                }
+                <span class="cov6" title="8">failedPath := strings.TrimSpace(m[1])
+                start := lastFailed + 1
+                lastFailed = i
+                findings = append(findings, findingsForFailure(lines[start:i+1], failedPath)...)</span>
+        }
+        <span class="cov3" title="3">return findings, failedFiles, totalBlocks</span>
+}
+
+// findingsForFailure attributes diagnostics in a FAILED window onto the failed TU.
+func findingsForFailure(window []string, failedPath string) []tidyFinding <span class="cov6" title="8">{
+        var out []tidyFinding
+        processingTU := failedPath
+        windowMentionsFailed := false
+        for _, line := range window </span><span class="cov9" title="32">{
+                if strings.Contains(line, failedPath+":") </span><span class="cov5" title="7">{
+                        windowMentionsFailed = true
+                }</span>
+        }
+        <span class="cov6" title="8">for _, line := range window </span><span class="cov9" title="32">{
+                if m := reProcessing.FindStringSubmatch(line); m != nil </span><span class="cov0" title="0">{
+                        processingTU = normalizeTidyPath(m[1], failedPath)
+                }</span>
+                <span class="cov9" title="32">m := reDiagnostic.FindStringSubmatch(line)
+                if m == nil </span><span class="cov9" title="24">{
+                        continue</span>
+                }
+                <span class="cov6" title="8">severity := m[4]
+                if severity == "note" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov6" title="8">checkRaw := m[6]
+                if checkRaw == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov6" title="8">check := strings.Split(checkRaw, ",")[0]
+                check = strings.TrimPrefix(check, "-warnings-as-errors")
+
+                rawPath := m[1]
+                file := normalizeTidyPath(rawPath, processingTU)
+                switch </span>{
+                case file == failedPath, strings.HasPrefix(line, failedPath+":"):<span class="cov5" title="7"></span>
+                        // direct hit
+                case isExternalTidyPath(rawPath) &amp;&amp; windowMentionsFailed:<span class="cov0" title="0">
+                        file = failedPath</span>
+                case processingTU == failedPath:<span class="cov1" title="1"></span>
+                        // e.g. missing-header errors while linting a header TU
+                default:<span class="cov0" title="0">
+                        continue</span>
+                }
+
+                <span class="cov6" title="8">lineNum, _ := strconv.Atoi(m[2])
+                colNum, _ := strconv.Atoi(m[3])
+                msg := m[5]
+                symbol := ""
+                complexity := 0
+                if cm := reComplexity.FindStringSubmatch(msg); cm != nil </span><span class="cov5" title="6">{
+                        symbol = cm[1]
+                        complexity, _ = strconv.Atoi(cm[2])
+                }</span>
+                <span class="cov6" title="8">out = append(out, tidyFinding{
+                        BlockFile:       failedPath,
+                        File:            file,
+                        Line:            lineNum,
+                        Column:          colNum,
+                        Severity:        severity,
+                        Check:           check,
+                        Symbol:          symbol,
+                        Message:         msg,
+                        ComplexityScore: complexity,
+                })</span>
+        }
+        <span class="cov6" title="8">return dedupeFindings(out)</span>
+}
+
+func isExternalTidyPath(raw string) bool <span class="cov1" title="1">{
+        return strings.HasPrefix(raw, "bazel-out/") ||
+                strings.HasPrefix(raw, "external/") ||
+                strings.Contains(raw, "/external/googlesql")
+}</span>
+
+func dedupeFindings(in []tidyFinding) []tidyFinding <span class="cov6" title="8">{
+        seen := make(map[string]struct{})
+        var out []tidyFinding
+        for _, f := range in </span><span class="cov6" title="8">{
+                key := fmt.Sprintf("%s:%d:%d:%s:%s", f.File, f.Line, f.Column, f.Check, f.Message)
+                if _, ok := seen[key]; ok </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov6" title="8">seen[key] = struct{}{}
+                out = append(out, f)</span>
+        }
+        <span class="cov6" title="8">return out</span>
+}
+
+// normalizeTidyPath maps clang-tidy diagnostic paths onto first-party
+// repo-relative paths. External / bazel-out paths are attributed to the
+// TU block file so triage stays one row per `FAILED:` entry.
+func normalizeTidyPath(raw, blockFile string) string <span class="cov6" title="8">{
+        path := strings.TrimSpace(raw)
+        path = strings.TrimPrefix(path, "./")
+        if strings.HasPrefix(path, "/") </span><span class="cov0" title="0">{
+                if idx := strings.Index(path, "/backend/"); idx &gt;= 0 </span><span class="cov0" title="0">{
+                        return strings.TrimPrefix(path[idx+1:], "/")
+                }</span>
+                <span class="cov0" title="0">const marker = "bigquery-emulator/"
+                if _, after, ok := strings.Cut(path, marker); ok </span><span class="cov0" title="0">{
+                        return after
+                }</span>
+                <span class="cov0" title="0">return blockFile</span>
+        }
+        <span class="cov6" title="8">if strings.HasPrefix(path, "external/") || strings.HasPrefix(path, "bazel-out/") </span><span class="cov0" title="0">{
+                return blockFile
+        }</span>
+        <span class="cov6" title="8">return path</span>
+}
+
+func writeTidyCSV(path string, findings []tidyFinding) error <span class="cov1" title="1">{
+        //nolint:gosec // Output path comes from task wrapper defaults or explicit flags.
+        if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil &amp;&amp; !os.IsExist(err) </span><span class="cov0" title="0">{
+                // csv at repo root has no dir
+                if filepath.Dir(path) != "." </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        //nolint:gosec // Output path comes from task wrapper defaults or explicit flags.
+        <span class="cov1" title="1">out, err := os.Create(path)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("create csv: %w", err)
+        }</span>
+        <span class="cov1" title="1">defer func() </span><span class="cov1" title="1">{ _ = out.Close() }</span>()
+
+        <span class="cov1" title="1">w := csv.NewWriter(out)
+        if err := w.Write([]string{
+                "block_file", "file", "line", "column", "severity", "check", "symbol", "message", "complexity_score",
+        }); err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov1" title="1">for _, f := range findings </span><span class="cov3" title="3">{
+                if err := w.Write([]string{
+                        f.BlockFile,
+                        f.File,
+                        strconv.Itoa(f.Line),
+                        strconv.Itoa(f.Column),
+                        f.Severity,
+                        f.Check,
+                        f.Symbol,
+                        f.Message,
+                        strconv.Itoa(f.ComplexityScore),
+                }); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov1" title="1">w.Flush()
+        return w.Error()</span>
+}
+</pre>
+		
+		<pre class="file" id="file200" style="display: none">package main
+
+import (
+        "fmt"
+        "io"
+        "os"
+        "path/filepath"
+        "sort"
+        "strings"
+)
+
+type fileSummary struct {
+        File            string
+        Findings        []tidyFinding
+        WorstComplexity int
+        Checks          map[string]int
+}
+
+func failedFileForFinding(f tidyFinding, failedFiles map[string]struct{}) string <span class="cov7" title="5">{
+        if _, ok := failedFiles[f.File]; ok </span><span class="cov7" title="5">{
+                return f.File
+        }</span>
+        <span class="cov0" title="0">if _, ok := failedFiles[f.BlockFile]; ok </span><span class="cov0" title="0">{
+                return f.BlockFile
+        }</span>
+        <span class="cov0" title="0">return ""</span>
+}
+
+func summarizeByFile(findings []tidyFinding, failedFiles map[string]struct{}) []fileSummary <span class="cov3" title="2">{
+        byFile := make(map[string]*fileSummary)
+        for path := range failedFiles </span><span class="cov7" title="5">{
+                byFile[path] = &amp;fileSummary{File: path, Checks: make(map[string]int)}
+        }</span>
+        <span class="cov3" title="2">for _, f := range findings </span><span class="cov7" title="5">{
+                key := failedFileForFinding(f, failedFiles)
+                if key == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov7" title="5">s := byFile[key]
+                s.Findings = append(s.Findings, f)
+                s.Checks[f.Check]++
+                if f.ComplexityScore &gt; s.WorstComplexity </span><span class="cov6" title="4">{
+                        s.WorstComplexity = f.ComplexityScore
+                }</span>
+        }
+        <span class="cov3" title="2">out := make([]fileSummary, 0, len(byFile))
+        for _, s := range byFile </span><span class="cov7" title="5">{
+                out = append(out, *s)
+        }</span>
+        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov6" title="4">{ return out[i].File &lt; out[j].File }</span>)
+        <span class="cov3" title="2">return out</span>
+}
+
+func subsystemFor(path string) string <span class="cov8" title="6">{
+        switch </span>{
+        case strings.HasPrefix(path, "backend/catalog/"):<span class="cov3" title="2">
+                return "catalog"</span>
+        case strings.HasPrefix(path, "backend/engine/control/"):<span class="cov0" title="0">
+                return "control"</span>
+        case strings.HasPrefix(path, "backend/engine/coordinator/"):<span class="cov0" title="0">
+                return "coordinator"</span>
+        case strings.HasPrefix(path, "backend/engine/duckdb/"):<span class="cov3" title="2">
+                return "duckdb"</span>
+        case strings.HasPrefix(path, "backend/engine/semantic/"):<span class="cov3" title="2">
+                return "semantic"</span>
+        case strings.HasPrefix(path, "backend/storage/"):<span class="cov0" title="0">
+                return "storage"</span>
+        case strings.HasPrefix(path, "backend/schema/"):<span class="cov0" title="0">
+                return "schema"</span>
+        case strings.HasPrefix(path, "backend/sqltools/"):<span class="cov0" title="0">
+                return "sqltools"</span>
+        case strings.HasPrefix(path, "frontend/handlers/"):<span class="cov0" title="0">
+                return "frontend"</span>
+        case strings.HasPrefix(path, "binaries/"):<span class="cov0" title="0">
+                return "binaries"</span>
+        case strings.HasPrefix(path, "tools/googlesql-prebuilt/smoke/"):<span class="cov0" title="0">
+                return "smoke"</span>
+        default:<span class="cov0" title="0">
+                return "other"</span>
+        }
+}
+
+func fileKind(path string) string <span class="cov7" title="5">{
+        base := filepath.Base(path)
+        switch </span>{
+        case strings.HasSuffix(base, "_test.cc"):<span class="cov0" title="0">
+                return fileKindTest</span>
+        case strings.HasSuffix(base, "_test_fixture.h"), strings.HasSuffix(base, "_internal.h"):<span class="cov0" title="0">
+                return fileKindFixture</span>
+        case strings.HasSuffix(base, ".h"), strings.HasSuffix(base, ".hpp"):<span class="cov0" title="0">
+                return "header"</span>
+        default:<span class="cov7" title="5">
+                return "production"</span>
+        }
+}
+
+func dispositionFor(s fileSummary) (disp string, wave int) <span class="cov5" title="3">{
+        hasNonComplexity := false
+        for check := range s.Checks </span><span class="cov5" title="3">{
+                if check != "readability-function-cognitive-complexity" &amp;&amp;
+                        check != "readability-function-size" </span><span class="cov1" title="1">{
+                        hasNonComplexity = true
+                        break</span>
+                }
+        }
+        <span class="cov5" title="3">if hasNonComplexity </span><span class="cov1" title="1">{
+                for check := range s.Checks </span><span class="cov1" title="1">{
+                        if strings.HasPrefix(check, "modernize-") </span><span class="cov0" title="0">{
+                                return "autofix", 0
+                        }</span>
+                }
+                <span class="cov1" title="1">return dispFix, 3</span>
+        }
+
+        <span class="cov3" title="2">kind := fileKind(s.File)
+        score := s.WorstComplexity
+        switch </span>{
+        case score &gt; 50:<span class="cov1" title="1">
+                return dispFix, 1</span>
+        case score &gt;= 35:<span class="cov1" title="1">
+                return dispFix, 2</span>
+        case score &gt;= 26:<span class="cov0" title="0">
+                if kind == fileKindTest || kind == fileKindFixture </span><span class="cov0" title="0">{
+                        return "NOLINT", 4
+                }</span>
+                <span class="cov0" title="0">return dispFix, 4</span>
+        case kind == fileKindTest || kind == fileKindFixture:<span class="cov0" title="0">
+                return "NOLINT", 4</span>
+        default:<span class="cov0" title="0">
+                return dispFix, 4</span>
+        }
+}
+
+func writeTriageMarkdown(path string, findings []tidyFinding, failedFiles map[string]struct{}, totalBlocks int) error <span class="cov1" title="1">{
+        //nolint:gosec // Output path comes from task wrapper defaults or explicit flags.
+        if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("mkdir triage doc: %w", err)
+        }</span>
+        <span class="cov1" title="1">content := buildTriageMarkdown(findings, failedFiles, totalBlocks)
+        //nolint:gosec // Generated triage doc is intentionally world-readable.
+        return os.WriteFile(path, []byte(content), 0o644)</span>
+}
+
+func buildTriageMarkdown(findings []tidyFinding, failedFiles map[string]struct{}, totalBlocks int) string <span class="cov1" title="1">{
+        summaries := summarizeByFile(findings, failedFiles)
+
+        checkCounts := make(map[string]int)
+        complexityCount := 0
+        for _, f := range findings </span><span class="cov5" title="3">{
+                checkCounts[f.Check]++
+                if f.ComplexityScore &gt; 0 </span><span class="cov3" title="2">{
+                        complexityCount++
+                }</span>
+        }
+
+        <span class="cov1" title="1">var b strings.Builder
+        writeTriageSummary(&amp;b, summaries, findings, checkCounts, complexityCount, totalBlocks)
+        writeTriageMatrix(&amp;b, summaries)
+        writeTriageWaves(&amp;b)
+        return b.String()</span>
+}
+
+func writeTriageSummary(
+        b *strings.Builder,
+        summaries []fileSummary,
+        findings []tidyFinding,
+        checkCounts map[string]int,
+        complexityCount, totalBlocks int,
+) <span class="cov1" title="1">{
+        b.WriteString("# clang-tidy triage (first-party C++)\n\n")
+        b.WriteString("Generated by `task lint:cpp:tidy-report` from `lint-cpp-tidy.log`.\n\n")
+        b.WriteString("## Summary\n\n")
+        _, _ = fmt.Fprintf(b, "| Metric | Value |\n|---|---|\n")
+        _, _ = fmt.Fprintf(b, "| Files scanned | %d |\n", totalBlocks)
+        _, _ = fmt.Fprintf(b, "| Files failed | %d |\n", len(summaries))
+        _, _ = fmt.Fprintf(b, "| Total findings | %d |\n", len(findings))
+        _, _ = fmt.Fprintf(b, "| Cognitive-complexity findings | %d |\n\n", complexityCount)
+
+        b.WriteString("**Check mix:** Failures are **not** complexity-only. ")
+        b.WriteString(
+                "Cognitive-complexity is the largest bucket, but analyzer and cppcoreguidelines checks also fail the lane.\n\n",
+        )
+
+        b.WriteString("### Findings by check\n\n")
+        b.WriteString("| Check | Count |\n|---|---|\n")
+        for _, check := range sortedKeys(checkCounts) </span><span class="cov3" title="2">{
+                _, _ = fmt.Fprintf(b, "| `%s` | %d |\n", check, checkCounts[check])
+        }</span>
+        <span class="cov1" title="1">b.WriteString("\n### Failed files by subsystem\n\n")
+        b.WriteString("| Subsystem | Files |\n|---|---|\n")
+        subFailed := make(map[string]int)
+        for _, s := range summaries </span><span class="cov5" title="3">{
+                subFailed[subsystemFor(s.File)]++
+        }</span>
+        <span class="cov1" title="1">for _, sub := range sortedKeys(subFailed) </span><span class="cov5" title="3">{
+                _, _ = fmt.Fprintf(b, "| %s | %d |\n", sub, subFailed[sub])
+        }</span>
+}
+
+func writeTriageMatrix(b *strings.Builder, summaries []fileSummary) <span class="cov1" title="1">{
+        b.WriteString("\n## Disposition matrix\n\n")
+        b.WriteString("| File | Findings | Checks | Worst complexity | Subsystem | Kind | Disposition | Wave | Notes |\n")
+        b.WriteString("|---|---:|---|---:|---|---|---|---:|---|\n")
+        for _, s := range summaries </span><span class="cov5" title="3">{
+                checks := sortedCheckList(s.Checks)
+                symbols := uniqueSymbols(s.Findings)
+                disp, wave := dispositionFor(s)
+                notes := strings.Join(symbols, ", ")
+                if len(notes) &gt; 80 </span><span class="cov0" title="0">{
+                        notes = notes[:77] + "..."
+                }</span>
+                <span class="cov5" title="3">_, _ = fmt.Fprintf(b, "| `%s` | %d | %s | %d | %s | %s | %s | %d | %s |\n",
+                        s.File, len(s.Findings), checks, s.WorstComplexity,
+                        subsystemFor(s.File), fileKind(s.File), disp, wave, notes)</span>
+        }
+}
+
+func writeTriageWaves(b *strings.Builder) <span class="cov1" title="1">{
+        b.WriteString("\n## Remediation waves\n\n")
+        b.WriteString("1. **Wave 0** — Tooling + `clang-tidy --fix` on rows dispositioned `autofix`.\n")
+        b.WriteString("2. **Wave 1** — P0 complexity (&gt;50): dedicated PRs with tests.\n")
+        b.WriteString("3. **Wave 2** — P1 complexity (35–50): one PR per subsystem.\n")
+        b.WriteString("4. **Wave 3** — Non-complexity correctness (`bugprone-*`, `clang-analyzer-*`).\n")
+        b.WriteString("5. **Wave 4** — P2 complexity (26–34), tests/fixtures, scoped NOLINT.\n")
+}</span>
+
+func sortedKeys(m map[string]int) []string <span class="cov8" title="6">{
+        keys := make([]string, 0, len(m))
+        for k := range m </span><span class="cov10" title="10">{
+                keys = append(keys, k)
+        }</span>
+        <span class="cov8" title="6">sort.Slice(keys, func(i, j int) bool </span><span class="cov6" title="4">{
+                if m[keys[i]] != m[keys[j]] </span><span class="cov3" title="2">{
+                        return m[keys[i]] &gt; m[keys[j]]
+                }</span>
+                <span class="cov3" title="2">return keys[i] &lt; keys[j]</span>
+        })
+        <span class="cov8" title="6">return keys</span>
+}
+
+func sortedCheckList(m map[string]int) string <span class="cov5" title="3">{
+        keys := sortedKeys(m)
+        parts := make([]string, len(keys))
+        for i, k := range keys </span><span class="cov5" title="3">{
+                parts[i] = fmt.Sprintf("%s (%d)", k, m[k])
+        }</span>
+        <span class="cov5" title="3">return strings.Join(parts, "; ")</span>
+}
+
+func uniqueSymbols(findings []tidyFinding) []string <span class="cov5" title="3">{
+        seen := make(map[string]struct{})
+        var out []string
+        for _, f := range findings </span><span class="cov5" title="3">{
+                name := f.Symbol
+                if name == "" </span><span class="cov1" title="1">{
+                        name = truncateMsg(f.Message, 40)
+                }</span>
+                <span class="cov5" title="3">if _, ok := seen[name]; ok </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov5" title="3">seen[name] = struct{}{}
+                out = append(out, name)</span>
+        }
+        <span class="cov5" title="3">return out</span>
+}
+
+func truncateMsg(s string, n int) string <span class="cov1" title="1">{
+        if len(s) &lt;= n </span><span class="cov1" title="1">{
+                return s
+        }</span>
+        <span class="cov0" title="0">return s[:n-3] + "..."</span>
+}
+
+func printTidySummary(
+        w io.Writer,
+        findings []tidyFinding,
+        failedFiles map[string]struct{},
+        totalBlocks int,
+        csvPath, mdPath string,
+) <span class="cov1" title="1">{
+        checkCounts := make(map[string]int)
+        complexityCount := 0
+        for _, f := range findings </span><span class="cov5" title="3">{
+                checkCounts[f.Check]++
+                if f.ComplexityScore &gt; 0 </span><span class="cov3" title="2">{
+                        complexityCount++
+                }</span>
+        }
+        <span class="cov1" title="1">_, _ = fmt.Fprintf(w, "lint:cpp:tidy-report: scanned %d file blocks, %d failed files, %d findings\n",
+                totalBlocks, len(failedFiles), len(findings))
+        _, _ = fmt.Fprintf(w, "  cognitive-complexity findings: %d\n", complexityCount)
+        _, _ = fmt.Fprintf(w, "  checks:\n")
+        for _, check := range sortedKeys(checkCounts) </span><span class="cov3" title="2">{
+                _, _ = fmt.Fprintf(w, "    %s: %d\n", check, checkCounts[check])
+        }</span>
+        <span class="cov1" title="1">_, _ = fmt.Fprintf(w, "  csv: %s\n", csvPath)
+        _, _ = fmt.Fprintf(w, "  triage: %s\n", mdPath)</span>
+}
+</pre>
+		
+		<pre class="file" id="file201" style="display: none">package main
+
+import (
         "encoding/json"
         "fmt"
         "io"
@@ -46790,7 +47348,7 @@ func emitBadge(b *badgeJSON, outPath string, stdout io.Writer) error <span class
 }
 </pre>
 		
-		<pre class="file" id="file200" style="display: none">// Command release emits shields.io endpoint JSON for the README
+		<pre class="file" id="file202" style="display: none">// Command release emits shields.io endpoint JSON for the README
 // release badge. The release workflow publishes badge-release.json
 // so the badge does not depend on shields.io's shared GitHub API
 // token pool.
@@ -46859,7 +47417,7 @@ func main() <span class="cov0" title="0">{
 }
 </pre>
 		
-		<pre class="file" id="file201" style="display: none">package main
+		<pre class="file" id="file203" style="display: none">package main
 
 import (
         "errors"
