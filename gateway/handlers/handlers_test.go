@@ -92,7 +92,12 @@ func TestBQStyleMessageRewritesStorageErrors(t *testing.T) {
 		{
 			name: "invalid timestamp parameter",
 			in:   "semantic: invalid TIMESTAMP parameter value 'not-a-timestamp'",
-			want: "Invalid timestamp string",
+			want: bqInvalidTimestampStringMsg,
+		},
+		{
+			name: "invalid timestamp wire string",
+			in:   "semantic: invalid TIMESTAMP value 'not-a-timestamp'",
+			want: bqInvalidTimestampStringMsg,
 		},
 	}
 	for _, tc := range tests {

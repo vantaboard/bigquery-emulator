@@ -85,7 +85,7 @@ def test_distinct_dedup_profiles(
             f"""
             SELECT DISTINCT city
             FROM `{dataset_ref}.v_profiles`
-            WHERE COALESCE(is_deleted, FALSE)
+            WHERE COALESCE(is_deleted, FALSE) = FALSE
               AND city IS NOT NULL
             ORDER BY city
             """
@@ -98,7 +98,7 @@ def test_distinct_dedup_profiles(
             f"""
             SELECT DISTINCT value
             FROM `{dataset_ref}.v_profiles`, UNNEST(tags) AS value
-            WHERE COALESCE(is_deleted, FALSE)
+            WHERE COALESCE(is_deleted, FALSE) = FALSE
             ORDER BY value
             """
         ).result()

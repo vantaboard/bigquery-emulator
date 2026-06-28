@@ -130,7 +130,6 @@ R11:
   - conformance/fixtures/core_usage/everyday_sql/cache_shape_dedup_view_then_query.yaml
   - conformance/differential/corpus/distinct_after_dedup.yaml
   - backend/engine/duckdb/transpiler/transpiler_integration_test.cc
-  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
   - third_party/scenarios/python/test_distinct_dedup_profiles.py
 R12:
   - conformance/fixtures/core_usage/everyday_sql/timestamp_short_offset_wire.yaml

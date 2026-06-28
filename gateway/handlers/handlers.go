@@ -267,6 +267,10 @@ func grpcToHTTPError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
+// bqInvalidTimestampStringMsg is BigQuery's wire message for rejected
+// TIMESTAMP parameter / wire-string values (see params_timestamp_reject).
+const bqInvalidTimestampStringMsg = "Invalid timestamp string"
+
 // notFoundResourceRE / alreadyExistsResourceRE match the engine's
 // canonical storage-layer error strings produced by DuckDBStorage
 // (see backend/storage/duckdb/duckdb_storage.cc): "<noun> not found:
@@ -305,8 +309,9 @@ func bqStyleMessage(msg string) string {
 	if m := alreadyExistsResourceRE.FindStringSubmatch(msg); m != nil {
 		return bqStyleResourceMessage("Already Exists", m[1], m[2], m[3], m[4])
 	}
-	if strings.HasPrefix(msg, "semantic: invalid TIMESTAMP parameter value ") {
-		return "Invalid timestamp string"
+	if strings.HasPrefix(msg, "semantic: invalid TIMESTAMP parameter value ") ||
+		strings.HasPrefix(msg, "semantic: invalid TIMESTAMP value ") {
+		return bqInvalidTimestampStringMsg
 	}
 	return msg
 }
