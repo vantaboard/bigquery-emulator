@@ -115,6 +115,7 @@ cc_library(
     name = "sql_preprocess",
     srcs = [
         "sql_preprocess.cc",
+        "sql_preprocess_as_paren_rewrites.cc",
         "sql_preprocess_rewrites.cc",
         "sql_preprocess_table_decorators.cc",
     ],
