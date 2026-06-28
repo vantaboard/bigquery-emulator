@@ -64,7 +64,7 @@ def test_distinct_dedup_profiles(
             {
                 "id": 3,
                 "city": None,
-                "tags": ["orphan"],
+                "tags": [],
                 "is_deleted": False,
                 "source_updated_at": "2025-01-01T00:00:00",
             },
