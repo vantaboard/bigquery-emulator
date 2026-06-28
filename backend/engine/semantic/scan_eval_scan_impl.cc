@@ -179,7 +179,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
               Value vb = bv == b.end() ? Value() : bv->second;
               if (ValueEqual(va, vb)) continue;
               if (va.is_null() || vb.is_null()) {
-                bool nulls_first;
+                bool nulls_first = false;
                 switch (item->null_order()) {
                   case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
                     nulls_first = true;
@@ -263,7 +263,11 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     case ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN:
     case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN: {
       const auto* aggregate =
-          static_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+          dynamic_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+      if (aggregate == nullptr) {
+        return absl::InvalidArgumentError(
+            "semantic: aggregate scan has unexpected node kind");
+      }
       return MaterializeAggregateScan(*aggregate, ctx);
     }
     case ::googlesql::RESOLVED_ANALYTIC_SCAN:

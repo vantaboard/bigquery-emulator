@@ -44,7 +44,7 @@ uint64_t ShiftMix(uint64_t value) {
 }
 
 uint64_t Load64(absl::string_view bytes, size_t offset) {
-  uint64_t out;
+  uint64_t out = 0;
   std::memcpy(&out, bytes.data() + offset, sizeof(out));
   return out;
 }
@@ -167,7 +167,7 @@ uint64_t FullFingerprint(absl::string_view bytes) {
 }
 
 uint64_t Fingerprint2011(absl::string_view bytes) {
-  uint64_t result;
+  uint64_t result = 0;
   if (bytes.size() <= 32) {
     result = MurmurHash64WithSeed(bytes, kHashK0 ^ kHashK1 ^ kHashK2);
   } else if (bytes.size() <= 64) {

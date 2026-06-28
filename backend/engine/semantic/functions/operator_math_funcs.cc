@@ -105,7 +105,7 @@ double RoundHalfAwayFromZero(double x, int64_t precision) {
   }
   const double factor = std::pow(10.0, static_cast<double>(precision));
   const double scaled = x * factor;
-  double rounded;
+  double rounded = 0.0;
   if (scaled >= 0.0) {
     rounded = std::floor(scaled + 0.5);
   } else {

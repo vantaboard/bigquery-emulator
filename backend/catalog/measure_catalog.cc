@@ -53,7 +53,8 @@ const ::googlesql::ResolvedExpr* ExtractSingleMeasureExpression(
       case ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN:
       case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN: {
         const auto* aggregate =
-            static_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+            dynamic_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+        if (aggregate == nullptr) return nullptr;
         if (aggregate->aggregate_list_size() != 1) return nullptr;
         const ::googlesql::ResolvedComputedColumnBase* cc =
             aggregate->aggregate_list(0);

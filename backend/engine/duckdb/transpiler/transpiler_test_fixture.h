@@ -333,7 +333,7 @@ class TranspilerBindFixture : public TranspilerTest {
     ASSERT_FALSE(emitted.empty()) << "transpiler returned empty SQL for:\n"
                                   << source_sql;
     SCOPED_TRACE(emitted);
-    ::duckdb_result result;
+    ::duckdb_result result{};
     const auto rc = ::duckdb_query(conn_, emitted.c_str(), &result);
     if (rc != ::DuckDBSuccess) {
       const char* err = ::duckdb_result_error(&result);

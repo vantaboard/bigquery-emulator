@@ -154,7 +154,11 @@ absl::StatusOr<Value> FinishAggregateFromArgColumns(
           ::googlesql::SQLFunction::kSQLFunctionGroup &&
       agg.function()->IsAggregate()) {
     const auto* sql_fn =
-        static_cast<const ::googlesql::SQLFunction*>(agg.function());
+        dynamic_cast<const ::googlesql::SQLFunction*>(agg.function());
+    if (sql_fn == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: aggregate function is not an SQL function");
+    }
     std::vector<size_t> all_rows;
     all_rows.reserve(input_rows.size());
     for (size_t i = 0; i < input_rows.size(); ++i) {

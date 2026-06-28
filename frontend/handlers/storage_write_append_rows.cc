@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -88,7 +89,7 @@ using internal::CellToValue;
     // CreateWriteStream requests while it writes the parquet file.
     backend::storage::TableId table;
     backend::schema::TableSchema schema;
-    v1::WriteStream::Type stream_type;
+    std::optional<v1::WriteStream::Type> stream_type;
     bool stream_finalized = false;
     {
       absl::MutexLock lock(&mu_);

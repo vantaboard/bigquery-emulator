@@ -410,7 +410,11 @@ GoogleSqlCatalog::MaterializeTablePhysical(absl::string_view project_id,
   for (std::vector<std::string>::size_type i = 0; i < keys_.size(); ++i) {
     if (keys_[i] == key) {
       MaterializedTableBuild built;
-      built.table = static_cast<StorageTable*>(tables_[i].get());
+      built.table = dynamic_cast<StorageTable*>(tables_[i].get());
+      if (built.table == nullptr) {
+        return absl::InternalError(absl::StrCat(
+            "GoogleSqlCatalog: cached table is not a StorageTable: ", key));
+      }
       return built;
     }
   }

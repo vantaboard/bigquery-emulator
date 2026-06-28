@@ -219,9 +219,11 @@ absl::StatusOr<Value> NetIpNetMask(const std::vector<Value>& args) {
         max_prefix));
   }
   std::string mask(n, '\0');
+  auto* mask_bytes = reinterpret_cast<unsigned char*>(mask.data());
   for (int64_t i = 0; i < p; ++i) {
-    mask[static_cast<size_t>(i / 8)] |=
-        static_cast<char>(0x80 >> static_cast<int>(i % 8));
+    const unsigned char bit =
+        static_cast<unsigned char>(0x80u) >> static_cast<unsigned>(i % 8);
+    mask_bytes[static_cast<size_t>(i / 8)] |= bit;
   }
   return Value::Bytes(std::move(mask));
 }
@@ -246,8 +248,11 @@ absl::StatusOr<Value> NetIpTrunc(const std::vector<Value>& args) {
         "NET.IP_TRUNC: length must be in the range from 0 to ", max_prefix));
   }
   std::string out = *bytes;
+  auto* out_bytes = reinterpret_cast<unsigned char*>(out.data());
   for (size_t i = static_cast<size_t>(prefix); i < out.size() * 8; ++i) {
-    out[i / 8] &= static_cast<char>(~(0x80 >> (i % 8)));
+    const unsigned char bit =
+        static_cast<unsigned char>(0x80u) >> static_cast<unsigned>(i % 8);
+    out_bytes[i / 8] &= static_cast<unsigned char>(~bit);
   }
   return Value::Bytes(std::move(out));
 }

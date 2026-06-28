@@ -366,7 +366,7 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
     if (*b >= 64) {
       return Value::Int64(0);
     }
-    return Value::Int64(static_cast<uint64_t>(*a) << *b);
+    return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(*a) << *b));
   }
   if (name == "$bitwise_right_shift") {
     if (*b < 0) {

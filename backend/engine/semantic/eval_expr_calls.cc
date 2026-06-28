@@ -110,11 +110,20 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   std::vector<std::string> arg_names;
   if (fn->GetGroup() ==
       ::googlesql::TemplatedSQLFunction::kTemplatedSQLFunctionGroup) {
-    arg_names = static_cast<const ::googlesql::TemplatedSQLFunction*>(fn)
-                    ->GetArgumentNames();
+    const auto* templated =
+        dynamic_cast<const ::googlesql::TemplatedSQLFunction*>(fn);
+    if (templated == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: SQL UDF call is not a templated function");
+    }
+    arg_names = templated->GetArgumentNames();
   } else if (fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
-    arg_names =
-        static_cast<const ::googlesql::SQLFunction*>(fn)->GetArgumentNames();
+    const auto* sql_fn = dynamic_cast<const ::googlesql::SQLFunction*>(fn);
+    if (sql_fn == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: SQL UDF call is not an SQL function");
+    }
+    arg_names = sql_fn->GetArgumentNames();
   } else {
     return absl::InvalidArgumentError(
         "semantic: SQL UDF call is not a templated or SQL function");
@@ -205,7 +214,11 @@ absl::StatusOr<Value> EvalFunctionCall(
   }
   if (fn != nullptr &&
       fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
-    const auto* sql_fn = static_cast<const ::googlesql::SQLFunction*>(fn);
+    const auto* sql_fn = dynamic_cast<const ::googlesql::SQLFunction*>(fn);
+    if (sql_fn == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: SQL UDF call is not an SQL function");
+    }
     if (sql_fn->FunctionExpression() != nullptr &&
         catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
       return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);

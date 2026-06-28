@@ -279,7 +279,7 @@ WildcardTable::CreateEvaluatorTableIterator(
   if (column_idxs.empty()) {
     idxs.resize(union_schema_.columns.size());
     for (size_t i = 0; i < union_schema_.columns.size(); ++i)
-      idxs[i] = i;
+      idxs[i] = static_cast<int>(i);
   } else {
     idxs.assign(column_idxs.begin(), column_idxs.end());
   }

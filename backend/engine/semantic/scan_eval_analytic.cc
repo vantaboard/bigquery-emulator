@@ -37,7 +37,7 @@ int CompareOrderByItem(const ::googlesql::ResolvedOrderByItem* item,
   if (item == nullptr) return 0;
   if (ValueEqual(va, vb)) return 0;
   if (va.is_null() || vb.is_null()) {
-    bool nulls_first;
+    bool nulls_first = false;
     switch (item->null_order()) {
       case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
         nulls_first = true;

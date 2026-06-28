@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -71,7 +72,7 @@ absl::StatusOr<Value> ParseListElementToken(
     case schema::ColumnType::kInt64: {
       const std::string raw(token);
       char* end = nullptr;
-      const long long v = std::strtoll(raw.c_str(), &end, 10);
+      const int64_t v = std::strtoll(raw.c_str(), &end, 10);
       if (end == raw.c_str() + raw.size()) return Value::Int64(v);
       break;
     }
@@ -145,9 +146,9 @@ absl::StatusOr<Value> ParseStructFieldLiteral(
     }
     case schema::ColumnType::kInt64: {
       char* end = nullptr;
-      const long long v = std::strtoll(trimmed.data(), &end, 10);
+      const int64_t v = std::strtoll(trimmed.data(), &end, 10);
       if (end != trimmed.data() && end == trimmed.data() + trimmed.size()) {
-        return Value::Int64(static_cast<int64_t>(v));
+        return Value::Int64(v);
       }
       return Value::String(std::string(trimmed));
     }

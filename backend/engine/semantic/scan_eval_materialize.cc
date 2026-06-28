@@ -95,11 +95,16 @@ void PopulateColumnNameBindingsDeep(
       case ::googlesql::RESOLVED_AGGREGATE_SCAN:
       case ::googlesql::RESOLVED_ANONYMIZED_AGGREGATE_SCAN:
       case ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN:
-      case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN:
-        scan = StripBarrierScans(
-            static_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan)
-                ->input_scan());
+      case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN: {
+        const auto* aggregate =
+            dynamic_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+        if (aggregate == nullptr) {
+          scan = nullptr;
+          break;
+        }
+        scan = StripBarrierScans(aggregate->input_scan());
         break;
+      }
       case ::googlesql::RESOLVED_ARRAY_SCAN:
         scan = StripBarrierScans(
             scan->GetAs<::googlesql::ResolvedArrayScan>()->input_scan());

@@ -201,7 +201,8 @@ using internal::ValueToCell;
   }
 
   const std::int64_t split_at =
-      range_start + static_cast<std::int64_t>(std::floor(span * fraction));
+      range_start + static_cast<std::int64_t>(
+                        std::floor(static_cast<double>(span) * fraction));
   if (split_at <= range_start || split_at >= range_end) {
     return ::grpc::Status(
         ::grpc::StatusCode::FAILED_PRECONDITION,

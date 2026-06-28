@@ -165,14 +165,14 @@ std::string RenderVersionIndexJson(const VersionIndex& index) {
   version_objs.reserve(index.versions.size());
   for (const VersionEntry& v : index.versions) {
     version_objs.push_back(
-        absl::StrFormat(R"({"valid_from_ms":%lld,"file":"%s"})",
-                        static_cast<long long>(v.valid_from_ms),
+        absl::StrFormat(R"({"valid_from_ms":%d,"file":"%s"})",
+                        v.valid_from_ms,
                         EscapeJsonString(v.file)));
   }
   return absl::StrFormat(
-      R"({"created_ts_ms":%lld,"current_ts_ms":%lld,"versions":[%s]})",
-      static_cast<long long>(index.created_ts_ms),
-      static_cast<long long>(index.current_ts_ms),
+      R"({"created_ts_ms":%d,"current_ts_ms":%d,"versions":[%s]})",
+      index.created_ts_ms,
+      index.current_ts_ms,
       absl::StrJoin(version_objs, ","));
 }
 
@@ -232,14 +232,14 @@ absl::Status InvalidSnapshotTimeError(const TableId& id,
                                       std::int64_t as_of_ms,
                                       std::int64_t earliest_ms) {
   return absl::InvalidArgumentError(absl::StrFormat(
-      "Invalid snapshot time %lld for table %s:%s.%s@%lld. Cannot read before "
-      "%lld.",
-      static_cast<long long>(as_of_ms),
+      "Invalid snapshot time %d for table %s:%s.%s@%d. Cannot read before "
+      "%d.",
+      as_of_ms,
       id.project_id,
       id.dataset_id,
       id.table_id,
-      static_cast<long long>(as_of_ms),
-      static_cast<long long>(earliest_ms)));
+      as_of_ms,
+      earliest_ms));
 }
 
 }  // namespace

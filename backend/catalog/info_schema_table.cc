@@ -317,7 +317,7 @@ InfoSchemaTable::CreateEvaluatorTableIterator(
   if (column_idxs.empty()) {
     idxs.resize(row_schema_.columns.size());
     for (size_t i = 0; i < row_schema_.columns.size(); ++i)
-      idxs[i] = i;
+      idxs[i] = static_cast<int>(i);
   } else {
     idxs.assign(column_idxs.begin(), column_idxs.end());
   }
