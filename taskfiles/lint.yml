@@ -16,6 +16,8 @@
 #        task lint:cpp:format-fix  (apply clang-format -i)
 #        task lint:cpp:source      (file-length / banned-logging / status checks)
 #        task lint:cpp:tidy        (clang-tidy, compile-aware, slow lane)
+#        task lint:cpp:tidy-parallel (per-file clang-tidy with JOBS parallelism)
+#        task lint:cpp:tidy-report (parse lint-cpp-tidy.log → CSV + triage doc)
 #        task lint:cpp:cppcheck    (cppcheck, slow secondary-analysis lane)
 #
 # The fast gate stays snappy so the auto-commit pre-commit hook
@@ -426,6 +428,87 @@ tasks:
         # shellcheck disable=SC2086  # intentional word-split for the file list
         clang-tidy -p . -warnings-as-errors='*' $files
 
+  cpp:tidy-parallel:
+    desc: |
+      Per-file clang-tidy with bounded parallelism (same flags as cpp:tidy).
+      Much faster than the single-process cpp:tidy lane (~15h vs ~4h on a
+      full tree). Writes block-delimited output suitable for tidy-report.
+    vars:
+      LOG: '{{.LOG | default "lint-cpp-tidy.log"}}'
+      JOBS: '{{.JOBS | default "5"}}'
+    cmds:
+      - |
+        export LOG="{{.LOG}}"
+        export JOBS="{{.JOBS}}"
+        bash -c '
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        log="${LOG:-lint-cpp-tidy.log}"
+        jobs="${JOBS:-5}"
+        if ! command -v clang-tidy >/dev/null 2>&1; then
+          echo "lint:cpp:tidy-parallel: clang-tidy not found on PATH" >&2
+          exit 1
+        fi
+        if [ ! -f compile_commands.json ]; then
+          echo "lint:cpp:tidy-parallel: compile_commands.json missing; run task lint:cpp:compile-commands" >&2
+          exit 1
+        fi
+        files=$(go run ./tools/lint/cpp list)
+        if [ -z "$files" ]; then
+          echo "lint:cpp:tidy-parallel: no first-party C++ files found" >&2
+          exit 0
+        fi
+        echo "=== lint:cpp:tidy-parallel started $(date -Is) jobs=$jobs ===" > "$log"
+        failures=0
+        while IFS= read -r f; do
+          [ -z "$f" ] && continue
+          (
+            echo ""
+            echo "========== $f =========="
+            if ! clang-tidy -p . -warnings-as-errors='"'"'*'"'"' "$f"; then
+              echo "FAILED: $f"
+              exit 1
+            fi
+          ) >> "$log" 2>&1 &
+          while [ "$(jobs -rp | wc -l)" -ge "$jobs" ]; do
+            if ! wait -n; then failures=$((failures + 1)); fi
+          done
+        done <<< "$files"
+        while [ "$(jobs -rp | wc -l)" -gt 0 ]; do
+          if ! wait -n; then failures=$((failures + 1)); fi
+        done
+        rc=0
+        [ "$failures" -gt 0 ] && rc=1
+        echo "=== lint:cpp:tidy-parallel finished $(date -Is) exit=$rc failures=$failures ===" >> "$log"
+        echo "EXIT_CODE=$rc" >> "$log"
+        echo "lint:cpp:tidy-parallel: wrote $log (failures=$failures)"
+        exit $rc
+        '
+
+  cpp:tidy-report:
+    desc: |
+      Parse lint-cpp-tidy.log into lint-cpp-tidy.csv and docs/dev/cpp-lint-tidy-triage.md.
+      Run after lint:cpp:tidy-parallel (or any log using the same block format).
+    vars:
+      LOG: '{{.LOG | default "lint-cpp-tidy.log"}}'
+      CSV: '{{.CSV | default "lint-cpp-tidy.csv"}}'
+      MARKDOWN: '{{.MARKDOWN | default "docs/dev/cpp-lint-tidy-triage.md"}}'
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -f "${LOG:-lint-cpp-tidy.log}" ]; then
+          echo "lint:cpp:tidy-report: log file not found: ${LOG:-lint-cpp-tidy.log}" >&2
+          echo "  Run: task lint:cpp:tidy-parallel" >&2
+          exit 1
+        fi
+        go run ./tools/lint/cpp parse-tidy-log \
+          -log "${LOG:-lint-cpp-tidy.log}" \
+          -csv "${CSV:-lint-cpp-tidy.csv}" \
+          -markdown "${MARKDOWN:-docs/dev/cpp-lint-tidy-triage.md}"
+
   cpp:compile-commands:
     desc: |
       Generate compile_commands.json at the repo root by translating
@@ -449,23 +532,47 @@ tasks:
           echo 'lint:cpp:compile-commands: tools/lint/cpp/compile_db.py is missing.' >&2
           exit 1
         fi
-        # Discover every first-party `cc_test` so the resulting
-        # compilation database covers gtest/gmock-using test TUs
-        # alongside the production binary. Without this, clang-tidy
-        # sees `*_test.cc` with no entry and falls back to the
-        # default include chain (no `gtest/gtest.h`, no
-        # `gmock/gmock.h`). Use the same `--config` as `task bazel:*`
-        # so prebuilt CI (no ../googlesql) resolves @googlesql.
-        test_targets=$(bazel query --config={{.GOOGLESQL_BAZEL_CONFIG}} \
-          '{{.CC_TEST_BAZEL_QUERY}}' | tr '\n' ' ')
+        # Discover every first-party `cc_test` (bash mapfile: zsh-safe, one
+        # --target per label). Source mode uses default MODULE.bazel resolution
+        # on query/aquery; only prebuilt passes --config=googlesql-prebuilt
+        # (build:googlesql-source is not valid for bazel query).
+        export GOOGLESQL_SOURCE="${GOOGLESQL_SOURCE:-prebuilt}"
+        bash -c '
+        set -eo pipefail
+        case "${GOOGLESQL_SOURCE:-prebuilt}" in
+          prebuilt)
+            query_cfg=(--config=googlesql-prebuilt)
+            aquery_cfg=googlesql-prebuilt
+            ;;
+          local|source)
+            query_cfg=()
+            aquery_cfg=
+            ;;
+          *)
+            echo "lint:cpp:compile-commands: GOOGLESQL_SOURCE must be local/source or prebuilt" >&2
+            exit 2
+            ;;
+        esac
+        mapfile -t test_targets < <(
+          bazel query --noshow_progress --noshow_loading_progress \
+            "${query_cfg[@]}" \
+            '"'"'{{.CC_TEST_BAZEL_QUERY}}'"'"'
+        )
         target_args=( --target //binaries/emulator_main:emulator_main )
-        for t in $test_targets; do
+        for t in "${test_targets[@]}"; do
           target_args+=( --target "$t" )
         done
-        python3 tools/lint/cpp/compile_db.py \
-          "${target_args[@]}" \
-          --bazel-config "{{.GOOGLESQL_BAZEL_CONFIG}}" \
-          --output compile_commands.json
+        if [ -n "$aquery_cfg" ]; then
+          python3 tools/lint/cpp/compile_db.py \
+            "${target_args[@]}" \
+            --bazel-config "$aquery_cfg" \
+            --output compile_commands.json
+        else
+          python3 tools/lint/cpp/compile_db.py \
+            "${target_args[@]}" \
+            --output compile_commands.json
+        fi
+        '
 
   cpp:test:
     desc: |

@@ -46,7 +46,9 @@ ownership boundary is pinned by
 | Apply autofixes | `task lint:fix` | gofmt, clang-format, go vet. |
 | Format C++ only | `task lint:cpp:format` / `task lint:cpp:format-fix` | Reads from `tools/lint/cpp list`. |
 | Source-only C++ checks | `task lint:cpp:source` | File length, banned logging, status anti-patterns. |
-| clang-tidy (slow) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
+| clang-tidy (slow, sequential) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
+| clang-tidy (parallel batch) | `task lint:cpp:tidy-parallel` | Per-file parallel run; set `JOBS` (default 5) and `LOG` (default `lint-cpp-tidy.log`). |
+| Parse tidy batch log | `task lint:cpp:tidy-report` | Reads `LOG`, writes `lint-cpp-tidy.csv` + `docs/dev/cpp-lint-tidy-triage.md`. |
 | Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
 | cppcheck | `task lint:cpp:cppcheck` | Secondary-analysis lane; also runs inside `task lint:run`. |
 | First-party `cc_test` | `task lint:cpp:test` | Discovers via `bazel query` (`--config` aligned with `task bazel:test`); reuses `task bazel:test`. |

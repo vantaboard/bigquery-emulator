@@ -35,8 +35,9 @@ import (
 // Subcommand names. Centralised so the dispatch in run() and the
 // table-driven tests stay aligned.
 const (
-	cmdList  = "list"
-	cmdCheck = "check"
+	cmdList         = "list"
+	cmdCheck        = "check"
+	cmdParseTidyLog = "parse-tidy-log"
 )
 
 // run is the testable entry point. It returns an error instead of
@@ -53,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runList(rest, stdout, stderr)
 	case cmdCheck:
 		return runCheck(rest, stdout, stderr)
+	case cmdParseTidyLog:
+		return runParseTidyLog(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stdout)
 		return nil
@@ -77,8 +80,9 @@ func usage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `cpp-lint - first-party C++ source-only lint runner.
 
 Subcommands:
-  list      Print the canonical first-party C++ source list (one path per line).
-  check     Run the source-only checks (file size, banned logging, status misuse).
+  list            Print the canonical first-party C++ source list (one path per line).
+  check           Run the source-only checks (file size, banned logging, status misuse).
+  parse-tidy-log  Parse lint-cpp-tidy.log into CSV + triage markdown.
 
 Run "cpp-lint <subcommand> -h" for per-subcommand flags.
 `)
