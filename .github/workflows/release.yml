@@ -245,8 +245,14 @@ jobs:
           echo "::notice::Release engine build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
           task emulator:build-engine:bazel
 
+      - name: Pre-pull BuildKit image (GCR mirror)
+        run: bash scripts/docker_pull_retry.sh mirror.gcr.io/moby/buildkit:buildx-stable-1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            image=mirror.gcr.io/moby/buildkit:buildx-stable-1
 
       - name: Normalize repository owner (lowercase)
         id: owner

@@ -40,8 +40,6 @@ esac
 
 max_attempts="${DOCKER_BUILD_MAX_ATTEMPTS:-5}"
 initial_delay="${DOCKER_BUILD_RETRY_DELAY_SEC:-15}"
-pull_max_attempts="${DOCKER_PULL_MAX_ATTEMPTS:-6}"
-pull_initial_delay="${DOCKER_PULL_RETRY_DELAY_SEC:-10}"
 dockerfile="${DOCKERFILE:-Dockerfile}"
 
 pull_dockerfile_frontend() {
@@ -52,21 +50,7 @@ pull_dockerfile_frontend() {
 	image="${syntax_line#*=}"
 	image="${image#"${image%%[![:space:]]*}"}"
 	echo "Pre-pulling Dockerfile frontend ${image} (from ${dockerfile})" >&2
-	local attempt=1 delay="$pull_initial_delay"
-	while [ "$attempt" -le "$pull_max_attempts" ]; do
-		if docker pull "$image"; then
-			return 0
-		fi
-		if [ "$attempt" -ge "$pull_max_attempts" ]; then
-			echo "docker pull ${image} failed after ${pull_max_attempts} attempts" >&2
-			return 1
-		fi
-		echo "docker pull failed (${attempt}/${pull_max_attempts}); retrying in ${delay}s…" >&2
-		sleep "$delay"
-		delay=$((delay + delay / 2))
-		attempt=$((attempt + 1))
-	done
-	return 1
+	bash "$(dirname "$0")/docker_pull_retry.sh" "$image"
 }
 
 attempt=1
