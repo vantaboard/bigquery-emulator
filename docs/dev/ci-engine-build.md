@@ -52,7 +52,7 @@ Cheap push/PR workflows (no engine):
 |-------|--------|---------|
 | `actions/cache` on `bin/` | `build-engine` | Skip Bazel when engine inputs + GoogleSQL pin unchanged **and** the cache key matches exactly |
 | `actions/cache` on `.cache/googlesql-prebuilt/` | `build-engine` | Skip tarball download when prebuilt SHA256 pin unchanged |
-| Bazel `disk-cache: engine` | `build-engine` | Shared incremental compile cache for engine, cc_test, and coverage |
+| Bazel `disk-cache: engine-v2` | `build-engine` | Shared incremental compile cache for engine, cc_test, and coverage |
 | `engine-binaries` artifact | per successful `build-engine` run | Consumers + re-runs download without rebuilding |
 
 ### `bin/` cache safety (exact hit only)
@@ -66,8 +66,29 @@ reports `cache-hit: true` for the full key (currently prefixed
 leave pre-change `emulator_main` binaries that still pass `--version`; a
 subsequent run can save them under the exact key and ship stale engines into
 conformance and thirdparty consumers (2026-06 incident: SIGINT teardown mutex
-fatals). Incremental compile speed belongs in the Bazel `disk-cache: engine`
+fatals). Incremental compile speed belongs in the Bazel `disk-cache: engine-v2`
 layer, not prefix-matched staged binaries.
+
+### Bazel disk cache poisoning (`CacheNotFoundException`)
+
+`setup-bazel` stores action outputs under `$HOME/.cache/bazel-disk` (see the
+injected `build --disk_cache=...` line in the setup step log). A partial GitHub
+Actions cache restore can leave action-cache metadata pointing at protobuf (or
+other) blobs that were never uploaded. The symptom is:
+
+```text
+CacheNotFoundException: Missing digest: ... empty.pb.cc
+```
+
+Re-running the workflow without invalidating the cache repeats the failure.
+`build-engine` mitigates this two ways:
+
+1. **Cache key bump** — `disk-cache: engine-v2` + `cache-version: 2` on
+   `bazel-contrib/setup-bazel` (bump again only when invalidating a poisoned
+   tree).
+2. **Retry wrapper** — `.github/scripts/bazel_task_with_disk_cache_retry.sh`
+   clears `$HOME/.cache/bazel-disk` and retries `lint:cpp:test` / coverage once
+   when the log contains `CacheNotFoundException`.
 
 When the cache key does not match exactly, the workflow removes any restored
 `bin/emulator_main` / `bin/libduckdb.so` and runs

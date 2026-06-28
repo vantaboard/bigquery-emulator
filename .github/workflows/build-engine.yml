@@ -10,7 +10,7 @@
 #   * `actions/cache` on `bin/` keyed by engine inputs + GoogleSQL pin (exact
 #     hit only; no restore-keys prefix — see docs/dev/ci-engine-build.md)
 #   * `actions/cache` on `.cache/googlesql-prebuilt/` keyed by prebuilt SHA256
-#   * Unified Bazel `disk-cache: engine` (shared with cc_test consumers)
+#   * Unified Bazel `disk-cache: engine-v2` (shared with cc_test consumers)
 #
 # Local equivalent: `task emulator:build-engine:bazel` (see taskfiles/ci.yml).
 
@@ -97,7 +97,8 @@ jobs:
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: engine
+          disk-cache: engine-v2
+          cache-version: 2
           repository-cache: true
 
       - name: Resolve GoogleSQL build mode
@@ -135,7 +136,9 @@ jobs:
       - name: Run first-party cc_test targets via Bazel
         env:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
-        run: task lint:cpp:test
+        run: |
+          chmod +x .github/scripts/bazel_task_with_disk_cache_retry.sh
+          .github/scripts/bazel_task_with_disk_cache_retry.sh task lint:cpp:test
 
       - name: Install coverage tooling (main push only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -180,7 +183,9 @@ jobs:
             local|source) gsq_cfg=googlesql-source ;;
           esac
           echo "::notice::Coverage build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
-          task bazel:coverage \
+          chmod +x .github/scripts/bazel_task_with_disk_cache_retry.sh
+          .github/scripts/bazel_task_with_disk_cache_retry.sh \
+            task bazel:coverage \
             TARGETS="${{ steps.coverage-targets.outputs.targets }}" \
             COVERAGE_FLAGS="--config=$gsq_cfg --combined_report=lcov --test_output=errors --strategy=CoverageReport=local"
 
