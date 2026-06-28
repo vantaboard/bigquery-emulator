@@ -114,7 +114,15 @@ absl::StatusOr<TableSchema> UnifyWildcardTableSchemas(
   TableSchema unified;
   unified.columns.reserve(by_name.size() + 1);
   for (const ColumnSchema& col : newest_or->columns) {
-    unified.columns.push_back(by_name[col.name]);
+    auto it = by_name.find(col.name);
+    if (it == by_name.end()) {
+      return absl::InternalError(
+          absl::StrCat("UnifyWildcardTableSchemas: missing unified column '",
+                       col.name,
+                       "' for table ",
+                       matched.back().table_id));
+    }
+    unified.columns.push_back(it->second);
   }
   for (const auto& [name, col] : by_name) {
     const bool already =

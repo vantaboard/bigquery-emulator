@@ -200,6 +200,10 @@ absl::StatusOr<Value> ToCodePoints(const std::vector<Value>& args,
     }
     return Value::Null(return_type);
   }
+  if (return_type == nullptr || !return_type->IsArray()) {
+    return absl::InvalidArgumentError(
+        "semantic: TO_CODE_POINTS missing array return type");
+  }
   if (args[0].type_kind() == ::googlesql::TYPE_STRING &&
       args[0].string_value().empty()) {
     return Value::Array(return_type->AsArray(), {});

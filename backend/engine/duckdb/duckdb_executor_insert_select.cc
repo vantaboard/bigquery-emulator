@@ -104,6 +104,13 @@ absl::StatusOr<DmlStats> RunInsertSelect(
   }
 
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return absl::FailedPreconditionError(
+          "DuckDbExecutor::ExecuteDml: null table reference in INSERT ... "
+          "SELECT scan");
+    }
     const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (storage_table == nullptr) {
       ::duckdb_disconnect(&conn);

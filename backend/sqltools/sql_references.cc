@@ -30,7 +30,8 @@ class ReferencedTableCollector : public ::googlesql::ResolvedASTVisitor {
  public:
   absl::Status VisitResolvedTableScan(
       const ::googlesql::ResolvedTableScan* node) override {
-    if (node != nullptr && node->table() != nullptr) {
+    if (node == nullptr) return absl::OkStatus();
+    if (node->table() != nullptr) {
       entries_.push_back(Entry{node->table(), node->alias()});
     }
     return ::googlesql::ResolvedASTVisitor::VisitResolvedTableScan(node);

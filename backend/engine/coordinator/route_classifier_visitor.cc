@@ -55,9 +55,8 @@ int RouteClassifierPriority(Disposition d) {
 
 absl::Status RouteClassifierVisitor::DefaultVisit(
     const ::googlesql::ResolvedNode* node) {
-  if (node != nullptr) {
-    CheckNodeClass(node);
-  }
+  if (node == nullptr) return absl::OkStatus();
+  CheckNodeClass(node);
   return ::googlesql::ResolvedASTVisitor::DefaultVisit(node);
 }
 

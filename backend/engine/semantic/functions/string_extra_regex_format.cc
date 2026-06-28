@@ -92,8 +92,13 @@ absl::StatusOr<Value> RegexpExtractAll(const std::vector<Value>& args,
     }
     return Value::Null(return_type);
   }
+  if (return_type == nullptr || !return_type->IsArray()) {
+    return absl::InvalidArgumentError(
+        "semantic: REGEXP_EXTRACT_ALL missing array return type");
+  }
   auto re = MakeRegExpForValue(args[1]);
   if (!re.ok()) return re.status();
+  std::unique_ptr<const RegExp> regexp = std::move(*re);
   int64_t offset = 0;
   if (args.size() >= 3 && !args[2].is_null()) {
     offset = args[2].int64_value() - 1;
@@ -101,7 +106,7 @@ absl::StatusOr<Value> RegexpExtractAll(const std::vector<Value>& args,
   absl::Status error;
   std::vector<Value> elements;
   RegExp::ExtractAllIterator iter =
-      (*re)->CreateExtractAllIterator(AsStringOrBytes(args[0]), offset);
+      regexp->CreateExtractAllIterator(AsStringOrBytes(args[0]), offset);
   absl::string_view match;
   while (iter.Next(&match, &error)) {
     elements.push_back(StringOrBytesFromView(args[0], match));
@@ -123,9 +128,10 @@ absl::StatusOr<Value> RegexpReplace(const std::vector<Value>& args) {
   }
   auto re = MakeRegExpForValue(args[1]);
   if (!re.ok()) return re.status();
+  std::unique_ptr<const RegExp> regexp = std::move(*re);
   absl::Status error;
   std::string out;
-  if (!(*re)->Replace(
+  if (!regexp->Replace(
           AsStringOrBytes(args[0]), AsStringOrBytes(args[2]), &out, &error)) {
     return error;
   }

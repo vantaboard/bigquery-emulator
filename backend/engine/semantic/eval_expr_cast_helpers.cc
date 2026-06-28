@@ -120,12 +120,13 @@ std::optional<absl::StatusOr<Value>> TryCastValueToType(
     const ::googlesql::StructType* source_st = inner.type()->AsStruct();
     if (!StructTypesCompatibleByPosition(source_st, target_st)) {
       if (return_null_on_error) return NullOfType(target);
-      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                               absl::StrCat("semantic: CAST from ",
-                                            source->DebugString(),
-                                            " to ",
-                                            target->DebugString(),
-                                            " is not yet implemented"));
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          absl::StrCat("semantic: CAST from ",
+                       source != nullptr ? source->DebugString() : "<null>",
+                       " to ",
+                       target->DebugString(),
+                       " is not yet implemented"));
     }
     std::vector<Value> fields;
     fields.reserve(inner.num_fields());

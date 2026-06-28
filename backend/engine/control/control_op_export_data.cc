@@ -65,6 +65,10 @@ absl::Status AttachReferencedTables(
   absl::Status visit_status = root.Accept(&collector);
   if (!visit_status.ok()) return visit_status;
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      return absl::FailedPreconditionError(
+          "control op executor: null table reference in EXPORT DATA scan");
+    }
     const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (source_table == nullptr) {
       return absl::FailedPreconditionError(

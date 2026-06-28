@@ -304,6 +304,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // already present in the connection's default schema.
   const absl::Time attach_start = absl::Now();
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return absl::FailedPreconditionError(
+          "duckdb engine: null table reference in query scan");
+    }
     if (const auto* wildcard_table =
             dynamic_cast<const catalog::WildcardTable*>(tbl)) {
       std::optional<std::vector<std::string>> suffix_allowlist =

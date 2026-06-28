@@ -313,6 +313,12 @@ absl::Status RunCreateTableAsSelect(
   }
 
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return absl::FailedPreconditionError(
+          "ControlOpExecutor::ExecuteDdl: null table reference in CTAS scan");
+    }
     const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (source_table == nullptr) {
       ::duckdb_disconnect(&conn);

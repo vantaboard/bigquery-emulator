@@ -127,6 +127,13 @@ absl::Status RunCreateMaterializedView(
   }
 
   for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      ::duckdb_disconnect(&conn);
+      ::duckdb_close(&db);
+      return absl::FailedPreconditionError(
+          "control op executor: null table reference in CREATE MATERIALIZED "
+          "VIEW scan");
+    }
     const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
     if (source_table == nullptr) {
       ::duckdb_disconnect(&conn);
