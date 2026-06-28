@@ -98,6 +98,7 @@ jobs:
           # Checkout uses head_sha (detached HEAD); stage charts, then switch to the branch tip.
           tmp="$(mktemp -d)"
           cp bench/charts/out/*.svg "$tmp/"
+          git restore bench/charts/out/*.svg
           git fetch origin "$branch"
           git checkout -B "$branch" "origin/${branch}"
           cp "$tmp"/*.svg bench/charts/out/
