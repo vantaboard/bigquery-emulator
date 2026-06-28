@@ -116,8 +116,10 @@ TEST(KllFuncsTest, InitWithWeightSkewsMedian) {
 }
 
 TEST(KllFuncsTest, InvalidSketchBytesRejected) {
-  auto got = KllQuantilesExtractInt64Scalar(
-      {Value::Bytes("not-a-sketch"), Value::Int64(2)}, Int64ArrayType());
+  Value invalid_sketch = Value::Bytes("not-a-sketch");
+  Value num_quantiles = Value::Int64(2);
+  auto got = KllQuantilesExtractInt64Scalar({invalid_sketch, num_quantiles},
+                                            Int64ArrayType());
   EXPECT_FALSE(got.ok());
 }
 

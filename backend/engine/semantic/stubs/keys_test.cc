@@ -31,13 +31,15 @@ TEST(KeysNewKeysetTest, ReturnsSentinelBytesForStringArg) {
   // sentinel still carries the salient input parameter -- BigQuery
   // documents that the returned BYTES depend on the key type, and
   // the placeholder preserves that observable difference.
-  auto r = KeysNewKeyset({Value::String("AEAD_AES_GCM_256")});
+  Value aead_key = Value::String("AEAD_AES_GCM_256");
+  auto r = KeysNewKeyset({aead_key});
   ASSERT_TRUE(r.ok()) << r.status();
   EXPECT_EQ(r->type_kind(), ::googlesql::TYPE_BYTES);
   EXPECT_EQ(r->bytes_value(), "bigquery-emulator:keyset:v1:AEAD_AES_GCM_256");
 
-  auto other =
-      KeysNewKeyset({Value::String("DETERMINISTIC_AEAD_AES_SIV_CMAC_256")});
+  Value deterministic_key =
+      Value::String("DETERMINISTIC_AEAD_AES_SIV_CMAC_256");
+  auto other = KeysNewKeyset({deterministic_key});
   ASSERT_TRUE(other.ok()) << other.status();
   EXPECT_EQ(other->bytes_value(),
             "bigquery-emulator:keyset:v1:DETERMINISTIC_AEAD_AES_SIV_CMAC_256");
@@ -54,7 +56,8 @@ TEST(KeysNewKeysetTest, NullStringPropagatesToNullBytes) {
   // unwrap relies on the function itself producing a typed NULL
   // (NULL BYTES) rather than `Value::Null()` so the surrounding
   // projection's column-type tag remains BYTES.
-  auto r = KeysNewKeyset({Value::NullString()});
+  Value null_key = Value::NullString();
+  auto r = KeysNewKeyset({null_key});
   ASSERT_TRUE(r.ok()) << r.status();
   EXPECT_TRUE(r->is_null());
   EXPECT_EQ(r->type_kind(), ::googlesql::TYPE_BYTES);
@@ -70,7 +73,9 @@ TEST(KeysNewKeysetTest, RejectsWrongArity) {
   EXPECT_THAT(std::string(zero.status().message()),
               HasSubstr("KEYS.NEW_KEYSET"));
 
-  auto two = KeysNewKeyset({Value::String("a"), Value::String("b")});
+  Value key_a = Value::String("a");
+  Value key_b = Value::String("b");
+  auto two = KeysNewKeyset({key_a, key_b});
   EXPECT_EQ(two.status().code(), absl::StatusCode::kInvalidArgument);
 }
 
@@ -81,7 +86,8 @@ TEST(KeysNewKeysetTest, RejectsNonStringArg) {
   // bypassed the analyzer (or hit a future overload the stub does
   // not yet model) and we surface a clean failure rather than
   // emitting a sentinel keyed on an INT64.
-  auto r = KeysNewKeyset({Value::Int64(7)});
+  Value wrong_type = Value::Int64(7);
+  auto r = KeysNewKeyset({wrong_type});
   EXPECT_EQ(r.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_THAT(std::string(r.status().message()), HasSubstr("STRING"));
 }
@@ -93,17 +99,19 @@ TEST(KeysKeysetLengthTest, ReturnsOneForAnyNonNullBytes) {
   // and any other BYTES the caller might pass -- the local-stub
   // posture is "accept-and-return-shaped-answer", not "validate
   // the keyset envelope".
-  auto from_sentinel = KeysKeysetLength(
-      {Value::Bytes("bigquery-emulator:keyset:v1:AEAD_AES_GCM_256")});
+  Value sentinel = Value::Bytes("bigquery-emulator:keyset:v1:AEAD_AES_GCM_256");
+  auto from_sentinel = KeysKeysetLength({sentinel});
   ASSERT_TRUE(from_sentinel.ok()) << from_sentinel.status();
   EXPECT_EQ(from_sentinel->type_kind(), ::googlesql::TYPE_INT64);
   EXPECT_EQ(from_sentinel->int64_value(), 1);
 
-  auto from_arbitrary = KeysKeysetLength({Value::Bytes("\x01\x02\x03")});
+  Value arbitrary = Value::Bytes("\x01\x02\x03");
+  auto from_arbitrary = KeysKeysetLength({arbitrary});
   ASSERT_TRUE(from_arbitrary.ok()) << from_arbitrary.status();
   EXPECT_EQ(from_arbitrary->int64_value(), 1);
 
-  auto from_empty = KeysKeysetLength({Value::Bytes("")});
+  Value empty = Value::Bytes("");
+  auto from_empty = KeysKeysetLength({empty});
   ASSERT_TRUE(from_empty.ok()) << from_empty.status();
   EXPECT_EQ(from_empty->int64_value(), 1);
 }
@@ -111,7 +119,8 @@ TEST(KeysKeysetLengthTest, ReturnsOneForAnyNonNullBytes) {
 TEST(KeysKeysetLengthTest, NullBytesPropagatesToNullInt64) {
   // Same NULL-propagation contract as the NEW_KEYSET stub. NULL ->
   // NULL INT64 so the projection column type tag stays INT64.
-  auto r = KeysKeysetLength({Value::NullBytes()});
+  Value null_keyset = Value::NullBytes();
+  auto r = KeysKeysetLength({null_keyset});
   ASSERT_TRUE(r.ok()) << r.status();
   EXPECT_TRUE(r->is_null());
   EXPECT_EQ(r->type_kind(), ::googlesql::TYPE_INT64);
@@ -123,14 +132,17 @@ TEST(KeysKeysetLengthTest, RejectsWrongArity) {
   EXPECT_THAT(std::string(zero.status().message()),
               HasSubstr("KEYS.KEYSET_LENGTH"));
 
-  auto two = KeysKeysetLength({Value::Bytes("a"), Value::Bytes("b")});
+  Value key_a = Value::Bytes("a");
+  Value key_b = Value::Bytes("b");
+  auto two = KeysKeysetLength({key_a, key_b});
   EXPECT_EQ(two.status().code(), absl::StatusCode::kInvalidArgument);
 }
 
 TEST(KeysKeysetLengthTest, RejectsNonBytesArg) {
   // Wrong type -> INVALID_ARGUMENT. Same reasoning as
   // `RejectsNonStringArg` on the NEW_KEYSET stub.
-  auto r = KeysKeysetLength({Value::String("not-bytes")});
+  Value not_bytes = Value::String("not-bytes");
+  auto r = KeysKeysetLength({not_bytes});
   EXPECT_EQ(r.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_THAT(std::string(r.status().message()), HasSubstr("BYTES"));
 }

@@ -60,7 +60,7 @@ std::string FormatPointWkt(double lng, double lat) {
 }
 
 struct ParsedGeography {
-  enum class Kind { kPoint, kPolygon } kind;
+  enum class Kind { kPoint, kPolygon } kind = Kind::kPoint;
   double point_lng = 0.0;
   double point_lat = 0.0;
   std::vector<std::pair<double, double>> ring;
@@ -462,7 +462,8 @@ absl::StatusOr<Value> EmuFormatTypeLiteral(const std::vector<Value>& args) {
   if (args[0].type()->IsRange()) {
     return Value::String(args[0].GetSQLLiteral(::googlesql::PRODUCT_EXTERNAL));
   }
-  std::vector<Value> format_args = {Value::String("%T"), args[0]};
+  Value format_pattern = Value::String("%T");
+  std::vector<Value> format_args = {format_pattern, args[0]};
   return FormatString(format_args);
 }
 

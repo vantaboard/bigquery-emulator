@@ -23,82 +23,104 @@ namespace {
 // A261`). Holding these stable is the contract of the row in
 // `functions.yaml`.
 TEST(SoundexTest, ClassicReferenceValues) {
-  EXPECT_EQ(Soundex({Value::String("Robert")})->string_value(), "R163");
-  EXPECT_EQ(Soundex({Value::String("Rupert")})->string_value(), "R163");
-  EXPECT_EQ(Soundex({Value::String("Rubin")})->string_value(), "R150");
-  EXPECT_EQ(Soundex({Value::String("Ashcraft")})->string_value(), "A261");
-  EXPECT_EQ(Soundex({Value::String("Tymczak")})->string_value(), "T522");
-  EXPECT_EQ(Soundex({Value::String("Pfister")})->string_value(), "P236");
-  EXPECT_EQ(Soundex({Value::String("Honeyman")})->string_value(), "H555");
+  Value robert = Value::String("Robert");
+  EXPECT_EQ(Soundex({robert})->string_value(), "R163");
+  Value rupert = Value::String("Rupert");
+  EXPECT_EQ(Soundex({rupert})->string_value(), "R163");
+  Value rubin = Value::String("Rubin");
+  EXPECT_EQ(Soundex({rubin})->string_value(), "R150");
+  Value ashcraft = Value::String("Ashcraft");
+  EXPECT_EQ(Soundex({ashcraft})->string_value(), "A261");
+  Value tymczak = Value::String("Tymczak");
+  EXPECT_EQ(Soundex({tymczak})->string_value(), "T522");
+  Value pfister = Value::String("Pfister");
+  EXPECT_EQ(Soundex({pfister})->string_value(), "P236");
+  Value honeman = Value::String("Honeyman");
+  EXPECT_EQ(Soundex({honeman})->string_value(), "H555");
 }
 
 TEST(SoundexTest, EmptyStringRoundTrips) {
-  auto v = Soundex({Value::String("")});
+  Value arg = Value::String("");
+  auto v = Soundex({arg});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->string_value(), "");
 }
 
 TEST(SoundexTest, NullPropagates) {
-  auto v = Soundex({Value::NullString()});
+  Value arg = Value::NullString();
+  auto v = Soundex({arg});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_TRUE(v->is_null());
 }
 
 TEST(SoundexTest, ShortStringPadsWithZeros) {
-  EXPECT_EQ(Soundex({Value::String("A")})->string_value(), "A000");
-  EXPECT_EQ(Soundex({Value::String("Hi")})->string_value(), "H000");
+  Value a = Value::String("A");
+  EXPECT_EQ(Soundex({a})->string_value(), "A000");
+  Value hi = Value::String("Hi");
+  EXPECT_EQ(Soundex({hi})->string_value(), "H000");
 }
 
 TEST(SoundexTest, NonLetterPrefixSkipped) {
   // Leading punctuation/digits do not anchor SOUNDEX -- the
   // first SOUNDEX-eligible letter does.
-  EXPECT_EQ(Soundex({Value::String("123Robert")})->string_value(), "R163");
+  Value arg = Value::String("123Robert");
+  EXPECT_EQ(Soundex({arg})->string_value(), "R163");
 }
 
 TEST(SoundexTest, AllLettersWithoutCodeReturnsLetterAndZeros) {
-  EXPECT_EQ(Soundex({Value::String("Aeiouy")})->string_value(), "A000");
+  Value arg = Value::String("Aeiouy");
+  EXPECT_EQ(Soundex({arg})->string_value(), "A000");
 }
 
 TEST(SoundexTest, NonStringRejected) {
-  auto v = Soundex({Value::Int64(7)});
+  Value arg = Value::Int64(7);
+  auto v = Soundex({arg});
   ASSERT_FALSE(v.ok());
   EXPECT_EQ(GetSemanticErrorReason(v.status()),
             SemanticErrorReason::kInvalidArgument);
 }
 
 TEST(InstrTest, BasicTwoArg) {
-  auto v = Instr({Value::String("hello world"), Value::String("world")});
+  Value haystack = Value::String("hello world");
+  Value needle = Value::String("world");
+  auto v = Instr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 7);
 }
 
 TEST(InstrTest, NotFoundReturnsZero) {
-  auto v = Instr({Value::String("hello"), Value::String("xyz")});
+  Value haystack = Value::String("hello");
+  Value needle = Value::String("xyz");
+  auto v = Instr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 0);
 }
 
 TEST(InstrTest, PositionStartsSearch) {
-  auto v =
-      Instr({Value::String("ababab"), Value::String("ab"), Value::Int64(2)});
+  Value haystack = Value::String("ababab");
+  Value needle = Value::String("ab");
+  Value position = Value::Int64(2);
+  auto v = Instr({haystack, needle, position});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 3);
 }
 
 TEST(InstrTest, OccurrencePicksNthMatch) {
-  auto v = Instr({Value::String("ababab"),
-                  Value::String("ab"),
-                  Value::Int64(1),
-                  Value::Int64(2)});
+  Value haystack = Value::String("ababab");
+  Value needle = Value::String("ab");
+  Value position = Value::Int64(1);
+  Value occurrence = Value::Int64(2);
+  auto v = Instr({haystack, needle, position, occurrence});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 3);
 }
 
 TEST(InstrTest, ThirdOccurrence) {
-  auto v = Instr({Value::String("ababab"),
-                  Value::String("ab"),
-                  Value::Int64(1),
-                  Value::Int64(3)});
+  Value haystack = Value::String("ababab");
+  Value needle = Value::String("ab");
+  Value position = Value::Int64(1);
+  Value occurrence = Value::Int64(3);
+  auto v = Instr({haystack, needle, position, occurrence});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 5);
 }
@@ -106,65 +128,81 @@ TEST(InstrTest, ThirdOccurrence) {
 TEST(InstrTest, NegativePositionSearchesFromEnd) {
   // BigQuery: INSTR('ababab', 'ab', -1) returns the last
   // occurrence's 1-based position (5).
-  auto v =
-      Instr({Value::String("ababab"), Value::String("ab"), Value::Int64(-1)});
+  Value haystack = Value::String("ababab");
+  Value needle = Value::String("ab");
+  Value position = Value::Int64(-1);
+  auto v = Instr({haystack, needle, position});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 5);
 }
 
 TEST(InstrTest, NegativePositionWithOccurrence) {
-  auto v = Instr({Value::String("ababab"),
-                  Value::String("ab"),
-                  Value::Int64(-1),
-                  Value::Int64(2)});
+  Value haystack = Value::String("ababab");
+  Value needle = Value::String("ab");
+  Value position = Value::Int64(-1);
+  Value occurrence = Value::Int64(2);
+  auto v = Instr({haystack, needle, position, occurrence});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 3);
 }
 
 TEST(InstrTest, EmptySubvalueReturnsPosition) {
-  auto v = Instr({Value::String("hello"), Value::String("")});
+  Value haystack = Value::String("hello");
+  Value needle = Value::String("");
+  auto v = Instr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_EQ(v->int64_value(), 1);
 }
 
 TEST(InstrTest, NullPropagates) {
-  auto v = Instr({Value::String("hi"), Value::NullString()});
+  Value haystack = Value::String("hi");
+  Value needle = Value::NullString();
+  auto v = Instr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_TRUE(v->is_null());
 }
 
 TEST(InstrTest, ZeroPositionRejected) {
-  auto v = Instr({Value::String("hi"), Value::String("h"), Value::Int64(0)});
+  Value haystack = Value::String("hi");
+  Value needle = Value::String("h");
+  Value position = Value::Int64(0);
+  auto v = Instr({haystack, needle, position});
   ASSERT_FALSE(v.ok());
   EXPECT_EQ(GetSemanticErrorReason(v.status()),
             SemanticErrorReason::kInvalidArgument);
 }
 
 TEST(InstrTest, NonPositiveOccurrenceRejected) {
-  auto v = Instr({Value::String("hi"),
-                  Value::String("h"),
-                  Value::Int64(1),
-                  Value::Int64(0)});
+  Value haystack = Value::String("hi");
+  Value needle = Value::String("h");
+  Value position = Value::Int64(1);
+  Value occurrence = Value::Int64(0);
+  auto v = Instr({haystack, needle, position, occurrence});
   ASSERT_FALSE(v.ok());
   EXPECT_EQ(GetSemanticErrorReason(v.status()),
             SemanticErrorReason::kInvalidArgument);
 }
 
 TEST(ContainsSubstrTest, CaseInsensitiveStringMatch) {
-  auto v = ContainsSubstr(
-      {Value::String("the blue house"), Value::String("Blue house")});
+  Value haystack = Value::String("the blue house");
+  Value needle = Value::String("Blue house");
+  auto v = ContainsSubstr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_TRUE(v->bool_value());
 }
 
 TEST(ContainsSubstrTest, UnicodeNormalizationMatch) {
-  auto v = ContainsSubstr({Value::String("\u2168"), Value::String("IX")});
+  Value haystack = Value::String("\u2168");
+  Value needle = Value::String("IX");
+  auto v = ContainsSubstr({haystack, needle});
   ASSERT_TRUE(v.ok()) << v.status();
   EXPECT_TRUE(v->bool_value());
 }
 
 TEST(ContainsSubstrTest, NullSearchValueRejected) {
-  auto v = ContainsSubstr({Value::String("hello"), Value::NullString()});
+  Value haystack = Value::String("hello");
+  Value needle = Value::NullString();
+  auto v = ContainsSubstr({haystack, needle});
   ASSERT_FALSE(v.ok());
 }
 

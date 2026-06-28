@@ -61,7 +61,8 @@ TEST(BitCountTest, NullPropagates) {
 }
 
 TEST(BitCountTest, NonInt64Rejected) {
-  auto v = BitCount({Value::String("hi")});
+  Value arg = Value::String("hi");
+  auto v = BitCount({arg});
   ASSERT_FALSE(v.ok());
   EXPECT_EQ(GetSemanticErrorReason(v.status()),
             SemanticErrorReason::kInvalidArgument);
