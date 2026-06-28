@@ -103,6 +103,59 @@ ColumnBindings MergeColumnBindings(const ColumnBindings& target,
 absl::Status RejectUnsupportedDmlFeatures(int generated_column_count,
                                           absl::string_view kind);
 
+struct SetAssignment {
+  UpdateTarget target;
+  const ::googlesql::ResolvedExpr* set_expr = nullptr;
+  const ::googlesql::Type* root_column_type = nullptr;
+};
+
+struct NestedArrayDeleteAssignment {
+  UpdateTarget target;
+  const ::googlesql::Type* root_column_type = nullptr;
+  const ::googlesql::ResolvedUpdateItem* item = nullptr;
+};
+
+absl::StatusOr<bool> EvalWherePredicate(
+    const ::googlesql::ResolvedExpr* where_expr, EvalContext& ctx);
+
+absl::StatusOr<DmlStats> FinalizeMutateWithReturning(
+    const ::googlesql::ResolvedReturningClause* returning,
+    std::unique_ptr<RowSource>* returning_out,
+    std::vector<ColumnBindings>&& returning_contexts,
+    std::vector<std::string>&& returning_actions,
+    DmlStats stats,
+    EvalContext& ctx);
+
+absl::StatusOr<std::pair<std::vector<SetAssignment>,
+                         std::vector<NestedArrayDeleteAssignment>>>
+ParseUpdateAssignments(const ::googlesql::ResolvedUpdateStmt& upd,
+                       const schema::TableSchema& schema);
+
+absl::Status ApplyUpdateSets(
+    storage::Row& mutated,
+    const std::vector<SetAssignment>& sets,
+    const std::vector<NestedArrayDeleteAssignment>& nested_deletes,
+    const ColumnBindings& row_ctx,
+    const schema::TableSchema& schema,
+    EvalContext& ctx);
+
+absl::StatusOr<bool> CountFromScanMatches(
+    const ::googlesql::ResolvedUpdateStmt& upd,
+    const ColumnBindings& target_bind,
+    const std::vector<ColumnBindings>& from_rows,
+    EvalContext& ctx,
+    ColumnBindings* matched_from);
+
+absl::StatusOr<DmlStats> BuildInsertReturningIfNeeded(
+    const ::googlesql::ResolvedInsertStmt& insert,
+    const catalog::StorageTable* target,
+    const schema::TableSchema& schema,
+    const absl::flat_hash_map<int, int>& by_id,
+    const std::vector<storage::Row>& rows,
+    std::unique_ptr<RowSource>* returning_out,
+    DmlStats stats,
+    EvalContext& ctx);
+
 absl::StatusOr<Value> ApplyNestedArrayDeleteItem(
     const ::googlesql::ResolvedUpdateItem& item,
     const Value& array_value,

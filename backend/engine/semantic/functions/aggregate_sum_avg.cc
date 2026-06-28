@@ -113,6 +113,78 @@ absl::StatusOr<Value> SumNumericAggregateImpl(
 }
 
 template <typename CallLike>
+absl::StatusOr<Value> SumInt64Cells(const CallLike& call,
+                                    const std::vector<Value>& cells) {
+  int64_t total = 0;
+  bool any_non_null = false;
+  for (const Value& v : cells) {
+    if (v.is_null()) continue;
+    if (v.type_kind() != ::googlesql::TYPE_INT64) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: SUM argument type mismatch");
+    }
+    any_non_null = true;
+    int64_t next = 0;
+    if (__builtin_add_overflow(total, v.int64_value(), &next)) {
+      return MakeSemanticError(SemanticErrorReason::kOverflow,
+                               "semantic: integer overflow");
+    }
+    total = next;
+  }
+  if (!any_non_null) return NullOfAggregateType(call.type());
+  return Value::Int64(total);
+}
+
+template <typename CallLike>
+absl::StatusOr<Value> SumDoubleCells(const CallLike& call,
+                                     const std::vector<Value>& cells) {
+  double total = 0;
+  bool any_non_null = false;
+  for (const Value& v : cells) {
+    if (v.is_null()) continue;
+    if (v.type_kind() != ::googlesql::TYPE_DOUBLE) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: SUM argument type mismatch");
+    }
+    any_non_null = true;
+    total += v.double_value();
+  }
+  if (!any_non_null) return NullOfAggregateType(call.type());
+  return Value::Double(total);
+}
+
+template <typename CallLike>
+absl::StatusOr<Value> SumNumericCells(const CallLike& call,
+                                      const std::vector<Value>& cells) {
+  std::optional<::googlesql::NumericValue> total;
+  bool any_non_null = false;
+  for (const Value& v : cells) {
+    if (v.is_null()) continue;
+    if (v.type_kind() != ::googlesql::TYPE_NUMERIC) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: SUM argument type mismatch");
+    }
+    any_non_null = true;
+    if (!total.has_value()) {
+      total = v.numeric_value();
+    } else {
+      auto sum = total->Add(v.numeric_value());
+      if (!sum.ok()) {
+        if (sum.status().code() == absl::StatusCode::kOutOfRange) {
+          return MakeSemanticError(SemanticErrorReason::kOverflow,
+                                   sum.status().message());
+        }
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 sum.status().message());
+      }
+      total = *sum;
+    }
+  }
+  if (!any_non_null) return NullOfAggregateType(call.type());
+  return Value::Numeric(*total);
+}
+
+template <typename CallLike>
 absl::StatusOr<Value> SumAggregateImpl(
     const CallLike& call,
     const std::vector<std::vector<Value>>& input_column_values) {
@@ -125,71 +197,16 @@ absl::StatusOr<Value> SumAggregateImpl(
   }
   const ::googlesql::Type* out_type = call.type();
   const std::vector<Value>& cells = input_column_values[0];
-  bool any_non_null = false;
   if (out_type != nullptr && out_type->kind() == ::googlesql::TYPE_NUMERIC) {
     return SumNumericAggregateImpl(call, input_column_values);
   }
   switch (cells.front().type_kind()) {
-    case ::googlesql::TYPE_INT64: {
-      int64_t total = 0;
-      for (const Value& v : cells) {
-        if (v.is_null()) continue;
-        if (v.type_kind() != ::googlesql::TYPE_INT64) {
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: SUM argument type mismatch");
-        }
-        any_non_null = true;
-        int64_t next = 0;
-        if (__builtin_add_overflow(total, v.int64_value(), &next)) {
-          return MakeSemanticError(SemanticErrorReason::kOverflow,
-                                   "semantic: integer overflow");
-        }
-        total = next;
-      }
-      if (!any_non_null) return NullOfAggregateType(out_type);
-      return Value::Int64(total);
-    }
-    case ::googlesql::TYPE_DOUBLE: {
-      double total = 0;
-      for (const Value& v : cells) {
-        if (v.is_null()) continue;
-        if (v.type_kind() != ::googlesql::TYPE_DOUBLE) {
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: SUM argument type mismatch");
-        }
-        any_non_null = true;
-        total += v.double_value();
-      }
-      if (!any_non_null) return NullOfAggregateType(out_type);
-      return Value::Double(total);
-    }
-    case ::googlesql::TYPE_NUMERIC: {
-      std::optional<::googlesql::NumericValue> total;
-      for (const Value& v : cells) {
-        if (v.is_null()) continue;
-        if (v.type_kind() != ::googlesql::TYPE_NUMERIC) {
-          return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                   "semantic: SUM argument type mismatch");
-        }
-        any_non_null = true;
-        if (!total.has_value()) {
-          total = v.numeric_value();
-        } else {
-          auto sum = total->Add(v.numeric_value());
-          if (!sum.ok()) {
-            if (sum.status().code() == absl::StatusCode::kOutOfRange) {
-              return MakeSemanticError(SemanticErrorReason::kOverflow,
-                                       sum.status().message());
-            }
-            return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                     sum.status().message());
-          }
-          total = *sum;
-        }
-      }
-      if (!any_non_null) return NullOfAggregateType(out_type);
-      return Value::Numeric(*total);
-    }
+    case ::googlesql::TYPE_INT64:
+      return SumInt64Cells(call, cells);
+    case ::googlesql::TYPE_DOUBLE:
+      return SumDoubleCells(call, cells);
+    case ::googlesql::TYPE_NUMERIC:
+      return SumNumericCells(call, cells);
     default:
       return MakeSemanticError(
           SemanticErrorReason::kNotImplemented,

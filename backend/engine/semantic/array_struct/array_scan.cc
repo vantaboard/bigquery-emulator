@@ -26,18 +26,24 @@ namespace array_struct {
 
 namespace {
 
-// Resolve the `array_zip_mode` enum literal the analyzer attaches
-// to a multi-array UNNEST. The analyzer guarantees the expr is a
-// `ResolvedLiteral` of opaque enum kind `ARRAY_ZIP_MODE` with one
-// of three values: `PAD`, `TRUNCATE`, `STRICT`. We extract the
-// enum NAME (not value index) so the dispatch below stays
-// human-readable.
+void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
+                                int n_arrays,
+                                ColumnBindings& bindings);
+void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
+                                    ColumnBindings& bindings);
+
 enum class ZipMode {
   kPad,
   kTruncate,
   kStrict,
 };
 
+// Resolve the `array_zip_mode` enum literal the analyzer attaches
+// to a multi-array UNNEST. The analyzer guarantees the expr is a
+// `ResolvedLiteral` of opaque enum kind `ARRAY_ZIP_MODE` with one
+// of three values: `PAD`, `TRUNCATE`, `STRICT`. We extract the
+// enum NAME (not value index) so the dispatch below stays
+// human-readable.
 absl::StatusOr<ZipMode> ResolveZipMode(
     const ::googlesql::ResolvedExpr* mode_expr) {
   // Default mode per GoogleSQL is PAD. The analyzer always attaches
@@ -104,6 +110,65 @@ absl::StatusOr<Value> EvaluateArrayExpr(const ::googlesql::ResolvedExpr* expr,
             v->type()->DebugString()));
   }
   return v;
+}
+
+int ComputeZipRowCount(ZipMode zip_mode,
+                       const std::vector<int>& sizes,
+                       int n_arrays) {
+  if (n_arrays == 1) return sizes[0];
+  switch (zip_mode) {
+    case ZipMode::kPad: {
+      int row_count = 0;
+      for (int s : sizes)
+        row_count = std::max(row_count, s);
+      return row_count;
+    }
+    case ZipMode::kTruncate: {
+      int row_count = sizes[0];
+      for (int i = 1; i < n_arrays; ++i) {
+        row_count = std::min(row_count, sizes[i]);
+      }
+      return row_count;
+    }
+    case ZipMode::kStrict:
+      return sizes[0];
+  }
+  return 0;
+}
+
+absl::StatusOr<int> ValidateStrictZipSizes(const std::vector<int>& sizes) {
+  const int row_count = sizes[0];
+  for (int i = 1; i < static_cast<int>(sizes.size()); ++i) {
+    if (sizes[i] != row_count) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          absl::StrCat("semantic: UNNEST with mode STRICT requires arrays of "
+                       "equal length; got array #0 length ",
+                       sizes[0],
+                       " and array #",
+                       i,
+                       " length ",
+                       sizes[i]));
+    }
+  }
+  return row_count;
+}
+
+ColumnBindings BuildOuterUnnestNullRow(
+    const ::googlesql::ResolvedArrayScan& scan, int n_arrays) {
+  ColumnBindings bindings;
+  bindings.reserve(n_arrays + 1);
+  for (int i = 0; i < n_arrays; ++i) {
+    bindings.emplace(scan.element_column_list(i).column_id(),
+                     NullElement(scan.element_column_list(i).type()));
+  }
+  if (scan.array_offset_column() != nullptr) {
+    bindings.emplace(scan.array_offset_column()->column().column_id(),
+                     Value::NullInt64());
+  }
+  AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
+  InjectArrayScanInternalColumns(scan, bindings);
+  return bindings;
 }
 
 }  // namespace
@@ -267,69 +332,20 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
   }
 
   int row_count = 0;
-  if (n_arrays == 1) {
-    row_count = sizes[0];
+  if (n_arrays > 1 && zip_mode == ZipMode::kStrict) {
+    auto strict_or = ValidateStrictZipSizes(sizes);
+    if (!strict_or.ok()) return strict_or.status();
+    row_count = *strict_or;
   } else {
-    switch (zip_mode) {
-      case ZipMode::kPad: {
-        for (int s : sizes)
-          row_count = std::max(row_count, s);
-        break;
-      }
-      case ZipMode::kTruncate: {
-        row_count = sizes[0];
-        for (int s : sizes)
-          row_count = std::min(row_count, s);
-        break;
-      }
-      case ZipMode::kStrict: {
-        row_count = sizes[0];
-        for (int i = 1; i < n_arrays; ++i) {
-          if (sizes[i] != row_count) {
-            return MakeSemanticError(
-                SemanticErrorReason::kInvalidArgument,
-                absl::StrCat(
-                    "semantic: UNNEST with mode STRICT requires arrays of "
-                    "equal length; got array #0 length ",
-                    sizes[0],
-                    " and array #",
-                    i,
-                    " length ",
-                    sizes[i]));
-          }
-        }
-        break;
-      }
-    }
+    row_count = ComputeZipRowCount(zip_mode, sizes, n_arrays);
   }
 
-  // -------- Outer UNNEST emits one all-NULL row on empty arrays.
-  //
-  // BigQuery semantics: `LEFT JOIN UNNEST(arr) ... ` (or
-  // `is_outer=true` set via `WITH OFFSET` on an empty side) emits
-  // one row with NULL for every element column and NULL for the
-  // offset column. DuckDB drops the row in its lateral unnest;
-  // promoting this shape to the semantic executor and emitting
-  // the NULL row here is what restores the contract.
   std::vector<ColumnBindings> rows;
   if (row_count == 0 && scan.is_outer()) {
-    ColumnBindings bindings;
-    bindings.reserve(n_arrays + 1);
-    for (int i = 0; i < n_arrays; ++i) {
-      bindings.emplace(scan.element_column_list(i).column_id(),
-                       NullElement(scan.element_column_list(i).type()));
-    }
-    if (scan.array_offset_column() != nullptr) {
-      bindings.emplace(scan.array_offset_column()->column().column_id(),
-                       Value::NullInt64());
-    }
-    AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
-    InjectArrayScanInternalColumns(scan, bindings);
-    rows.push_back(std::move(bindings));
+    rows.push_back(BuildOuterUnnestNullRow(scan, n_arrays));
     return rows;
   }
 
-  // -------- Materialize the rows.
   rows.reserve(row_count);
   for (int idx = 0; idx < row_count; ++idx) {
     ColumnBindings bindings;

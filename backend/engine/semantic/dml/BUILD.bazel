@@ -19,6 +19,7 @@ cc_library(
         "dml_insert.cc",
         "dml_merge.cc",
         "dml_mutate.cc",
+        "dml_mutate_helpers.cc",
         "dml_returning.cc",
     ],
     hdrs = [

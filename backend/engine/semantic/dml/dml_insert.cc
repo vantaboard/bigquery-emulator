@@ -127,27 +127,17 @@ absl::StatusOr<DmlStats> ExecuteInsert(
     absl::Status assert_ok = CheckAssertRowsModified(
         insert.assert_rows_modified(), DmlStatementKind::kInsert, stats, ctx);
     if (!assert_ok.ok()) return assert_ok;
+    if (insert.returning() != nullptr && returning_out != nullptr &&
+        insert.table_scan() != nullptr && by_id.ok()) {
+      auto ret_or = BuildInsertReturningIfNeeded(
+          insert, target, schema, *by_id, rows, returning_out, stats, ctx);
+      if (!ret_or.ok()) return ret_or.status();
+      stats = *ret_or;
+    }
     absl::Status appended =
         // cpp-lint:allow(status-discarded) -- captured into appended
         storage.AppendRows(target->storage_table_id(), rows);
     if (!appended.ok()) return appended;
-    if (insert.returning() != nullptr && returning_out != nullptr &&
-        insert.table_scan() != nullptr && !rows.empty()) {
-      std::vector<ColumnBindings> contexts;
-      std::vector<std::string> actions;
-      contexts.reserve(rows.size());
-      actions.reserve(rows.size());
-      for (const storage::Row& row : rows) {
-        auto bind = BindRow(row, *insert.table_scan(), *by_id, schema);
-        if (!bind.ok()) return bind.status();
-        contexts.push_back(*std::move(bind));
-        actions.push_back("INSERT");
-      }
-      auto ret_or = BuildReturningRowSource(
-          *insert.returning(), std::move(contexts), std::move(actions), ctx);
-      if (!ret_or.ok()) return ret_or.status();
-      *returning_out = *std::move(ret_or);
-    }
     return stats;
   }
 
@@ -175,27 +165,17 @@ absl::StatusOr<DmlStats> ExecuteInsert(
   absl::Status assert_ok = CheckAssertRowsModified(
       insert.assert_rows_modified(), DmlStatementKind::kInsert, stats, ctx);
   if (!assert_ok.ok()) return assert_ok;
+  if (insert.returning() != nullptr && returning_out != nullptr &&
+      insert.table_scan() != nullptr && !rows.empty() && by_id.ok()) {
+    auto ret_or = BuildInsertReturningIfNeeded(
+        insert, target, schema, *by_id, rows, returning_out, stats, ctx);
+    if (!ret_or.ok()) return ret_or.status();
+    stats = *ret_or;
+  }
   absl::Status appended =
       // cpp-lint:allow(status-discarded) -- captured into appended
       storage.AppendRows(target->storage_table_id(), rows);
   if (!appended.ok()) return appended;
-  if (insert.returning() != nullptr && returning_out != nullptr &&
-      insert.table_scan() != nullptr && !rows.empty()) {
-    std::vector<ColumnBindings> contexts;
-    std::vector<std::string> actions;
-    contexts.reserve(rows.size());
-    actions.reserve(rows.size());
-    for (const storage::Row& row : rows) {
-      auto bind = BindRow(row, *insert.table_scan(), *by_id, schema);
-      if (!bind.ok()) return bind.status();
-      contexts.push_back(*std::move(bind));
-      actions.push_back("INSERT");
-    }
-    auto ret_or = BuildReturningRowSource(
-        *insert.returning(), std::move(contexts), std::move(actions), ctx);
-    if (!ret_or.ok()) return ret_or.status();
-    *returning_out = *std::move(ret_or);
-  }
   return stats;
 }
 

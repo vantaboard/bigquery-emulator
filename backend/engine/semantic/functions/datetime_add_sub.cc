@@ -27,6 +27,8 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
+namespace {
+
 using datetime_internal::DateTimestampPart;
 using datetime_internal::DatetimeValue;
 using datetime_internal::DefaultTimeZone;
@@ -35,57 +37,44 @@ using datetime_internal::PartFromArg;
 using datetime_internal::TimeValue;
 using ::googlesql::Value;
 
-absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
-                                          const std::vector<Value>& args) {
-  if (args.size() < 2) {
+absl::StatusOr<Value> DateDiffImpl(const std::vector<Value>& args) {
+  if (args.size() != 3) {
     return absl::InvalidArgumentError(
-        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+        "semantic: DATE_DIFF expects three arguments");
   }
-  if (!args.empty() && args[0].type_kind() == ::googlesql::TYPE_DATETIME) {
-    if (name == "date_diff") {
-      return DatetimeAddSubDiffTrunc("datetime_diff", args);
-    }
-    if (name == "date_trunc") {
-      return DatetimeAddSubDiffTrunc("datetime_trunc", args);
-    }
+  if (args[2].is_null()) return Value::NullInt64();
+  auto part = PartFromArg(args[2]);
+  if (!part.ok()) return part.status();
+  int32_t out = 0;
+  if (auto s = ::googlesql::functions::DiffDates(
+          args[0].date_value(), args[1].date_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::Null(args[0].type());
+  return Value::Int64(out);
+}
+
+absl::StatusOr<Value> DateTruncImpl(const std::vector<Value>& args) {
+  if (args.size() < 2 || args.size() > 3) {
+    return absl::InvalidArgumentError(
+        "semantic: DATE_TRUNC expects 2 or 3 arguments");
   }
-  if (name == "date_diff") {
-    if (args.size() != 3) {
-      return absl::InvalidArgumentError(
-          "semantic: DATE_DIFF expects three arguments");
-    }
-    if (args[2].is_null()) return Value::NullInt64();
-    auto part = PartFromArg(args[2]);
-    if (!part.ok()) return part.status();
-    int32_t out = 0;
-    if (auto s = ::googlesql::functions::DiffDates(
-            args[0].date_value(), args[1].date_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(out);
+  if ((args.size() == 3 && args[2].is_null()) || args[1].is_null()) {
+    return Value::NullDate();
   }
-  if (name == "date_trunc") {
-    if (args.size() < 2 || args.size() > 3) {
-      return absl::InvalidArgumentError(
-          "semantic: DATE_TRUNC expects 2 or 3 arguments");
-    }
-    if ((args.size() == 3 && args[2].is_null()) || args[1].is_null()) {
-      return Value::NullDate();
-    }
-    auto part = PartFromArg(args[1]);
-    if (!part.ok()) return part.status();
-    int32_t out = 0;
-    if (auto s = ::googlesql::functions::TruncateDate(
-            args[0].date_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Date(out);
+  auto part = PartFromArg(args[1]);
+  if (!part.ok()) return part.status();
+  int32_t out = 0;
+  if (auto s = ::googlesql::functions::TruncateDate(
+          args[0].date_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
+  return Value::Date(out);
+}
+
+absl::StatusOr<Value> DateAddSubImpl(absl::string_view name,
+                                     const std::vector<Value>& args) {
   if (args.size() != 3) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects three arguments"));
@@ -101,17 +90,42 @@ absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
         !s.ok()) {
       return s;
     }
-  } else if (name == "date_sub") {
+  } else {
     if (auto s = ::googlesql::functions::SubDate(
             args[0].date_value(), *part, interval, &out);
         !s.ok()) {
       return s;
     }
-  } else {
-    return absl::InvalidArgumentError(
-        absl::StrCat("semantic: unknown date function ", name));
   }
   return Value::Date(out);
+}
+
+}  // namespace
+
+absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
+                                          const std::vector<Value>& args) {
+  if (args.size() < 2) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+  }
+  if (args[0].type_kind() == ::googlesql::TYPE_DATETIME) {
+    if (name == "date_diff") {
+      return DatetimeAddSubDiffTrunc("datetime_diff", args);
+    }
+    if (name == "date_trunc") {
+      return DatetimeAddSubDiffTrunc("datetime_trunc", args);
+    }
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::Null(args[0].type());
+  }
+  if (name == "date_diff") return DateDiffImpl(args);
+  if (name == "date_trunc") return DateTruncImpl(args);
+  if (name == "date_add" || name == "date_sub") {
+    return DateAddSubImpl(name, args);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: unknown date function ", name));
 }
 
 absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,

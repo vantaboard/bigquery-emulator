@@ -24,18 +24,21 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
-std::optional<absl::StatusOr<Value>> Dispatch(
+namespace {
+
+std::optional<absl::StatusOr<Value>> DispatchCoreAndNumeric(
     absl::string_view name,
     const std::vector<Value>& args,
-    const ::googlesql::Type* return_type,
-    const EvalContext* ctx) {
-  (void)return_type;
+    const ::googlesql::Type* return_type) {
   if (name == "$extract") return Extract(args, return_type);
   if (name == "$subscript") return JsonSubscript(args, return_type);
-  // Numeric edges.
   if (name == "bit_count") return BitCount(args);
   if (name == "ieee_divide") return IeeeDivide(args);
-  // String family.
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchStringBasics(
+    absl::string_view name, const std::vector<Value>& args) {
   if (name == "soundex") return Soundex(args);
   if (name == "instr") return Instr(args);
   if (name == "contains_substr") return ContainsSubstr(args);
@@ -56,22 +59,13 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "rtrim") return Rtrim(args);
   if (name == "lpad") return Lpad(args);
   if (name == "rpad") return Rpad(args);
-  if (name == "floor") return Floor(args);
-  if (name == "ceil" || name == "ceiling") return Ceil(args);
-  if (name == "round") return Round(args);
-  if (name == "trunc") return Trunc(args);
-  if (name == "sign") return Sign(args);
-  if (name == "div") return Div(args);
-  if (name == "mod") return Mod(args);
-  if (name == "pow" || name == "power") return Pow(args);
-  if (name == "log") return Log(args);
-  if (name == "ln") return Log(args);
-  if (name == "sqrt") return Sqrt(args);
-  if (name == "sin") return Sin(args);
-  if (name == "cos") return Cos(args);
-  if (name == "asin") return Asin(args);
-  if (name == "acos") return Acos(args);
-  if (name == "atan2") return Atan2(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchStringSearchAndEncode(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
   if (name == "replace") return Replace(args);
   if (name == "translate") return Translate(args);
   if (name == "reverse") return Reverse(args);
@@ -88,11 +82,13 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "from_base64") return FromBase64(args);
   if (name == "to_base32") return ToBase32(args);
   if (name == "from_base32") return FromBase32(args);
-  if (name == "md5") return Md5(args);
-  if (name == "sha1") return Sha1(args);
-  if (name == "sha256") return Sha256(args);
-  if (name == "sha512") return Sha512(args);
-  if (name == "farm_fingerprint") return FarmFingerprintFunc(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchStringNormalize(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
   if (name == "initcap") return InitcapFunc(args);
   if (name == "normalize") return NormalizeFunc(args);
   if (name == "normalize_and_casefold") return NormalizeAndCasefoldFunc(args);
@@ -102,10 +98,56 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "code_points_to_string") return CodePointsToString(args);
   if (name == "code_points_to_bytes") return CodePointsToBytes(args);
   if (name == "to_code_points") return ToCodePoints(args, return_type);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchStringFamily(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
+  if (auto r = DispatchStringBasics(name, args)) return *r;
+  if (auto r = DispatchStringSearchAndEncode(name, args, return_type))
+    return *r;
+  if (auto r = DispatchStringNormalize(name, args, return_type)) return *r;
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchMathFamily(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
+  (void)return_type;
+  if (name == "floor") return Floor(args);
+  if (name == "ceil" || name == "ceiling") return Ceil(args);
+  if (name == "round") return Round(args);
+  if (name == "trunc") return Trunc(args);
+  if (name == "sign") return Sign(args);
+  if (name == "div") return Div(args);
+  if (name == "mod") return Mod(args);
+  if (name == "pow" || name == "power") return Pow(args);
+  if (name == "log") return Log(args);
+  if (name == "ln") return Log(args);
+  if (name == "sqrt") return Sqrt(args);
+  if (name == "sin") return Sin(args);
+  if (name == "cos") return Cos(args);
+  if (name == "asin") return Asin(args);
+  if (name == "acos") return Acos(args);
+  if (name == "atan2") return Atan2(args);
   if (name == "least") return Least(args, return_type);
   if (name == "greatest") return Greatest(args, return_type);
   if (name == "parse_numeric") return ParseNumericFunc(args);
-  if (name == "parse_bignumeric") return ParseBignumeric(args, ctx);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchHashAndRegexp(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
+  if (name == "md5") return Md5(args);
+  if (name == "sha1") return Sha1(args);
+  if (name == "sha256") return Sha256(args);
+  if (name == "sha512") return Sha512(args);
+  if (name == "farm_fingerprint") return FarmFingerprintFunc(args);
   if (name == "regexp_contains") return RegexpContains(args);
   if (name == "regexp_extract") return RegexpExtract(args);
   if (name == "regexp_extract_all") {
@@ -113,6 +155,14 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   }
   if (name == "regexp_replace") return RegexpReplace(args);
   if (name == "regexp_instr") return RegexpInstr(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchFormatAndGeog(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type,
+    const EvalContext* ctx) {
   if (name == "format") {
     if (args.size() == 2 && !args[0].is_null() &&
         args[0].string_value() == "%T" && !args[1].is_null() &&
@@ -121,6 +171,7 @@ std::optional<absl::StatusOr<Value>> Dispatch(
     }
     return Format(args);
   }
+  if (name == "parse_bignumeric") return ParseBignumeric(args, ctx);
   if (name == "st_geogpoint") return StGeogPoint(args);
   if (name == "st_geogfromtext") return StGeogFromText(args);
   if (name == "st_geogfromwkb") return StGeogFromWkb(args);
@@ -129,6 +180,13 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "st_within") return StWithin(args);
   if (name == "st_contains") return StContains(args);
   if (name == "st_intersects") return StIntersects(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchJsonFamily(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
   if (name == "to_json") return ToJson(args);
   if (name == "to_json_string") return ToJsonString(args);
   if (name == "parse_json") return ParseJson(args);
@@ -150,22 +208,29 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "float64") return JsonCastFloat64(args);
   if (name == "string") {
     if (args.size() == 1) return JsonCastString(args);
-    return StringFunc(args);  // datetime_funcs.h
+    return StringFunc(args);
   }
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchDatetimeParseFormat(
+    absl::string_view name, const std::vector<Value>& args) {
   if (name == "justify_days") return JustifyDays(args);
   if (name == "justify_hours") return JustifyHours(args);
   if (name == "justify_interval") return JustifyInterval(args);
-  // Parse functions.
   if (name == "parse_date") return ParseDate(args);
   if (name == "parse_datetime") return ParseDatetime(args);
   if (name == "parse_timestamp") return ParseTimestamp(args);
   if (name == "parse_time") return ParseTime(args);
-  // Format functions.
   if (name == "format_date") return FormatDate(args);
   if (name == "format_datetime") return FormatDatetime(args);
   if (name == "format_timestamp") return FormatTimestamp(args);
   if (name == "format_time") return FormatTime(args);
-  // Date/time arithmetic and current_* / unix_*.
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchDatetimeArithmetic(
+    absl::string_view name, const std::vector<Value>& args) {
   if (name == "date_add" || name == "date_sub" || name == "date_diff" ||
       name == "date_trunc") {
     return DateAddSubDiffTrunc(name, args);
@@ -182,6 +247,11 @@ std::optional<absl::StatusOr<Value>> Dispatch(
       name == "time_trunc") {
     return TimeAddSubDiffTrunc(name, args);
   }
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchDatetimeCurrentUnix(
+    absl::string_view name, const std::vector<Value>& args) {
   if (name == "current_date") return CurrentDate(args);
   if (name == "current_datetime") return CurrentDatetime(args);
   if (name == "current_time") return CurrentTime(args);
@@ -196,6 +266,38 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "date_from_unix_date") return DateFromUnixDate(args);
   if (name == "last_day") return LastDay(args);
   if (name == "timestamp_bucket") return TimestampBucket(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchDatetimeConstructors(
+    absl::string_view name, const std::vector<Value>& args) {
+  if (name == "time") return TimeConstructor(args);
+  if (name == "date") return DateConstructor(args);
+  if (name == "datetime") return DatetimeConstructor(name, args);
+  if (name == "timestamp" || name == "timestamp_from_date" ||
+      name == "timestamp_from_datetime") {
+    return TimestampConstructor(name, args);
+  }
+  if (name == "make_interval") return MakeInterval(args);
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchDatetimeFamily(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
+  if (auto r = DispatchDatetimeParseFormat(name, args)) return *r;
+  if (auto r = DispatchDatetimeArithmetic(name, args)) return *r;
+  if (auto r = DispatchDatetimeCurrentUnix(name, args)) return *r;
+  if (name == "extract") return Extract(args, return_type);
+  if (auto r = DispatchDatetimeConstructors(name, args)) return *r;
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> DispatchArrayAndRange(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type) {
   if (name == "generate_array") {
     return GenerateArray(args, return_type);
   }
@@ -225,20 +327,28 @@ std::optional<absl::StatusOr<Value>> Dispatch(
   if (name == "generate_timestamp_array") {
     return GenerateTimestampArray(args, return_type);
   }
-  if (name == "time") return TimeConstructor(args);
-  if (name == "date") return DateConstructor(args);
-  if (name == "datetime") return DatetimeConstructor(name, args);
-  if (name == "timestamp" || name == "timestamp_from_date" ||
-      name == "timestamp_from_datetime") {
-    return TimestampConstructor(name, args);
-  }
-  // Intervals and extract.
-  if (name == "make_interval") return MakeInterval(args);
   if (name == "range") return RangeCtor(args, return_type);
   if (name == "range_start") return RangeStart(args);
   if (name == "range_end") return RangeEnd(args);
   if (name == "range_overlaps") return RangeOverlaps(args);
-  if (name == "extract") return Extract(args, return_type);
+  return std::nullopt;
+}
+
+}  // namespace
+
+std::optional<absl::StatusOr<Value>> Dispatch(
+    absl::string_view name,
+    const std::vector<Value>& args,
+    const ::googlesql::Type* return_type,
+    const EvalContext* ctx) {
+  if (auto r = DispatchCoreAndNumeric(name, args, return_type)) return *r;
+  if (auto r = DispatchStringFamily(name, args, return_type)) return *r;
+  if (auto r = DispatchMathFamily(name, args, return_type)) return *r;
+  if (auto r = DispatchHashAndRegexp(name, args, return_type)) return *r;
+  if (auto r = DispatchFormatAndGeog(name, args, return_type, ctx)) return *r;
+  if (auto r = DispatchJsonFamily(name, args, return_type)) return *r;
+  if (auto r = DispatchDatetimeFamily(name, args, return_type)) return *r;
+  if (auto r = DispatchArrayAndRange(name, args, return_type)) return *r;
   if (auto specialized = DispatchSpecializedScalar(name, args, return_type)) {
     return *specialized;
   }

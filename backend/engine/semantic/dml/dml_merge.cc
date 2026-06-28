@@ -127,6 +127,177 @@ struct SourceMergeState {
   bool acted = false;
 };
 
+void CorrelateMergeTargetsAndSources(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    std::vector<TargetMergeState>& targets,
+    std::vector<SourceMergeState>& sources,
+    EvalContext& ctx) {
+  for (size_t s = 0; s < sources.size(); ++s) {
+    for (size_t t = 0; t < targets.size(); ++t) {
+      ColumnBindings merged =
+          MergeColumnBindings(targets[t].target_bind, sources[s].source_bind);
+      ctx.columns = &merged;
+      if (!EvalBoolExpr(merge.merge_expr(), ctx)) {
+        ctx.columns = nullptr;
+        continue;
+      }
+      ctx.columns = nullptr;
+      targets[t].has_source_match = true;
+      targets[t].match_count += 1;
+      targets[t].matched_bind = merged;
+      sources[s].has_target_match = true;
+    }
+  }
+}
+
+absl::Status CheckMatchedTargetMultiMatch(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    const std::vector<TargetMergeState>& targets) {
+  bool matched_mutates = false;
+  for (int i = 0; i < merge.when_clause_list_size(); ++i) {
+    const ::googlesql::ResolvedMergeWhen* when = merge.when_clause_list(i);
+    if (when != nullptr &&
+        when->match_type() == ::googlesql::ResolvedMergeWhen::MATCHED &&
+        (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE ||
+         when->action_type() == ::googlesql::ResolvedMergeWhen::DELETE)) {
+      matched_mutates = true;
+      break;
+    }
+  }
+  if (!matched_mutates) return absl::OkStatus();
+  for (const TargetMergeState& st : targets) {
+    if (st.match_count > 1) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          "semantic/dml: MERGE must match at most one source row for "
+          "each target row");
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ApplyMatchedMergeWhen(
+    const ::googlesql::ResolvedMergeWhen& when,
+    const schema::TableSchema& schema,
+    const ::googlesql::ResolvedTableScan& target_scan,
+    std::vector<TargetMergeState>& targets,
+    DmlStats& stats,
+    EvalContext& ctx) {
+  for (TargetMergeState& st : targets) {
+    if (!st.has_source_match || st.acted || st.deleted) continue;
+    ctx.columns = &st.matched_bind;
+    if (!EvalBoolExpr(when.match_expr(), ctx)) {
+      ctx.columns = nullptr;
+      continue;
+    }
+    ctx.columns = nullptr;
+    if (when.action_type() == ::googlesql::ResolvedMergeWhen::DELETE) {
+      st.deleted = true;
+      st.acted = true;
+      ++stats.deleted_row_count;
+      continue;
+    }
+    if (when.action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
+      auto sets = ParseMergeUpdateItems(when, schema, target_scan);
+      if (!sets.ok()) return sets.status();
+      absl::Status applied =
+          ApplyMergeSets(st.row, *sets, st.matched_bind, schema, ctx);
+      if (!applied.ok()) return applied;
+      st.acted = true;
+      ++stats.updated_row_count;
+      continue;
+    }
+    return absl::InternalError(
+        "semantic/dml: MATCHED MERGE clause has unexpected action");
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ApplyNotMatchedByTargetMergeWhen(
+    const ::googlesql::ResolvedMergeWhen& when,
+    const schema::TableSchema& schema,
+    std::vector<SourceMergeState>& sources,
+    std::vector<storage::Row>& inserts,
+    DmlStats& stats,
+    EvalContext& ctx) {
+  for (size_t s = 0; s < sources.size(); ++s) {
+    SourceMergeState& src = sources[s];
+    if (src.has_target_match || src.acted) continue;
+    ctx.columns = &src.source_bind;
+    if (!EvalBoolExpr(when.match_expr(), ctx)) {
+      ctx.columns = nullptr;
+      continue;
+    }
+    if (when.action_type() != ::googlesql::ResolvedMergeWhen::INSERT) {
+      ctx.columns = nullptr;
+      return absl::InternalError(
+          "semantic/dml: NOT MATCHED BY TARGET requires INSERT");
+    }
+    if (when.insert_row() == nullptr || when.insert_column_list().empty()) {
+      ctx.columns = nullptr;
+      return absl::InternalError(
+          "semantic/dml: MERGE INSERT clause missing row/columns");
+    }
+    std::vector<int> column_idx;
+    column_idx.reserve(when.insert_column_list_size());
+    for (int c = 0; c < when.insert_column_list_size(); ++c) {
+      const int idx = IndexOfColumn(schema, when.insert_column_list(c).name());
+      if (idx < 0) {
+        ctx.columns = nullptr;
+        return absl::InternalError(
+            absl::StrCat("semantic/dml: MERGE INSERT column '",
+                         when.insert_column_list(c).name(),
+                         "' not found in target schema"));
+      }
+      column_idx.push_back(idx);
+    }
+    auto built = BuildInsertRow(*when.insert_row(), column_idx, schema, ctx);
+    ctx.columns = nullptr;
+    if (!built.ok()) return built.status();
+    inserts.push_back(*std::move(built));
+    src.acted = true;
+    ++stats.inserted_row_count;
+  }
+  return absl::OkStatus();
+}
+
+absl::Status ApplyNotMatchedBySourceMergeWhen(
+    const ::googlesql::ResolvedMergeWhen& when,
+    const schema::TableSchema& schema,
+    const ::googlesql::ResolvedTableScan& target_scan,
+    std::vector<TargetMergeState>& targets,
+    DmlStats& stats,
+    EvalContext& ctx) {
+  for (TargetMergeState& st : targets) {
+    if (st.has_source_match || st.acted || st.deleted) continue;
+    ctx.columns = &st.target_bind;
+    if (!EvalBoolExpr(when.match_expr(), ctx)) {
+      ctx.columns = nullptr;
+      continue;
+    }
+    ctx.columns = nullptr;
+    if (when.action_type() == ::googlesql::ResolvedMergeWhen::DELETE) {
+      st.deleted = true;
+      st.acted = true;
+      ++stats.deleted_row_count;
+      continue;
+    }
+    if (when.action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
+      auto sets = ParseMergeUpdateItems(when, schema, target_scan);
+      if (!sets.ok()) return sets.status();
+      absl::Status applied =
+          ApplyMergeSets(st.row, *sets, st.target_bind, schema, ctx);
+      if (!applied.ok()) return applied;
+      st.acted = true;
+      ++stats.updated_row_count;
+      continue;
+    }
+    return absl::InternalError(
+        "semantic/dml: NOT MATCHED BY SOURCE has unexpected action");
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::StatusOr<DmlStats> ExecuteMerge(
@@ -163,44 +334,10 @@ absl::StatusOr<DmlStats> ExecuteMerge(
     sources.push_back({bind, false, false});
   }
 
-  for (size_t s = 0; s < sources.size(); ++s) {
-    for (size_t t = 0; t < targets.size(); ++t) {
-      ColumnBindings merged =
-          MergeColumnBindings(targets[t].target_bind, sources[s].source_bind);
-      ctx.columns = &merged;
-      if (!EvalBoolExpr(merge.merge_expr(), ctx)) {
-        ctx.columns = nullptr;
-        continue;
-      }
-      ctx.columns = nullptr;
-      targets[t].has_source_match = true;
-      targets[t].match_count += 1;
-      targets[t].matched_bind = merged;
-      sources[s].has_target_match = true;
-    }
-  }
+  CorrelateMergeTargetsAndSources(merge, targets, sources, ctx);
 
-  bool matched_mutates = false;
-  for (int i = 0; i < merge.when_clause_list_size(); ++i) {
-    const ::googlesql::ResolvedMergeWhen* when = merge.when_clause_list(i);
-    if (when != nullptr &&
-        when->match_type() == ::googlesql::ResolvedMergeWhen::MATCHED &&
-        (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE ||
-         when->action_type() == ::googlesql::ResolvedMergeWhen::DELETE)) {
-      matched_mutates = true;
-      break;
-    }
-  }
-  if (matched_mutates) {
-    for (const TargetMergeState& st : targets) {
-      if (st.match_count > 1) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic/dml: MERGE must match at most one source row for "
-            "each target row");
-      }
-    }
-  }
+  absl::Status multi_match = CheckMatchedTargetMultiMatch(merge, targets);
+  if (!multi_match.ok()) return multi_match;
 
   DmlStats stats;
   std::vector<storage::Row> inserts;
@@ -214,109 +351,21 @@ absl::StatusOr<DmlStats> ExecuteMerge(
 
     switch (when->match_type()) {
       case ::googlesql::ResolvedMergeWhen::MATCHED: {
-        for (TargetMergeState& st : targets) {
-          if (!st.has_source_match || st.acted || st.deleted) continue;
-          ctx.columns = &st.matched_bind;
-          if (!EvalBoolExpr(when->match_expr(), ctx)) {
-            ctx.columns = nullptr;
-            continue;
-          }
-          ctx.columns = nullptr;
-          if (when->action_type() == ::googlesql::ResolvedMergeWhen::DELETE) {
-            st.deleted = true;
-            st.acted = true;
-            ++stats.deleted_row_count;
-            continue;
-          }
-          if (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
-            auto sets =
-                ParseMergeUpdateItems(*when, schema, *merge.table_scan());
-            if (!sets.ok()) return sets.status();
-            absl::Status applied =
-                ApplyMergeSets(st.row, *sets, st.matched_bind, schema, ctx);
-            if (!applied.ok()) return applied;
-            st.acted = true;
-            ++stats.updated_row_count;
-            continue;
-          }
-          return absl::InternalError(
-              "semantic/dml: MATCHED MERGE clause has unexpected action");
-        }
+        absl::Status applied = ApplyMatchedMergeWhen(
+            *when, schema, *merge.table_scan(), targets, stats, ctx);
+        if (!applied.ok()) return applied;
         break;
       }
       case ::googlesql::ResolvedMergeWhen::NOT_MATCHED_BY_TARGET: {
-        for (size_t s = 0; s < sources.size(); ++s) {
-          SourceMergeState& src = sources[s];
-          if (src.has_target_match || src.acted) continue;
-          ctx.columns = &src.source_bind;
-          if (!EvalBoolExpr(when->match_expr(), ctx)) {
-            ctx.columns = nullptr;
-            continue;
-          }
-          if (when->action_type() != ::googlesql::ResolvedMergeWhen::INSERT) {
-            ctx.columns = nullptr;
-            return absl::InternalError(
-                "semantic/dml: NOT MATCHED BY TARGET requires INSERT");
-          }
-          if (when->insert_row() == nullptr ||
-              when->insert_column_list().empty()) {
-            ctx.columns = nullptr;
-            return absl::InternalError(
-                "semantic/dml: MERGE INSERT clause missing row/columns");
-          }
-          std::vector<int> column_idx;
-          column_idx.reserve(when->insert_column_list_size());
-          for (int c = 0; c < when->insert_column_list_size(); ++c) {
-            const int idx =
-                IndexOfColumn(schema, when->insert_column_list(c).name());
-            if (idx < 0) {
-              ctx.columns = nullptr;
-              return absl::InternalError(
-                  absl::StrCat("semantic/dml: MERGE INSERT column '",
-                               when->insert_column_list(c).name(),
-                               "' not found in target schema"));
-            }
-            column_idx.push_back(idx);
-          }
-          auto built =
-              BuildInsertRow(*when->insert_row(), column_idx, schema, ctx);
-          ctx.columns = nullptr;
-          if (!built.ok()) return built.status();
-          inserts.push_back(*std::move(built));
-          src.acted = true;
-          ++stats.inserted_row_count;
-        }
+        absl::Status applied = ApplyNotMatchedByTargetMergeWhen(
+            *when, schema, sources, inserts, stats, ctx);
+        if (!applied.ok()) return applied;
         break;
       }
       case ::googlesql::ResolvedMergeWhen::NOT_MATCHED_BY_SOURCE: {
-        for (TargetMergeState& st : targets) {
-          if (st.has_source_match || st.acted || st.deleted) continue;
-          ctx.columns = &st.target_bind;
-          if (!EvalBoolExpr(when->match_expr(), ctx)) {
-            ctx.columns = nullptr;
-            continue;
-          }
-          ctx.columns = nullptr;
-          if (when->action_type() == ::googlesql::ResolvedMergeWhen::DELETE) {
-            st.deleted = true;
-            st.acted = true;
-            ++stats.deleted_row_count;
-            continue;
-          }
-          if (when->action_type() == ::googlesql::ResolvedMergeWhen::UPDATE) {
-            auto sets =
-                ParseMergeUpdateItems(*when, schema, *merge.table_scan());
-            if (!sets.ok()) return sets.status();
-            absl::Status applied =
-                ApplyMergeSets(st.row, *sets, st.target_bind, schema, ctx);
-            if (!applied.ok()) return applied;
-            st.acted = true;
-            ++stats.updated_row_count;
-            continue;
-          }
-          return absl::InternalError(
-              "semantic/dml: NOT MATCHED BY SOURCE has unexpected action");
-        }
+        absl::Status applied = ApplyNotMatchedBySourceMergeWhen(
+            *when, schema, *merge.table_scan(), targets, stats, ctx);
+        if (!applied.ok()) return applied;
         break;
       }
     }

@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -64,58 +65,197 @@ absl::StatusOr<Value> DefaultInternalAnalyzerColumn(
   return Value::Null(type);
 }
 
+absl::StatusOr<Value> EvalResolvedLiteral(
+    const ::googlesql::ResolvedLiteral& lit) {
+  // cpp-lint:allow(statusor-unchecked-value) -- `lit.value()` is
+  // `ResolvedLiteral::value()` returning `googlesql::Value`, not a
+  // `StatusOr<T>::value()` unwrap.
+  return lit.value();
+}
+
+absl::StatusOr<Value> EvalResolvedParameter(
+    const ::googlesql::ResolvedParameter& param, const EvalContext& ctx) {
+  if (ctx.parameters == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedParameter referenced but no parameter "
+        "bindings supplied");
+  }
+  if (param.is_untyped()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic: untyped parameter has no value to bind to");
+  }
+  if (!param.name().empty()) {
+    const std::string key = absl::AsciiStrToLower(param.name());
+    auto it = ctx.parameters->by_name.find(key);
+    if (it == ctx.parameters->by_name.end()) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          absl::StrCat("semantic: no value bound for parameter @",
+                       param.name()));
+    }
+    return it->second;
+  }
+  if (param.position() > 0) {
+    size_t idx = static_cast<size_t>(param.position()) - 1;
+    if (idx >= ctx.parameters->by_position.size()) {
+      return MakeSemanticError(
+          SemanticErrorReason::kInvalidArgument,
+          absl::StrCat("semantic: no value bound for positional parameter #",
+                       param.position()));
+    }
+    return ctx.parameters->by_position[idx];
+  }
+  return absl::InvalidArgumentError(
+      "semantic: ResolvedParameter has neither name nor position");
+}
+
+absl::StatusOr<Value> LookupColumnRef(const ::googlesql::ResolvedColumnRef& ref,
+                                      const EvalContext& ctx) {
+  if (ctx.columns == nullptr) {
+    if (ctx.columns_by_name != nullptr) {
+      auto name_it =
+          ctx.columns_by_name->find(std::string(ref.column().name()));
+      if (name_it != ctx.columns_by_name->end()) {
+        return name_it->second;
+      }
+    }
+    if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
+        internal.ok()) {
+      return *std::move(internal);
+    }
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        absl::StrCat("semantic: ResolvedColumnRef '",
+                     ref.column().name(),
+                     "' referenced without a row binding; correlated scans "
+                     "require correlated scan support; see "
+                     "docs/ENGINE_POLICY.md"));
+  }
+  auto it = ctx.columns->find(ref.column().column_id());
+  if (it == ctx.columns->end()) {
+    if (ctx.columns_by_name != nullptr) {
+      auto name_it =
+          ctx.columns_by_name->find(std::string(ref.column().name()));
+      if (name_it != ctx.columns_by_name->end()) {
+        return name_it->second;
+      }
+    }
+    if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
+        internal.ok()) {
+      return *std::move(internal);
+    }
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: no row binding for column '",
+                     ref.column().name(),
+                     "' (column_id=",
+                     ref.column().column_id(),
+                     ")"));
+  }
+  return it->second;
+}
+
+absl::StatusOr<Value> EvalResolvedConstant(
+    const ::googlesql::ResolvedConstant& node, const EvalContext& ctx) {
+  const ::googlesql::Constant* constant = node.constant();
+  if (constant == nullptr) {
+    return absl::InternalError(
+        "semantic: ResolvedConstant has null constant pointer");
+  }
+  if (ctx.script_variables != nullptr &&
+      ctx.script_variables->Has(constant->Name())) {
+    absl::StatusOr<Value> bound =
+        ctx.script_variables->Lookup(constant->Name());
+    if (!bound.ok()) return bound.status();
+    return *std::move(bound);
+  }
+  if (!constant->HasValue()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: constant '",
+                     constant->FullName(),
+                     "' has no bound value (catalog returned "
+                     "HasValue=false)"));
+  }
+  absl::StatusOr<Value> value = constant->GetValue();
+  if (!value.ok()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             absl::StrCat("semantic: constant '",
+                                          constant->FullName(),
+                                          "' failed to provide its value: ",
+                                          value.status().message()));
+  }
+  return *std::move(value);
+}
+
+absl::StatusOr<Value> EvalResolvedMakeStruct(
+    const ::googlesql::ResolvedMakeStruct& node, const EvalContext& ctx) {
+  const ::googlesql::Type* type = node.type();
+  if (type == nullptr || !type->IsStruct()) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedMakeStruct has non-STRUCT type");
+  }
+  const ::googlesql::StructType* st = type->AsStruct();
+  if (st == nullptr || st->num_fields() != node.field_list_size()) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedMakeStruct field count mismatch");
+  }
+  std::vector<Value> fields;
+  fields.reserve(node.field_list_size());
+  for (int i = 0; i < node.field_list_size(); ++i) {
+    const ::googlesql::ResolvedExpr* field_expr = node.field_list(i);
+    if (field_expr == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: ResolvedMakeStruct field is null");
+    }
+    auto v = EvalExpr(*field_expr, ctx);
+    if (!v.ok()) return v.status();
+    fields.push_back(*std::move(v));
+  }
+  return Value::Struct(st, std::move(fields));
+}
+
+absl::StatusOr<Value> EvalResolvedWithExpr(
+    const ::googlesql::ResolvedWithExpr& node, const EvalContext& ctx) {
+  if (node.expr() == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedWithExpr has null body expr");
+  }
+  ColumnBindings bindings;
+  if (ctx.columns != nullptr) {
+    bindings = *ctx.columns;
+  }
+  absl::flat_hash_map<std::string, Value> by_name;
+  EvalContext inner_ctx = ctx;
+  for (int i = 0; i < node.assignment_list_size(); ++i) {
+    const ::googlesql::ResolvedComputedColumn* cc = node.assignment_list(i);
+    if (cc == nullptr || cc->expr() == nullptr) {
+      return absl::InternalError(
+          "semantic: ResolvedWithExpr assignment has null expr");
+    }
+    auto bound = EvalExpr(*cc->expr(), inner_ctx);
+    if (!bound.ok()) return bound.status();
+    bindings.emplace(cc->column().column_id(), *bound);
+    by_name[std::string(cc->column().name())] = *bound;
+    inner_ctx.columns = &bindings;
+    inner_ctx.columns_by_name = &by_name;
+  }
+  inner_ctx.columns = &bindings;
+  inner_ctx.columns_by_name = &by_name;
+  return EvalExpr(*node.expr(), inner_ctx);
+}
+
 }  // namespace
 
 absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
                                const EvalContext& ctx) {
   switch (expr.node_kind()) {
-    case ::googlesql::RESOLVED_LITERAL: {
-      const auto& lit = *expr.GetAs<::googlesql::ResolvedLiteral>();
-      // ResolvedLiteral carries the analyzer-validated `Value`
-      // directly; copying it is cheap (refcounted backing for
-      // STRING / ARRAY / STRUCT).
-      // cpp-lint:allow(statusor-unchecked-value) -- `lit.value()`
-      // is `ResolvedLiteral::value()` returning `googlesql::Value`,
-      // not a `StatusOr<T>::value()` unwrap.
-      return lit.value();
-    }
-    case ::googlesql::RESOLVED_PARAMETER: {
-      const auto& param = *expr.GetAs<::googlesql::ResolvedParameter>();
-      if (ctx.parameters == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedParameter referenced but no parameter "
-            "bindings supplied");
-      }
-      if (param.is_untyped()) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: untyped parameter has no value to bind to");
-      }
-      if (!param.name().empty()) {
-        const std::string key = absl::AsciiStrToLower(param.name());
-        auto it = ctx.parameters->by_name.find(key);
-        if (it == ctx.parameters->by_name.end()) {
-          return MakeSemanticError(
-              SemanticErrorReason::kInvalidArgument,
-              absl::StrCat("semantic: no value bound for parameter @",
-                           param.name()));
-        }
-        return it->second;
-      }
-      if (param.position() > 0) {
-        size_t idx = static_cast<size_t>(param.position()) - 1;
-        if (idx >= ctx.parameters->by_position.size()) {
-          return MakeSemanticError(
-              SemanticErrorReason::kInvalidArgument,
-              absl::StrCat(
-                  "semantic: no value bound for positional parameter #",
-                  param.position()));
-        }
-        return ctx.parameters->by_position[idx];
-      }
-      return absl::InvalidArgumentError(
-          "semantic: ResolvedParameter has neither name nor position");
-    }
+    case ::googlesql::RESOLVED_LITERAL:
+      return EvalResolvedLiteral(*expr.GetAs<::googlesql::ResolvedLiteral>());
+    case ::googlesql::RESOLVED_PARAMETER:
+      return EvalResolvedParameter(
+          *expr.GetAs<::googlesql::ResolvedParameter>(), ctx);
     case ::googlesql::RESOLVED_FUNCTION_CALL:
       return EvalFunctionCall(*expr.GetAs<::googlesql::ResolvedFunctionCall>(),
                               ctx);
@@ -175,129 +315,15 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       }
       return *std::move(bound);
     }
-    case ::googlesql::RESOLVED_CONSTANT: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedConstant>();
-      const ::googlesql::Constant* constant = node.constant();
-      if (constant == nullptr) {
-        return absl::InternalError(
-            "semantic: ResolvedConstant has null constant pointer");
-      }
-      if (ctx.script_variables != nullptr &&
-          ctx.script_variables->Has(constant->Name())) {
-        absl::StatusOr<Value> bound =
-            ctx.script_variables->Lookup(constant->Name());
-        if (!bound.ok()) return bound.status();
-        return *std::move(bound);
-      }
-      // `ResolvedConstant` carries a non-owning pointer to a
-      // `googlesql::Constant` registered on the catalog. The
-      // BigQuery emulator's catalog adapter (today only the
-      // analyzer's built-in constants, future module-defined
-      // constants once `CREATE CONSTANT` lands) stores
-      // `SimpleConstant` instances whose `HasValue()` is true and
-      // `GetValue()` returns the bound `Value` verbatim. Constants
-      // whose value is not available yet (e.g. an unresolved
-      // `SQLConstant`) surface as a structured `kInvalidArgument`
-      // so the gateway envelope names the constant rather than
-      // silently substituting NULL.
-      if (!constant->HasValue()) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            absl::StrCat("semantic: constant '",
-                         constant->FullName(),
-                         "' has no bound value (catalog returned "
-                         "HasValue=false)"));
-      }
-      absl::StatusOr<Value> value = constant->GetValue();
-      if (!value.ok()) {
-        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                                 absl::StrCat("semantic: constant '",
-                                              constant->FullName(),
-                                              "' failed to provide its value: ",
-                                              value.status().message()));
-      }
-      return *std::move(value);
-    }
-    case ::googlesql::RESOLVED_COLUMN_REF: {
-      // A `ResolvedColumnRef` reads a column the surrounding scan
-      // emits row-at-a-time. The FROM-clause executor binds the
-      // current row's `ColumnBindings` onto `ctx.columns` before
-      // calling `EvalExpr`; a missing binding is an analyzer /
-      // executor mismatch and surfaces a structured INVALID_ARGUMENT.
-      // Scalar-only SELECT keeps `ctx.columns == nullptr` and
-      // every column reference there is a bug -- the scalar path
-      // resolves columns through `ResolvedProjectScan::expr_list`,
-      // not through column refs.
-      const auto& ref = *expr.GetAs<::googlesql::ResolvedColumnRef>();
-      if (ctx.columns == nullptr) {
-        if (ctx.columns_by_name != nullptr) {
-          auto name_it =
-              ctx.columns_by_name->find(std::string(ref.column().name()));
-          if (name_it != ctx.columns_by_name->end()) {
-            return name_it->second;
-          }
-        }
-        if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
-            internal.ok()) {
-          return *std::move(internal);
-        }
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            absl::StrCat("semantic: ResolvedColumnRef '",
-                         ref.column().name(),
-                         "' referenced without a row binding; correlated scans "
-                         "require correlated scan support; see "
-                         "docs/ENGINE_POLICY.md"));
-      }
-      auto it = ctx.columns->find(ref.column().column_id());
-      if (it == ctx.columns->end()) {
-        if (ctx.columns_by_name != nullptr) {
-          auto name_it =
-              ctx.columns_by_name->find(std::string(ref.column().name()));
-          if (name_it != ctx.columns_by_name->end()) {
-            return name_it->second;
-          }
-        }
-        if (auto internal = DefaultInternalAnalyzerColumn(ref.column());
-            internal.ok()) {
-          return *std::move(internal);
-        }
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            absl::StrCat("semantic: no row binding for column '",
-                         ref.column().name(),
-                         "' (column_id=",
-                         ref.column().column_id(),
-                         ")"));
-      }
-      return it->second;
-    }
-    case ::googlesql::RESOLVED_MAKE_STRUCT: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedMakeStruct>();
-      const ::googlesql::Type* type = node.type();
-      if (type == nullptr || !type->IsStruct()) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedMakeStruct has non-STRUCT type");
-      }
-      const ::googlesql::StructType* st = type->AsStruct();
-      if (st == nullptr || st->num_fields() != node.field_list_size()) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedMakeStruct field count mismatch");
-      }
-      std::vector<Value> fields;
-      fields.reserve(node.field_list_size());
-      for (int i = 0; i < node.field_list_size(); ++i) {
-        const ::googlesql::ResolvedExpr* field_expr = node.field_list(i);
-        if (field_expr == nullptr) {
-          return absl::InvalidArgumentError(
-              "semantic: ResolvedMakeStruct field is null");
-        }
-        auto v = EvalExpr(*field_expr, ctx);
-        if (!v.ok()) return v.status();
-        fields.push_back(*std::move(v));
-      }
-      return Value::Struct(st, std::move(fields));
-    }
+    case ::googlesql::RESOLVED_COLUMN_REF:
+      return LookupColumnRef(*expr.GetAs<::googlesql::ResolvedColumnRef>(),
+                             ctx);
+    case ::googlesql::RESOLVED_CONSTANT:
+      return EvalResolvedConstant(*expr.GetAs<::googlesql::ResolvedConstant>(),
+                                  ctx);
+    case ::googlesql::RESOLVED_MAKE_STRUCT:
+      return EvalResolvedMakeStruct(
+          *expr.GetAs<::googlesql::ResolvedMakeStruct>(), ctx);
     case ::googlesql::RESOLVED_GET_STRUCT_FIELD: {
       const auto& node = *expr.GetAs<::googlesql::ResolvedGetStructField>();
       if (node.expr() == nullptr) {
@@ -328,35 +354,9 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
       if (!base.ok()) return base.status();
       return functions::JsonGetField(*base, node.field_name(), expr.type());
     }
-    case ::googlesql::RESOLVED_WITH_EXPR: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedWithExpr>();
-      if (node.expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedWithExpr has null body expr");
-      }
-      ColumnBindings bindings;
-      if (ctx.columns != nullptr) {
-        bindings = *ctx.columns;
-      }
-      absl::flat_hash_map<std::string, Value> by_name;
-      EvalContext inner_ctx = ctx;
-      for (int i = 0; i < node.assignment_list_size(); ++i) {
-        const ::googlesql::ResolvedComputedColumn* cc = node.assignment_list(i);
-        if (cc == nullptr || cc->expr() == nullptr) {
-          return absl::InternalError(
-              "semantic: ResolvedWithExpr assignment has null expr");
-        }
-        auto bound = EvalExpr(*cc->expr(), inner_ctx);
-        if (!bound.ok()) return bound.status();
-        bindings.emplace(cc->column().column_id(), *bound);
-        by_name[std::string(cc->column().name())] = *bound;
-        inner_ctx.columns = &bindings;
-        inner_ctx.columns_by_name = &by_name;
-      }
-      inner_ctx.columns = &bindings;
-      inner_ctx.columns_by_name = &by_name;
-      return EvalExpr(*node.expr(), inner_ctx);
-    }
+    case ::googlesql::RESOLVED_WITH_EXPR:
+      return EvalResolvedWithExpr(*expr.GetAs<::googlesql::ResolvedWithExpr>(),
+                                  ctx);
     case ::googlesql::RESOLVED_SUBQUERY_EXPR:
       return EvalSubqueryExpr(*expr.GetAs<::googlesql::ResolvedSubqueryExpr>(),
                               ctx);

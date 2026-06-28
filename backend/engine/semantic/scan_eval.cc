@@ -28,6 +28,9 @@ using scan_eval_internal::StripBarrierScans;
 
 namespace {
 
+absl::StatusOr<const ::googlesql::ResolvedProjectScan*> FindOutputProjectScan(
+    const ::googlesql::ResolvedScan* scan);
+
 void BindCorrelatedSubqueryColumns(
     const ::googlesql::ResolvedSubqueryExpr& node,
     const EvalContext& ctx,
@@ -70,6 +73,154 @@ void BindCorrelatedSubqueryColumns(
     BindCorrelatedColumnRefs(node.subquery(), frame);
   }
   bindings = frame.merged;
+}
+
+int ResolveSubqueryValueColumnId(const ::googlesql::ResolvedScan* subquery) {
+  auto project_or = FindOutputProjectScan(subquery);
+  if (project_or.ok() && *project_or != nullptr) {
+    const ::googlesql::ResolvedProjectScan* project = *project_or;
+    if (project->expr_list_size() > 0 && project->expr_list(0) != nullptr) {
+      return project->expr_list(0)->column().column_id();
+    }
+    if (project->column_list_size() > 0) {
+      return project->column_list(0).column_id();
+    }
+  }
+  const ::googlesql::ResolvedScan* sub = StripBarrierScans(subquery);
+  if (sub != nullptr && sub->column_list_size() > 0) {
+    return sub->column_list(0).column_id();
+  }
+  return -1;
+}
+
+absl::StatusOr<Value> SubqueryValueFromRow(int value_col_id,
+                                           const ColumnBindings& row) {
+  if (value_col_id >= 0) {
+    auto it = row.find(value_col_id);
+    if (it != row.end()) return it->second;
+  }
+  if (!row.empty()) return row.begin()->second;
+  return absl::InternalError("semantic: subquery row missing projected column");
+}
+
+absl::StatusOr<Value> EvalExistsSubquery(
+    const std::vector<ColumnBindings>& rows) {
+  return Value::Bool(!rows.empty());
+}
+
+absl::StatusOr<Value> EvalScalarSubquery(
+    const std::vector<ColumnBindings>& rows,
+    int value_col_id,
+    const ::googlesql::Type* type) {
+  if (rows.empty()) {
+    if (type != nullptr && type->IsArray()) {
+      return Value::Array(type->AsArray(), {});
+    }
+    return Value::Null(type);
+  }
+  if (rows.size() > 1) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic: scalar subquery returned more than one row");
+  }
+  return SubqueryValueFromRow(value_col_id, rows[0]);
+}
+
+absl::StatusOr<Value> EvalArraySubquery(const std::vector<ColumnBindings>& rows,
+                                        int value_col_id,
+                                        const ::googlesql::Type* type) {
+  if (type == nullptr || !type->IsArray()) {
+    return absl::InternalError("semantic: ARRAY subquery missing ARRAY type");
+  }
+  std::vector<Value> elements;
+  elements.reserve(rows.size());
+  for (const ColumnBindings& row : rows) {
+    auto v = SubqueryValueFromRow(value_col_id, row);
+    if (!v.ok()) return v.status();
+    elements.push_back(*std::move(v));
+  }
+  return Value::Array(type->AsArray(), std::move(elements));
+}
+
+absl::StatusOr<Value> EvalInSubquery(
+    const ::googlesql::ResolvedSubqueryExpr& node,
+    const std::vector<ColumnBindings>& rows,
+    int value_col_id,
+    const EvalContext& ctx) {
+  if (node.in_expr() == nullptr) {
+    return absl::InvalidArgumentError("semantic: IN subquery missing in_expr");
+  }
+  auto lhs = EvalExpr(*node.in_expr(), ctx);
+  if (!lhs.ok()) return lhs.status();
+  if (lhs->is_null()) return Value::NullBool();
+  for (const ColumnBindings& row : rows) {
+    auto rv = SubqueryValueFromRow(value_col_id, row);
+    if (!rv.ok()) return rv.status();
+    if (lhs->is_null() || rv->is_null()) continue;
+    if (lhs->Equals(*rv)) return Value::Bool(true);
+  }
+  return Value::Bool(false);
+}
+
+absl::StatusOr<Value> EvalLikeAnyAllSubquery(
+    const ::googlesql::ResolvedSubqueryExpr& node,
+    const std::vector<ColumnBindings>& rows,
+    int value_col_id,
+    const EvalContext& ctx) {
+  if (node.in_expr() == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: LIKE ANY/ALL subquery missing in_expr");
+  }
+  auto lhs = EvalExpr(*node.in_expr(), ctx);
+  if (!lhs.ok()) return lhs.status();
+  if (lhs->is_null()) return Value::NullBool();
+  if (rows.empty()) {
+    switch (node.subquery_type()) {
+      case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+      case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+        return Value::Bool(false);
+      case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+      case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+        return Value::Bool(true);
+      default:
+        break;
+    }
+  }
+  bool any_match = false;
+  bool all_match = true;
+  for (const ColumnBindings& row : rows) {
+    auto pattern = SubqueryValueFromRow(value_col_id, row);
+    if (!pattern.ok()) return pattern.status();
+    if (pattern->is_null()) {
+      all_match = false;
+      continue;
+    }
+    auto matched = functions::DispatchLike("$like", {*lhs, *pattern});
+    if (!matched.ok()) return matched.status();
+    if (matched->is_null()) {
+      all_match = false;
+      continue;
+    }
+    if (matched->bool_value()) {
+      any_match = true;
+    } else {
+      all_match = false;
+    }
+  }
+  switch (node.subquery_type()) {
+    case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
+      return Value::Bool(any_match);
+    case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
+      return Value::Bool(all_match);
+    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
+      return Value::Bool(!any_match);
+    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+      return Value::Bool(!all_match);
+    default:
+      break;
+  }
+  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                           "semantic: LIKE ANY/ALL subquery type");
 }
 
 }  // namespace
@@ -149,139 +300,22 @@ absl::StatusOr<Value> EvalSubqueryExpr(
   auto rows_or = MaterializeScanImpl(node.subquery(), inner_ctx);
   if (!rows_or.ok()) return rows_or.status();
   const std::vector<ColumnBindings>& rows = *rows_or;
-  int value_col_id = -1;
-  auto project_or = FindOutputProjectScan(node.subquery());
-  if (project_or.ok() && *project_or != nullptr) {
-    const ::googlesql::ResolvedProjectScan* project = *project_or;
-    if (project->expr_list_size() > 0 && project->expr_list(0) != nullptr) {
-      value_col_id = project->expr_list(0)->column().column_id();
-    } else if (project->column_list_size() > 0) {
-      value_col_id = project->column_list(0).column_id();
-    }
-  } else {
-    const ::googlesql::ResolvedScan* sub = StripBarrierScans(node.subquery());
-    if (sub != nullptr && sub->column_list_size() > 0) {
-      value_col_id = sub->column_list(0).column_id();
-    }
-  }
-
-  auto value_from_row =
-      [&](const ColumnBindings& row) -> absl::StatusOr<Value> {
-    if (value_col_id >= 0) {
-      auto it = row.find(value_col_id);
-      if (it != row.end()) return it->second;
-    }
-    if (!row.empty()) return row.begin()->second;
-    return absl::InternalError(
-        "semantic: subquery row missing projected column");
-  };
+  const int value_col_id = ResolveSubqueryValueColumnId(node.subquery());
 
   switch (node.subquery_type()) {
     case ::googlesql::ResolvedSubqueryExpr::EXISTS:
-      return Value::Bool(!rows.empty());
-    case ::googlesql::ResolvedSubqueryExpr::SCALAR: {
-      if (rows.empty()) {
-        if (node.type() != nullptr && node.type()->IsArray()) {
-          return Value::Array(node.type()->AsArray(), {});
-        }
-        return Value::Null(node.type());
-      }
-      if (rows.size() > 1) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: scalar subquery returned more than one row");
-      }
-      return value_from_row(rows[0]);
-    }
-    case ::googlesql::ResolvedSubqueryExpr::ARRAY: {
-      if (node.type() == nullptr || !node.type()->IsArray()) {
-        return absl::InternalError(
-            "semantic: ARRAY subquery missing ARRAY type");
-      }
-      std::vector<Value> elements;
-      elements.reserve(rows.size());
-      for (const ColumnBindings& row : rows) {
-        auto v = value_from_row(row);
-        if (!v.ok()) return v.status();
-        elements.push_back(*std::move(v));
-      }
-      return Value::Array(node.type()->AsArray(), std::move(elements));
-    }
-    case ::googlesql::ResolvedSubqueryExpr::IN: {
-      if (node.in_expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: IN subquery missing in_expr");
-      }
-      auto lhs = EvalExpr(*node.in_expr(), ctx);
-      if (!lhs.ok()) return lhs.status();
-      if (lhs->is_null()) return Value::NullBool();
-      for (const ColumnBindings& row : rows) {
-        auto rv = value_from_row(row);
-        if (!rv.ok()) return rv.status();
-        if (lhs->is_null() || rv->is_null()) continue;
-        if (lhs->Equals(*rv)) return Value::Bool(true);
-      }
-      return Value::Bool(false);
-    }
+      return EvalExistsSubquery(rows);
+    case ::googlesql::ResolvedSubqueryExpr::SCALAR:
+      return EvalScalarSubquery(rows, value_col_id, node.type());
+    case ::googlesql::ResolvedSubqueryExpr::ARRAY:
+      return EvalArraySubquery(rows, value_col_id, node.type());
+    case ::googlesql::ResolvedSubqueryExpr::IN:
+      return EvalInSubquery(node, rows, value_col_id, ctx);
     case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
     case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
     case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
-    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL: {
-      if (node.in_expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: LIKE ANY/ALL subquery missing in_expr");
-      }
-      auto lhs = EvalExpr(*node.in_expr(), ctx);
-      if (!lhs.ok()) return lhs.status();
-      if (lhs->is_null()) return Value::NullBool();
-      if (rows.empty()) {
-        switch (node.subquery_type()) {
-          case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
-          case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
-            return Value::Bool(false);
-          case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
-          case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
-            return Value::Bool(true);
-          default:
-            break;
-        }
-      }
-      bool any_match = false;
-      bool all_match = true;
-      for (const ColumnBindings& row : rows) {
-        auto pattern = value_from_row(row);
-        if (!pattern.ok()) return pattern.status();
-        if (pattern->is_null()) {
-          all_match = false;
-          continue;
-        }
-        auto matched = functions::DispatchLike("$like", {*lhs, *pattern});
-        if (!matched.ok()) return matched.status();
-        if (matched->is_null()) {
-          all_match = false;
-          continue;
-        }
-        if (matched->bool_value()) {
-          any_match = true;
-        } else {
-          all_match = false;
-        }
-      }
-      switch (node.subquery_type()) {
-        case ::googlesql::ResolvedSubqueryExpr::LIKE_ANY:
-          return Value::Bool(any_match);
-        case ::googlesql::ResolvedSubqueryExpr::LIKE_ALL:
-          return Value::Bool(all_match);
-        case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ANY:
-          return Value::Bool(!any_match);
-        case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
-          return Value::Bool(!all_match);
-        default:
-          break;
-      }
-      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                               "semantic: LIKE ANY/ALL subquery type");
-    }
+    case ::googlesql::ResolvedSubqueryExpr::NOT_LIKE_ALL:
+      return EvalLikeAnyAllSubquery(node, rows, value_col_id, ctx);
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                "semantic: subquery type not yet implemented");

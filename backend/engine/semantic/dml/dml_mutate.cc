@@ -67,20 +67,10 @@ absl::StatusOr<DmlStats> ExecuteDelete(
     if (!bind.ok()) return bind.status();
     ColumnBindings local = *std::move(bind);
     ctx.columns = &local;
-    Value pred_val;
-    if (del.where_expr() != nullptr) {
-      auto v = EvalExpr(*del.where_expr(), ctx);
-      ctx.columns = nullptr;
-      if (!v.ok()) return v.status();
-      pred_val = *std::move(v);
-    } else {
-      ctx.columns = nullptr;
-      pred_val = Value::Bool(true);
-    }
-    const bool matched = pred_val.is_valid() && !pred_val.is_null() &&
-                         pred_val.type_kind() == ::googlesql::TYPE_BOOL &&
-                         pred_val.bool_value();
-    if (matched) {
+    auto matched_or = EvalWherePredicate(del.where_expr(), ctx);
+    ctx.columns = nullptr;
+    if (!matched_or.ok()) return matched_or.status();
+    if (*matched_or) {
       ++deleted;
       if (del.returning() != nullptr && returning_out != nullptr) {
         returning_contexts.push_back(local);
@@ -107,12 +97,12 @@ absl::StatusOr<DmlStats> ExecuteDelete(
 
   if (del.returning() != nullptr && returning_out != nullptr &&
       !returning_contexts.empty()) {
-    auto returning_or = BuildReturningRowSource(*del.returning(),
-                                                std::move(returning_contexts),
-                                                std::move(returning_actions),
-                                                ctx);
-    if (!returning_or.ok()) return returning_or.status();
-    *returning_out = *std::move(returning_or);
+    return FinalizeMutateWithReturning(del.returning(),
+                                       returning_out,
+                                       std::move(returning_contexts),
+                                       std::move(returning_actions),
+                                       stats,
+                                       ctx);
   }
   return stats;
 }
@@ -137,87 +127,11 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
   const catalog::StorageTable* target = *target_or;
   const schema::TableSchema& schema = target->bq_schema();
 
-  struct SetAssignment {
-    UpdateTarget target;
-    const ::googlesql::ResolvedExpr* set_expr = nullptr;
-    const ::googlesql::Type* root_column_type = nullptr;
-  };
-  struct NestedArrayDeleteAssignment {
-    UpdateTarget target;
-    const ::googlesql::Type* root_column_type = nullptr;
-    const ::googlesql::ResolvedUpdateItem* item = nullptr;
-  };
-  std::vector<SetAssignment> sets;
-  std::vector<NestedArrayDeleteAssignment> nested_deletes;
-  sets.reserve(upd.update_item_list_size());
-  nested_deletes.reserve(upd.update_item_list_size());
-  for (int i = 0; i < upd.update_item_list_size(); ++i) {
-    const ::googlesql::ResolvedUpdateItem* item = upd.update_item_list(i);
-    if (item == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: UPDATE update_item_list contains a null entry");
-    }
-    if (!item->update_item_element_list().empty() ||
-        !item->update_list().empty() || !item->insert_list().empty()) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "deferred; see docs/ENGINE_POLICY.md");
-    }
-    if (!item->delete_list().empty()) {
-      if (item->target() == nullptr || item->element_column() == nullptr) {
-        return absl::InternalError(
-            "semantic/dml: nested DELETE item missing target/element_column");
-      }
-      auto parsed = ParseUpdateTarget(*item->target(), schema);
-      if (!parsed.ok()) return parsed.status();
-      const ::googlesql::Type* root_type = nullptr;
-      for (int c = 0; c < upd.table_scan()->column_list_size(); ++c) {
-        const ::googlesql::ResolvedColumn& col =
-            upd.table_scan()->column_list(c);
-        if (IndexOfColumn(schema, col.name()) == parsed->column_idx) {
-          root_type = col.type();
-          break;
-        }
-      }
-      if (root_type == nullptr) {
-        return absl::InternalError(
-            "semantic/dml: nested DELETE target column missing from table "
-            "scan");
-      }
-      nested_deletes.push_back({*std::move(parsed), root_type, item});
-      continue;
-    }
-    if (item->element_column() != nullptr) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "deferred; see docs/ENGINE_POLICY.md");
-    }
-    if (item->target() == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: ResolvedUpdateItem has null target");
-    }
-    if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: scalar UPDATE item has null set_value");
-    }
-    auto parsed = ParseUpdateTarget(*item->target(), schema);
-    if (!parsed.ok()) return parsed.status();
-    const ::googlesql::Type* root_type = nullptr;
-    for (int c = 0; c < upd.table_scan()->column_list_size(); ++c) {
-      const ::googlesql::ResolvedColumn& col = upd.table_scan()->column_list(c);
-      if (IndexOfColumn(schema, col.name()) == parsed->column_idx) {
-        root_type = col.type();
-        break;
-      }
-    }
-    if (root_type == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: UPDATE target column missing from table scan");
-    }
-    sets.push_back({*std::move(parsed), item->set_value()->value(), root_type});
-  }
+  auto assignments_or = ParseUpdateAssignments(upd, schema);
+  if (!assignments_or.ok()) return assignments_or.status();
+  const std::vector<SetAssignment>& sets = assignments_or->first;
+  const std::vector<NestedArrayDeleteAssignment>& nested_deletes =
+      assignments_or->second;
 
   auto by_id = BuildColumnIndexByColumnId(*upd.table_scan(), schema);
   if (!by_id.ok()) return by_id.status();
@@ -233,52 +147,6 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
     from_rows = *std::move(materialized);
   }
 
-  auto apply_sets = [&](storage::Row& mutated,
-                        const ColumnBindings& row_ctx) -> absl::Status {
-    ctx.columns = &row_ctx;
-    for (const SetAssignment& s : sets) {
-      auto v = EvalExpr(*s.set_expr, ctx);
-      if (!v.ok()) return v.status();
-      if (s.target.struct_field_path.empty()) {
-        auto cell = ToStorageValue(*v);
-        if (!cell.ok()) return cell.status();
-        mutated.cells[s.target.column_idx] = *std::move(cell);
-        continue;
-      }
-      auto current = catalog::StorageValueToGoogleSqlValue(
-          mutated.cells[s.target.column_idx],
-          s.root_column_type,
-          schema.columns[s.target.column_idx]);
-      if (!current.ok()) return current.status();
-      auto rewritten =
-          SetNestedStructField(*current, s.target.struct_field_path, *v);
-      if (!rewritten.ok()) return rewritten.status();
-      auto cell = ToStorageValue(*rewritten);
-      if (!cell.ok()) return cell.status();
-      mutated.cells[s.target.column_idx] = *std::move(cell);
-    }
-    for (const NestedArrayDeleteAssignment& nested : nested_deletes) {
-      auto current = catalog::StorageValueToGoogleSqlValue(
-          mutated.cells[nested.target.column_idx],
-          nested.root_column_type,
-          schema.columns[nested.target.column_idx]);
-      if (!current.ok()) return current.status();
-      if (!nested.target.struct_field_path.empty()) {
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            "semantic/dml: nested DELETE on nested STRUCT arrays is deferred");
-      }
-      auto rewritten =
-          ApplyNestedArrayDeleteItem(*nested.item, *current, row_ctx, ctx);
-      if (!rewritten.ok()) return rewritten.status();
-      auto cell = ToStorageValue(*rewritten);
-      if (!cell.ok()) return cell.status();
-      mutated.cells[nested.target.column_idx] = *std::move(cell);
-    }
-    ctx.columns = nullptr;
-    return absl::OkStatus();
-  };
-
   std::vector<storage::Row> rewritten;
   rewritten.reserve(rows.size());
   std::vector<ColumnBindings> returning_contexts;
@@ -291,23 +159,16 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
 
     if (upd.from_scan() == nullptr) {
       ctx.columns = &target_bind;
-      bool matched = false;
-      if (upd.where_expr() == nullptr) {
-        matched = true;
-      } else {
-        auto v = EvalExpr(*upd.where_expr(), ctx);
-        ctx.columns = nullptr;
-        if (!v.ok()) return v.status();
-        matched = v->is_valid() && !v->is_null() &&
-                  v->type_kind() == ::googlesql::TYPE_BOOL && v->bool_value();
-      }
-      if (!matched) {
-        ctx.columns = nullptr;
+      auto matched_or = EvalWherePredicate(upd.where_expr(), ctx);
+      ctx.columns = nullptr;
+      if (!matched_or.ok()) return matched_or.status();
+      if (!*matched_or) {
         rewritten.push_back(row);
         continue;
       }
       storage::Row mutated = row;
-      absl::Status applied = apply_sets(mutated, target_bind);
+      absl::Status applied = ApplyUpdateSets(
+          mutated, sets, nested_deletes, target_bind, schema, ctx);
       if (!applied.ok()) return applied;
       ++updated;
       if (upd.returning() != nullptr && returning_out != nullptr) {
@@ -320,41 +181,17 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
       continue;
     }
 
-    int match_count = 0;
     ColumnBindings matched_from;
-    for (const ColumnBindings& from_bind : from_rows) {
-      ColumnBindings merged = MergeColumnBindings(target_bind, from_bind);
-      ctx.columns = &merged;
-      bool matched = false;
-      if (upd.where_expr() == nullptr) {
-        matched = true;
-      } else {
-        auto v = EvalExpr(*upd.where_expr(), ctx);
-        if (!v.ok()) {
-          ctx.columns = nullptr;
-          return v.status();
-        }
-        matched = v->is_valid() && !v->is_null() &&
-                  v->type_kind() == ::googlesql::TYPE_BOOL && v->bool_value();
-      }
-      if (matched) {
-        ++match_count;
-        matched_from = std::move(merged);
-      }
-    }
-    ctx.columns = nullptr;
-    if (match_count == 0) {
+    auto from_match_or =
+        CountFromScanMatches(upd, target_bind, from_rows, ctx, &matched_from);
+    if (!from_match_or.ok()) return from_match_or.status();
+    if (!*from_match_or) {
       rewritten.push_back(row);
       continue;
     }
-    if (match_count > 1) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic/dml: UPDATE/MERGE must match at most one source row for "
-          "each target row");
-    }
     storage::Row mutated = row;
-    absl::Status applied = apply_sets(mutated, matched_from);
+    absl::Status applied = ApplyUpdateSets(
+        mutated, sets, nested_deletes, matched_from, schema, ctx);
     if (!applied.ok()) return applied;
     ++updated;
     if (upd.returning() != nullptr && returning_out != nullptr) {
@@ -381,12 +218,12 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
   }
   if (upd.returning() != nullptr && returning_out != nullptr &&
       !returning_contexts.empty()) {
-    auto returning_or = BuildReturningRowSource(*upd.returning(),
-                                                std::move(returning_contexts),
-                                                std::move(returning_actions),
-                                                ctx);
-    if (!returning_or.ok()) return returning_or.status();
-    *returning_out = *std::move(returning_or);
+    return FinalizeMutateWithReturning(upd.returning(),
+                                       returning_out,
+                                       std::move(returning_contexts),
+                                       std::move(returning_actions),
+                                       stats,
+                                       ctx);
   }
   return stats;
 }
