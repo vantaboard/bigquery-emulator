@@ -355,6 +355,86 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteMultiStmtScript(
   return final_rows;
 }
 
+absl::StatusOr<std::unique_ptr<RowSource>> ExecuteControlFlowTailIfNeeded(
+    LocalCoordinatorEngine& engine,
+    const QueryRequest& request,
+    ::googlesql::Catalog* catalog,
+    semantic::script::ScriptDriver* driver,
+    absl::string_view remaining) {
+  if (!ScriptNeedsGoogleSqlExecutor(LeadingScriptStatement(remaining))) {
+    return std::unique_ptr<RowSource>();
+  }
+#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
+  absl::string_view tail_for_executor = remaining;
+  const std::string trimmed_remaining =
+      std::string(absl::StripAsciiWhitespace(remaining));
+  if (!absl::StartsWithIgnoreCase(trimmed_remaining, "BEGIN")) {
+    tail_for_executor = StripBeginEnd(remaining);
+  }
+  return ExecuteScriptViaGoogleSql(
+      engine, request, catalog, driver, tail_for_executor);
+#else
+  return semantic::MakeSemanticError(
+      semantic::SemanticErrorReason::kNotImplemented,
+      "script: structured control flow (IF/WHILE/LOOP/FOR/EXCEPTION) requires "
+      "googlesql/scripting::ScriptExecutor, which is not linked in the "
+      "prebuilt artifact");
+#endif
+}
+absl::Status ExecuteAnalyzeNextLoopStep(
+    LocalCoordinatorEngine& engine,
+    const QueryRequest& request,
+    ::googlesql::Catalog* catalog,
+    catalog::GoogleSqlCatalog* bq_catalog,
+    ::googlesql::AnalyzerOptions& options,
+    ::googlesql::TypeFactory* type_factory,
+    ::googlesql::ParseResumeLocation* resume,
+    semantic::script::ScriptDriver* driver,
+    absl::flat_hash_set<std::string>* registered_script_vars,
+    std::unique_ptr<RowSource>* final_rows,
+    bool* at_end) {
+  const absl::string_view remaining =
+      resume->input().substr(resume->byte_position());
+  absl::StatusOr<std::unique_ptr<RowSource>> control_flow_rows =
+      ExecuteControlFlowTailIfNeeded(
+          engine, request, catalog, driver, remaining);
+  if (!control_flow_rows.ok()) return control_flow_rows.status();
+  if (*control_flow_rows != nullptr) {
+    *final_rows = std::move(*control_flow_rows);
+    *at_end = true;
+    return absl::OkStatus();
+  }
+
+  absl::Status registered = RegisterScriptVariablesOnCatalogFromDriver(
+      bq_catalog, *driver, registered_script_vars);
+  if (!registered.ok()) return registered;
+  bool set_handled = false;
+  absl::Status set_status = TryExecuteLeadingSetStatement(
+      request, *resume, bq_catalog, catalog, *driver, &set_handled);
+  if (!set_status.ok()) return set_status;
+  if (set_handled) {
+    const absl::string_view tail =
+        resume->input().substr(resume->byte_position());
+    if (absl::StripAsciiWhitespace(tail).empty()) *at_end = true;
+    return absl::OkStatus();
+  }
+
+  std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
+  absl::Status analyzed = ::googlesql::AnalyzeNextStatement(
+      resume, options, catalog, type_factory, &output, at_end);
+  if (!analyzed.ok()) return analyzed;
+  if (output == nullptr || output->resolved_statement() == nullptr) {
+    return absl::InternalError(
+        "script::ExecuteScriptViaAnalyzeNext: analyzer returned null");
+  }
+
+  return ExecuteOneScriptStatement(engine,
+                                   request,
+                                   *output->resolved_statement(),
+                                   catalog,
+                                   *driver,
+                                   final_rows);
+}
 absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
     LocalCoordinatorEngine& engine,
     const QueryRequest& request,
@@ -394,58 +474,18 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteScriptViaAnalyzeNext(
   bool at_end = false;
   absl::flat_hash_set<std::string> registered_script_vars;
   while (!at_end) {
-    const absl::string_view remaining =
-        resume.input().substr(resume.byte_position());
-    if (ScriptNeedsGoogleSqlExecutor(LeadingScriptStatement(remaining))) {
-#if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
-      absl::string_view tail_for_executor = remaining;
-      const std::string trimmed_remaining =
-          std::string(absl::StripAsciiWhitespace(remaining));
-      if (!absl::StartsWithIgnoreCase(trimmed_remaining, "BEGIN")) {
-        tail_for_executor = StripBeginEnd(remaining);
-      }
-      return ExecuteScriptViaGoogleSql(
-          engine, request, catalog, &driver, tail_for_executor);
-#else
-      return semantic::MakeSemanticError(
-          semantic::SemanticErrorReason::kNotImplemented,
-          "script: structured control flow (IF/WHILE/LOOP/FOR/EXCEPTION) "
-          "requires "
-          "googlesql/scripting::ScriptExecutor, which is not linked in the "
-          "prebuilt artifact");
-#endif
-    }
-    absl::Status registered = RegisterScriptVariablesOnCatalogFromDriver(
-        bq_catalog, driver, &registered_script_vars);
-    if (!registered.ok()) return registered;
-    bool set_handled = false;
-    absl::Status set_status = TryExecuteLeadingSetStatement(
-        request, resume, bq_catalog, catalog, driver, &set_handled);
-    if (!set_status.ok()) return set_status;
-    if (set_handled) {
-      const absl::string_view tail =
-          resume.input().substr(resume.byte_position());
-      if (absl::StripAsciiWhitespace(tail).empty()) {
-        at_end = true;
-      }
-      continue;
-    }
-    std::unique_ptr<const ::googlesql::AnalyzerOutput> output;
-    absl::Status analyzed = ::googlesql::AnalyzeNextStatement(
-        &resume, *options, catalog, type_factory, &output, &at_end);
-    if (!analyzed.ok()) return analyzed;
-    if (output == nullptr || output->resolved_statement() == nullptr) {
-      return absl::InternalError(
-          "script::ExecuteScriptViaAnalyzeNext: analyzer returned null");
-    }
-    absl::Status executed =
-        ExecuteOneScriptStatement(engine,
-                                  request,
-                                  *output->resolved_statement(),
-                                  catalog,
-                                  driver,
-                                  &final_rows);
-    if (!executed.ok()) return executed;
+    absl::Status step = ExecuteAnalyzeNextLoopStep(engine,
+                                                   request,
+                                                   catalog,
+                                                   bq_catalog,
+                                                   *options,
+                                                   type_factory,
+                                                   &resume,
+                                                   &driver,
+                                                   &registered_script_vars,
+                                                   &final_rows,
+                                                   &at_end);
+    if (!step.ok()) return step;
   }
   if (final_rows == nullptr) {
     return std::unique_ptr<RowSource>(

@@ -223,6 +223,33 @@ absl::StatusOr<std::string> RenderSemanticParameterLiteral(
   }
 }
 
+const QueryParameter* FindParameterForRef(
+    const duckdb::transpiler::Transpiler::ParameterRef& ref,
+    absl::Span<const QueryParameter> parameters) {
+  if (!ref.name.empty()) {
+    for (const QueryParameter& p : parameters) {
+      if (absl::EqualsIgnoreCase(p.name, ref.name)) return &p;
+    }
+    return nullptr;
+  }
+  int seen = 0;
+  for (const QueryParameter& p : parameters) {
+    if (!p.name.empty()) continue;
+    if (++seen == ref.position) return &p;
+  }
+  return nullptr;
+}
+
+absl::StatusOr<std::string> RenderParameterLiteral(
+    const QueryParameter& parameter) {
+  auto value = semantic::ParseParameterValue(
+      parameter.value_json, parameter.type_kind, parameter.type_json);
+  if (!value.ok()) return value.status();
+  auto literal = RenderSemanticParameterLiteral(*value);
+  if (!literal.ok()) return literal.status();
+  return *std::move(literal);
+}
+
 absl::StatusOr<std::string> SubstituteDuckdbParameters(
     std::string sql,
     const std::vector<duckdb::transpiler::Transpiler::ParameterRef>& order,
@@ -230,35 +257,14 @@ absl::StatusOr<std::string> SubstituteDuckdbParameters(
   if (order.empty()) return sql;
   std::vector<std::string> literals(order.size());
   for (size_t i = 0; i < order.size(); ++i) {
-    const duckdb::transpiler::Transpiler::ParameterRef& ref = order[i];
-    const QueryParameter* param = nullptr;
-    if (!ref.name.empty()) {
-      for (const QueryParameter& p : parameters) {
-        if (absl::EqualsIgnoreCase(p.name, ref.name)) {
-          param = &p;
-          break;
-        }
-      }
-    } else {
-      int seen = 0;
-      for (const QueryParameter& p : parameters) {
-        if (!p.name.empty()) continue;
-        if (++seen == ref.position) {
-          param = &p;
-          break;
-        }
-      }
-    }
+    const QueryParameter* param = FindParameterForRef(order[i], parameters);
     if (param == nullptr) {
       return absl::InvalidArgumentError(
           absl::StrCat("ControlOpExecutor: missing query parameter for DuckDB ",
                        "placeholder $",
                        i + 1));
     }
-    auto value = semantic::ParseParameterValue(
-        param->value_json, param->type_kind, param->type_json);
-    if (!value.ok()) return value.status();
-    auto literal = RenderSemanticParameterLiteral(*value);
+    absl::StatusOr<std::string> literal = RenderParameterLiteral(*param);
     if (!literal.ok()) return literal.status();
     literals[i] = *std::move(literal);
   }
@@ -320,54 +326,29 @@ absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql) {
   return absl::OkStatus();
 }
 
-// Materialize one storage table inside `conn` at the given quoted
-// table name. Mirrors `DuckDbExecutor::AttachStorageTableAt` for
-// CTAS.
-absl::Status AttachStorageTableAt(::duckdb_connection conn,
-                                  storage::Storage* storage,
-                                  const catalog::StorageTable& table,
-                                  absl::string_view quoted_table_name,
-                                  std::optional<std::int64_t> as_of_ms) {
-  const schema::TableSchema& schema = table.bq_schema();
-  const std::string table_name(quoted_table_name);
-  const storage::TableId& id = table.storage_table_id();
+absl::StatusOr<std::optional<std::string>> ResolveParquetPath(
+    storage::Storage* storage,
+    const storage::TableId& id,
+    std::optional<std::int64_t> as_of_ms) {
+  if (!as_of_ms.has_value()) return storage->ParquetSnapshotPath(id);
+  absl::StatusOr<std::optional<std::string>> path_or =
+      storage->ParquetSnapshotPathAt(id, *as_of_ms);
+  if (!path_or.ok()) return path_or.status();
+  return std::move(*path_or);
+}
 
-  std::optional<std::string> parquet_path;
-  if (as_of_ms.has_value()) {
-    absl::StatusOr<std::optional<std::string>> path_or =
-        storage->ParquetSnapshotPathAt(id, *as_of_ms);
-    if (!path_or.ok()) return path_or.status();
-    parquet_path = std::move(*path_or);
-  } else {
-    parquet_path = storage->ParquetSnapshotPath(id);
-  }
+absl::Status CreateOrReplaceTable(::duckdb_connection conn,
+                                  absl::string_view table_name,
+                                  const schema::TableSchema& schema) {
+  return RunSqlNoResult(conn,
+                        absl::StrCat("CREATE OR REPLACE TABLE ",
+                                     table_name,
+                                     " ",
+                                     RenderColumnList(schema)));
+}
 
-  if (parquet_path) {
-    const std::string columns = RenderColumnList(schema);
-    absl::Status status = RunSqlNoResult(
-        conn,
-        absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ", columns));
-    if (!status.ok()) return status;
-    const std::string escaped = EscapeStringLiteralInner(*parquet_path);
-    return RunSqlNoResult(conn,
-                          absl::StrCat("INSERT INTO ",
-                                       table_name,
-                                       " SELECT * FROM read_parquet('",
-                                       escaped,
-                                       "')"));
-  }
-
-  const std::string columns = RenderColumnList(schema);
-
-  absl::Status status = RunSqlNoResult(
-      conn, absl::StrCat("CREATE OR REPLACE TABLE ", table_name, " ", columns));
-  if (!status.ok()) return status;
-
-  absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
-      storage->ScanRows(table.storage_table_id());
-  if (!iter.ok()) return iter.status();
-
-  std::unique_ptr<storage::RowIterator> rows_iter = std::move(iter).value();
+absl::StatusOr<std::vector<storage::Row>> ReadRowsFromIterator(
+    std::unique_ptr<storage::RowIterator> rows_iter) {
   std::vector<storage::Row> rows;
   storage::Row row;
   while (true) {
@@ -376,8 +357,14 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
     if (!*has) break;
     rows.push_back(row);
   }
-  if (rows.empty()) return absl::OkStatus();
+  return rows;
+}
 
+absl::StatusOr<std::string> BuildInsertSqlForRows(
+    absl::string_view table_name,
+    const catalog::StorageTable& table,
+    const schema::TableSchema& schema,
+    absl::Span<const storage::Row> rows) {
   std::string insert_sql;
   absl::StrAppend(&insert_sql, "INSERT INTO ", table_name, " VALUES ");
   const size_t ncols = schema.columns.size();
@@ -403,7 +390,54 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
     }
     absl::StrAppend(&insert_sql, ")");
   }
-  return RunSqlNoResult(conn, insert_sql);
+  return insert_sql;
+}
+
+// Materialize one storage table inside `conn` at the given quoted
+// table name. Mirrors `DuckDbExecutor::AttachStorageTableAt` for
+// CTAS.
+absl::Status AttachStorageTableAt(::duckdb_connection conn,
+                                  storage::Storage* storage,
+                                  const catalog::StorageTable& table,
+                                  absl::string_view quoted_table_name,
+                                  std::optional<std::int64_t> as_of_ms) {
+  const schema::TableSchema& schema = table.bq_schema();
+  const std::string table_name(quoted_table_name);
+  const storage::TableId& id = table.storage_table_id();
+
+  absl::StatusOr<std::optional<std::string>> parquet_path_or =
+      ResolveParquetPath(storage, id, as_of_ms);
+  if (!parquet_path_or.ok()) return parquet_path_or.status();
+  std::optional<std::string> parquet_path = std::move(*parquet_path_or);
+
+  if (parquet_path) {
+    absl::Status status = CreateOrReplaceTable(conn, table_name, schema);
+    if (!status.ok()) return status;
+    const std::string escaped = EscapeStringLiteralInner(*parquet_path);
+    return RunSqlNoResult(conn,
+                          absl::StrCat("INSERT INTO ",
+                                       table_name,
+                                       " SELECT * FROM read_parquet('",
+                                       escaped,
+                                       "')"));
+  }
+
+  absl::Status status = CreateOrReplaceTable(conn, table_name, schema);
+  if (!status.ok()) return status;
+
+  absl::StatusOr<std::unique_ptr<storage::RowIterator>> iter =
+      storage->ScanRows(table.storage_table_id());
+  if (!iter.ok()) return iter.status();
+  absl::StatusOr<std::vector<storage::Row>> rows_or =
+      ReadRowsFromIterator(std::move(*iter));
+  if (!rows_or.ok()) return rows_or.status();
+  std::vector<storage::Row> rows = std::move(*rows_or);
+  if (rows.empty()) return absl::OkStatus();
+
+  absl::StatusOr<std::string> insert_sql =
+      BuildInsertSqlForRows(table_name, table, schema, rows);
+  if (!insert_sql.ok()) return insert_sql.status();
+  return RunSqlNoResult(conn, *insert_sql);
 }
 
 // Drain every row out of `quoted_table_name` in `conn` and return
