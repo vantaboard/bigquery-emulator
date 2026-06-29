@@ -144,7 +144,7 @@ absl::Status RunExportData(storage::Storage& storage,
     return attach;
   }
 
-  const bool export_to_gcs = absl::StartsWith(*uri_or, "gs://");
+  auto export_to_gcs = absl::StartsWith(*uri_or, "gs://");
   std::string write_path = *path_or;
   if (export_to_gcs) {
     write_path = absl::StrCat(*path_or, ".export.tmp");

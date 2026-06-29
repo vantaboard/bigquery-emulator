@@ -65,7 +65,7 @@ absl::StatusOr<schema::TableSchema> ResolveLoadSchema(
 
 struct LoadDataFileOptions {
   std::string format = "CSV";
-  std::vector<std::string> uris;
+  std::vector<std::string> uris{};
 };
 
 absl::StatusOr<LoadDataFileOptions> ParseLoadDataFileOptions(
