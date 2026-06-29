@@ -200,9 +200,9 @@ std::string TryEmitStringAggDistinctDedupeScan(
 }
 
 struct AggregateScanParts {
-  std::vector<std::string> projections;
-  std::vector<std::string> group_by_exprs;
-  absl::flat_hash_map<int, std::string> group_by_id_to_name;
+  std::vector<std::string> projections{};
+  std::vector<std::string> group_by_exprs{};
+  absl::flat_hash_map<int, std::string> group_by_id_to_name{};
 };
 
 bool BuildAggregateScanParts(const ::googlesql::ResolvedAggregateScan* node,

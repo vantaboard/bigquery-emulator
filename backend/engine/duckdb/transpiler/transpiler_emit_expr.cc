@@ -15,6 +15,7 @@
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/transpiler/transpiler_emit_expr_helpers.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
@@ -62,43 +63,21 @@ std::string Transpiler::EmitCast(const ::googlesql::ResolvedCast* node) {
   //                          fall through `DuckDBSqlTypeName` to
   //                          `VARCHAR`; emitting that silently
   //                          would not match BigQuery semantics.
-  if (node == nullptr || node->expr() == nullptr) return "";
-  if (node->format() != nullptr || node->time_zone() != nullptr) return "";
-  if (node->extended_cast() != nullptr) return "";
-  if (!node->type_modifiers().IsEmpty()) return "";
+  if (CastHasUnsupportedFeatures(node)) return "";
   const ::googlesql::Type* target = node->type();
-  if (target == nullptr) return "";
-  if (!internal::IsCastTargetSupported(target->kind())) return "";
   std::string inner = EmitExpr(node->expr());
   if (inner.empty()) return "";
   std::string type_sql = ToDuckDBSqlType(*target);
   if (type_sql.empty()) return "";
   if (target->kind() == ::googlesql::TYPE_TIMESTAMP) {
-    if (auto lit = internal::TryLiteralString(node->expr())) {
-      if (lit->find('+') == std::string::npos &&
-          lit->find('Z') == std::string::npos &&
-          lit->find("UTC") == std::string::npos &&
-          (lit->size() < 6 ||
-           lit->compare(lit->size() - 6, 6, "+00:00") != 0)) {
-        inner = internal::QuoteString(absl::StrCat(*lit, "+00"));
-      }
-    }
+    inner = NormalizeTimestampCastInner(inner, node->expr());
     type_sql = "TIMESTAMPTZ";
   }
-  if (target->kind() == ::googlesql::TYPE_STRUCT) {
-    const ::googlesql::Type* source_type = node->expr()->type();
-    if (source_type != nullptr && source_type->IsStruct()) {
-      const ::googlesql::StructType* target_st = target->AsStruct();
-      const ::googlesql::StructType* source_st = source_type->AsStruct();
-      if (target_st != nullptr && source_st != nullptr) {
-        std::string remapped = internal::EmitStructPositionalCastRemap(
-            inner, *source_st, *target_st);
-        if (!remapped.empty()) return remapped;
-      }
-    }
+  if (std::string remapped = TryEmitStructTypeCast(inner, target, node->expr());
+      !remapped.empty()) {
+    return remapped;
   }
-  const char* op = node->return_null_on_error() ? "TRY_CAST" : "CAST";
-  return absl::StrCat(op, "(", inner, " AS ", type_sql, ")");
+  return FormatCastExpression(inner, type_sql, node->return_null_on_error());
 }
 
 std::string Transpiler::EmitMakeStruct(
