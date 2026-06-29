@@ -106,64 +106,55 @@ absl::Status BindTvfArguments(
   return absl::OkStatus();
 }
 
-}  // namespace
-
-absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeMlPredictTvf(
     const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
-  if (scan.tvf() == nullptr) {
-    return absl::InvalidArgumentError("semantic: TVFScan has null tvf");
+  for (int i = 0; i < scan.argument_list_size(); ++i) {
+    const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
+    if (arg == nullptr || arg->scan() == nullptr) {
+      continue;
+    }
+    const ::googlesql::ResolvedScan* input_scan = arg->scan();
+    auto input_rows = scan_eval_internal::MaterializeScanImpl(input_scan, ctx);
+    if (!input_rows.ok()) {
+      return input_rows.status();
+    }
+    return stubs::MlPredictStub(scan, *input_rows, input_scan);
   }
-  const std::string tvf_name = absl::AsciiStrToLower(scan.tvf()->SQLName());
-  if (tvf_name == "ml.predict") {
-    for (int i = 0; i < scan.argument_list_size(); ++i) {
-      const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
-      if (arg == nullptr || arg->scan() == nullptr) {
-        continue;
-      }
-      const ::googlesql::ResolvedScan* input_scan = arg->scan();
+  return MakeSemanticError(
+      SemanticErrorReason::kInvalidArgument,
+      "semantic stub: ML.PREDICT requires a TABLE input argument");
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeMlEvaluateTvf(
+    const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
+  for (int i = 0; i < scan.argument_list_size(); ++i) {
+    const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
+    if (arg != nullptr && arg->scan() != nullptr) {
       auto input_rows =
-          scan_eval_internal::MaterializeScanImpl(input_scan, ctx);
+          scan_eval_internal::MaterializeScanImpl(arg->scan(), ctx);
       if (!input_rows.ok()) {
         return input_rows.status();
       }
-      return stubs::MlPredictStub(scan, *input_rows, input_scan);
-    }
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        "semantic stub: ML.PREDICT requires a TABLE input argument");
-  }
-  if (tvf_name == "ml.evaluate") {
-    for (int i = 0; i < scan.argument_list_size(); ++i) {
-      const ::googlesql::ResolvedFunctionArgument* arg = scan.argument_list(i);
-      if (arg != nullptr && arg->scan() != nullptr) {
-        auto input_rows =
-            scan_eval_internal::MaterializeScanImpl(arg->scan(), ctx);
-        if (!input_rows.ok()) {
-          return input_rows.status();
-        }
-        break;
-      }
-    }
-    return stubs::MlEvaluateStub(scan);
-  }
-  if (tvf_name == "ml.forecast") {
-    return stubs::MlForecastStub(scan);
-  }
-  if (scan.signature() != nullptr) {
-    const auto* templated_sig =
-        dynamic_cast<const ::googlesql::TemplatedSQLTVFSignature*>(
-            scan.signature().get());
-    if (templated_sig != nullptr &&
-        templated_sig->resolved_templated_query() != nullptr &&
-        templated_sig->resolved_templated_query()->query() != nullptr) {
-      const ::googlesql::ResolvedScan* inner =
-          templated_sig->resolved_templated_query()->query();
-      auto rows = scan_eval_internal::MaterializeScanImpl(inner, ctx);
-      if (!rows.ok()) return rows.status();
-      return RemapScanOutputColumns(*rows, inner, scan);
+      break;
     }
   }
+  return stubs::MlEvaluateStub(scan);
+}
 
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeTemplatedSqlTvf(
+    const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
+  const auto* templated_sig =
+      dynamic_cast<const ::googlesql::TemplatedSQLTVFSignature*>(
+          scan.signature().get());
+  const ::googlesql::ResolvedScan* inner =
+      templated_sig->resolved_templated_query()->query();
+  auto rows = scan_eval_internal::MaterializeScanImpl(inner, ctx);
+  if (!rows.ok()) return rows.status();
+  return RemapScanOutputColumns(*rows, inner, scan);
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeRegisteredSqlTvf(
+    const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
   const auto* sql_tvf =
       dynamic_cast<const ::googlesql::SQLTableValuedFunction*>(scan.tvf());
   if (sql_tvf == nullptr) {
@@ -188,6 +179,36 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
   auto rows = scan_eval_internal::MaterializeScanImpl(inner_query, inner);
   if (!rows.ok()) return rows.status();
   return RemapScanOutputColumns(*rows, inner_query, scan);
+}
+
+}  // namespace
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
+    const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
+  if (scan.tvf() == nullptr) {
+    return absl::InvalidArgumentError("semantic: TVFScan has null tvf");
+  }
+  const std::string tvf_name = absl::AsciiStrToLower(scan.tvf()->SQLName());
+  if (tvf_name == "ml.predict") {
+    return MaterializeMlPredictTvf(scan, ctx);
+  }
+  if (tvf_name == "ml.evaluate") {
+    return MaterializeMlEvaluateTvf(scan, ctx);
+  }
+  if (tvf_name == "ml.forecast") {
+    return stubs::MlForecastStub(scan);
+  }
+  if (scan.signature() != nullptr) {
+    const auto* templated_sig =
+        dynamic_cast<const ::googlesql::TemplatedSQLTVFSignature*>(
+            scan.signature().get());
+    if (templated_sig != nullptr &&
+        templated_sig->resolved_templated_query() != nullptr &&
+        templated_sig->resolved_templated_query()->query() != nullptr) {
+      return MaterializeTemplatedSqlTvf(scan, ctx);
+    }
+  }
+  return MaterializeRegisteredSqlTvf(scan, ctx);
 }
 
 }  // namespace semantic

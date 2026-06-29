@@ -278,7 +278,7 @@ cc_library(
         "scan_eval_materialize.cc",
         "scan_eval_materialize_relation_argument.cc",
         "scan_eval_setops.cc",
-        "scan_eval_analytic.cc",
+        "scan_eval_analytic_helpers.cc",
         "scan_eval_sample.cc",
         "scan_eval_match_recognize.cc",
         "scan_eval_scan_impl.cc",

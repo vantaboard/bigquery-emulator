@@ -218,7 +218,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeOrderByScanRows(
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithScanBody(
-    const ::googlesql::ResolvedWithScan& with_scan, EvalContext& ctx) {
+    const ::googlesql::ResolvedWithScan& with_scan, const EvalContext& ctx) {
   absl::flat_hash_map<std::string, CteTable> tables;
   for (int i = 0; i < with_scan.with_entry_list_size(); ++i) {
     const ::googlesql::ResolvedWithEntry* entry = with_scan.with_entry_list(i);

@@ -86,7 +86,7 @@ absl::StatusOr<std::vector<AggListRow>> CollectOrderedAggRows(
     const std::vector<std::vector<Value>>& input_column_values,
     const std::vector<ColumnBindings>& input_rows,
     bool ignore_nulls,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<AggListRow> rows;
   rows.reserve(input_rows.size());
   for (size_t r = 0; r < input_rows.size(); ++r) {
