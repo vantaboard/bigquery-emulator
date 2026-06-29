@@ -29,6 +29,77 @@ namespace internal {
 
 namespace {
 
+struct DuckDbSession {
+  ::duckdb_database db = nullptr;
+  ::duckdb_connection conn = nullptr;
+
+  DuckDbSession() = default;
+  DuckDbSession(const DuckDbSession&) = delete;
+  DuckDbSession& operator=(const DuckDbSession&) = delete;
+  DuckDbSession(DuckDbSession&& other) noexcept
+      : db(std::exchange(other.db, nullptr)),
+        conn(std::exchange(other.conn, nullptr)) {}
+  DuckDbSession& operator=(DuckDbSession&& other) noexcept {
+    if (this == &other) return *this;
+    if (conn != nullptr) ::duckdb_disconnect(&conn);
+    if (db != nullptr) ::duckdb_close(&db);
+    db = std::exchange(other.db, nullptr);
+    conn = std::exchange(other.conn, nullptr);
+    return *this;
+  }
+  ~DuckDbSession() {
+    if (conn != nullptr) ::duckdb_disconnect(&conn);
+    if (db != nullptr) ::duckdb_close(&db);
+  }
+};
+
+absl::StatusOr<DuckDbSession> OpenDuckDbSession() {
+  DuckDbSession session;
+  if (::duckdb_open(nullptr, &session.db) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "control op executor: duckdb_open(in-memory) failed");
+  }
+  if (::duckdb_connect(session.db, &session.conn) != ::DuckDBSuccess) {
+    return absl::InternalError("control op executor: duckdb_connect failed");
+  }
+  if (auto reg = duckdb::udf::RegisterAll(session.conn); !reg.ok()) {
+    return reg;
+  }
+  return session;
+}
+
+absl::Status EnsureTargetSchemaExistsIfNeeded(::duckdb_connection conn,
+                                              const storage::TableId& target,
+                                              bool is_temp_mv) {
+  if (is_temp_mv) return absl::OkStatus();
+  return RunSqlNoResult(conn,
+                        absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                     QuoteIdent(target.dataset_id)));
+}
+
+absl::Status AttachCollectorTables(::duckdb_connection conn,
+                                   storage::Storage& storage,
+                                   const TableScanCollector& collector) {
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      return absl::FailedPreconditionError(
+          "control op executor: null table reference in CREATE MATERIALIZED "
+          "VIEW scan");
+    }
+    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (source_table == nullptr) {
+      return absl::FailedPreconditionError(
+          absl::StrCat("control op executor: cannot attach non-StorageTable '",
+                       tbl->Name(),
+                       "' for CREATE MATERIALIZED VIEW"));
+    }
+    absl::Status attach = AttachStorageTableAt(
+        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
+    if (!attach.ok()) return attach;
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> BuildMaterializeSql(
     absl::string_view request_sql,
     const ::googlesql::ResolvedCreateMaterializedViewStmt* stmt,
@@ -96,79 +167,29 @@ absl::Status RunCreateMaterializedView(
   absl::Status visit_status = root_stmt.Accept(&collector);
   if (!visit_status.ok()) return visit_status;
 
-  ::duckdb_database db = nullptr;
-  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
-    return absl::InternalError(
-        "control op executor: duckdb_open(in-memory) failed");
-  }
-  ::duckdb_connection conn = nullptr;
-  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
-    ::duckdb_close(&db);
-    return absl::InternalError("control op executor: duckdb_connect failed");
-  }
-  if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return reg;
-  }
+  absl::StatusOr<DuckDbSession> session = OpenDuckDbSession();
+  if (!session.ok()) return session.status();
+  ::duckdb_connection conn = session->conn;
 
   const bool is_temp_mv = absl::StrContains(request.sql, "CREATE TEMP") ||
                           absl::StrContains(request.sql, "create temp");
-  if (!is_temp_mv) {
-    absl::Status target_schema_status =
-        RunSqlNoResult(conn,
-                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                    QuoteIdent(target->dataset_id)));
-    if (!target_schema_status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return target_schema_status;
-    }
-  }
-
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    if (tbl == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(
-          "control op executor: null table reference in CREATE MATERIALIZED "
-          "VIEW scan");
-    }
-    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (source_table == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(
-          absl::StrCat("control op executor: cannot attach non-StorageTable '",
-                       tbl->Name(),
-                       "' for CREATE MATERIALIZED VIEW"));
-    }
-    absl::Status attach = AttachStorageTableAt(
-        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
-    if (!attach.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return attach;
-    }
-  }
+  absl::Status target_schema =
+      EnsureTargetSchemaExistsIfNeeded(conn, *target, is_temp_mv);
+  if (!target_schema.ok()) return target_schema;
+  absl::Status attach = AttachCollectorTables(conn, storage, collector);
+  if (!attach.ok()) return attach;
 
   if (stmt->create_mode() ==
       ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
     absl::Status dropped = storage.DropTable(*target);
     if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
       return dropped;
     }
   }
 
   absl::StatusOr<std::string> materialize_sql =
       BuildMaterializeSql(request.sql, stmt, *target, request.parameters);
-  if (!materialize_sql.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return materialize_sql.status();
-  }
+  if (!materialize_sql.ok()) return materialize_sql.status();
 
   ::duckdb_result mv_result;
   if (::duckdb_query(conn, materialize_sql->c_str(), &mv_result) !=
@@ -176,8 +197,6 @@ absl::Status RunCreateMaterializedView(
     const auto* err = ::duckdb_result_error(&mv_result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&mv_result);
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
     return absl::InvalidArgumentError(
         absl::StrCat("control op executor: DuckDB rejected materialized view: ",
                      detail,
@@ -194,8 +213,6 @@ absl::Status RunCreateMaterializedView(
                                 QuoteIdent(target->table_id));
   absl::StatusOr<std::vector<storage::Row>> after_rows =
       DrainTableRows(conn, quoted_target, *bq_schema);
-  ::duckdb_disconnect(&conn);
-  ::duckdb_close(&db);
   if (!after_rows.ok()) return after_rows.status();
 
   if (is_temp_mv) {

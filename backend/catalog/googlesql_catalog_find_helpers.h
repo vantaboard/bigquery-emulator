@@ -29,11 +29,11 @@ absl::StatusOr<ParsedFindTablePath> ParseFindTablePath(
     absl::string_view project_id,
     absl::string_view default_dataset_id);
 
-std::optional<InfoSchemaViewKind> ParseInfoSchemaView(absl::string_view view_name);
+std::optional<InfoSchemaViewKind> ParseInfoSchemaView(
+    absl::string_view view_name);
 
 absl::StatusOr<const ::googlesql::Type*> ScalarOrStructType(
-    const schema::ColumnSchema& column,
-    ::googlesql::TypeFactory* type_factory);
+    const schema::ColumnSchema& column, ::googlesql::TypeFactory* type_factory);
 
 }  // namespace catalog
 }  // namespace backend

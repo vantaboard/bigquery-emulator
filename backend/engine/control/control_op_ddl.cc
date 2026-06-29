@@ -242,19 +242,85 @@ absl::StatusOr<std::string> BuildDuckdbCtasSql(
                       select_sql);
 }
 
+struct DuckDbSession {
+  ::duckdb_database db = nullptr;
+  ::duckdb_connection conn = nullptr;
+
+  DuckDbSession() = default;
+  DuckDbSession(const DuckDbSession&) = delete;
+  DuckDbSession& operator=(const DuckDbSession&) = delete;
+  DuckDbSession(DuckDbSession&& other) noexcept
+      : db(std::exchange(other.db, nullptr)),
+        conn(std::exchange(other.conn, nullptr)) {}
+  DuckDbSession& operator=(DuckDbSession&& other) noexcept {
+    if (this == &other) return *this;
+    if (conn != nullptr) ::duckdb_disconnect(&conn);
+    if (db != nullptr) ::duckdb_close(&db);
+    db = std::exchange(other.db, nullptr);
+    conn = std::exchange(other.conn, nullptr);
+    return *this;
+  }
+  ~DuckDbSession() {
+    if (conn != nullptr) ::duckdb_disconnect(&conn);
+    if (db != nullptr) ::duckdb_close(&db);
+  }
+};
+
+absl::StatusOr<DuckDbSession> OpenDuckDbSession() {
+  DuckDbSession session;
+  if (::duckdb_open(nullptr, &session.db) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: duckdb_open(in-memory) failed");
+  }
+  if (::duckdb_connect(session.db, &session.conn) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: duckdb_connect failed");
+  }
+  if (auto reg = duckdb::udf::RegisterAll(session.conn); !reg.ok()) {
+    return reg;
+  }
+  return session;
+}
+
+absl::Status EnsureTargetSchemaExistsIfNeeded(::duckdb_connection conn,
+                                              const storage::TableId& target,
+                                              bool is_temp_ctas) {
+  if (is_temp_ctas) return absl::OkStatus();
+  return RunSqlNoResult(conn,
+                        absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                     QuoteIdent(target.dataset_id)));
+}
+
+absl::Status AttachCollectorTables(::duckdb_connection conn,
+                                   storage::Storage& storage,
+                                   const TableScanCollector& collector) {
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      return absl::FailedPreconditionError(
+          "ControlOpExecutor::ExecuteDdl: null table reference in CTAS scan");
+    }
+    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (source_table == nullptr) {
+      return absl::FailedPreconditionError(absl::StrCat(
+          "ControlOpExecutor::ExecuteDdl: cannot attach non-StorageTable '",
+          tbl->Name(),
+          "' for CTAS; rebuild against a "
+          "GoogleSqlCatalog-backed analyzer"));
+    }
+    // Attach at the bare table name so transpiled `FROM "people"` (see
+    // `EmitTableScan`) resolves in the connection default schema, matching
+    // `DuckDbExecutor::ExecuteQuery`.
+    absl::Status attach = AttachStorageTableAt(
+        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
+    if (!attach.ok()) return attach;
+  }
+  return absl::OkStatus();
+}
+
 // --- CREATE TABLE AS SELECT handler ---------------------------------------
-//
-// statementType: `CREATE_TABLE_AS_SELECT`. The handler materializes
-// each referenced source table inside a per-query in-memory DuckDB
-// connection, runs the user-submitted SQL verbatim, then reads back
-// the resulting rows under the BigQuery-typed schema (so storage
-// records the BigQuery view of the schema, not DuckDB's inferred
-// types). This is the same migration-compatible path the prior
-// `DuckDbExecutor::ExecuteDdl::RunCreateTableAsSelect` carried -- the
-// "run SELECT half through the coordinator" refactor the plan
-// envisions is deferred to a follow-up because it requires injecting
-// a `coordinator::Engine*` back into this executor (circular
-// dependency with `LocalCoordinatorEngine`).
+// statementType: `CREATE_TABLE_AS_SELECT`. Materializes source tables in an
+// in-memory DuckDB connection, executes the CTAS SQL, then persists rows in
+// BigQuery schema shape.
 absl::Status RunCreateTableAsSelect(
     storage::Storage& storage,
     absl::string_view project_id,
@@ -281,83 +347,29 @@ absl::Status RunCreateTableAsSelect(
   absl::Status visit_status = root_stmt->Accept(&collector);
   if (!visit_status.ok()) return visit_status;
 
-  ::duckdb_database db = nullptr;
-  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
-    return absl::InternalError(
-        "ControlOpExecutor::ExecuteDdl: duckdb_open(in-memory) failed");
-  }
-  ::duckdb_connection conn = nullptr;
-  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
-    ::duckdb_close(&db);
-    return absl::InternalError(
-        "ControlOpExecutor::ExecuteDdl: duckdb_connect failed");
-  }
-  if (auto reg = duckdb::udf::RegisterAll(conn); !reg.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return reg;
-  }
+  absl::StatusOr<DuckDbSession> session = OpenDuckDbSession();
+  if (!session.ok()) return session.status();
+  ::duckdb_connection conn = session->conn;
 
   const bool is_temp_ctas = absl::StrContains(request.sql, "CREATE TEMP") ||
                             absl::StrContains(request.sql, "create temp");
-  if (!is_temp_ctas) {
-    absl::Status target_schema_status =
-        RunSqlNoResult(conn,
-                       absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
-                                    QuoteIdent(target->dataset_id)));
-    if (!target_schema_status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return target_schema_status;
-    }
-  }
-
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    if (tbl == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(
-          "ControlOpExecutor::ExecuteDdl: null table reference in CTAS scan");
-    }
-    const auto* source_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (source_table == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(absl::StrCat(
-          "ControlOpExecutor::ExecuteDdl: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "' for CTAS; rebuild against a "
-          "GoogleSqlCatalog-backed analyzer"));
-    }
-    // Attach at the bare table name so transpiled `FROM "people"` (see
-    // `EmitTableScan`) resolves in the connection default schema, matching
-    // `DuckDbExecutor::ExecuteQuery`.
-    absl::Status attach = AttachStorageTableAt(
-        conn, &storage, *source_table, QuoteIdent(tbl->Name()));
-    if (!attach.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return attach;
-    }
-  }
+  absl::Status target_schema =
+      EnsureTargetSchemaExistsIfNeeded(conn, *target, is_temp_ctas);
+  if (!target_schema.ok()) return target_schema;
+  absl::Status attach = AttachCollectorTables(conn, storage, collector);
+  if (!attach.ok()) return attach;
 
   if (stmt->create_mode() ==
       ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
     absl::Status dropped = storage.DropTable(*target);
     if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
       return dropped;
     }
   }
 
   absl::StatusOr<std::string> ctas_sql = BuildDuckdbCtasSql(
       request.sql, stmt, *target, *bq_schema, request.parameters);
-  if (!ctas_sql.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return ctas_sql.status();
-  }
+  if (!ctas_sql.ok()) return ctas_sql.status();
 
   ::duckdb_result ctas_result;
   if (::duckdb_query(conn, ctas_sql->c_str(), &ctas_result) !=
@@ -365,8 +377,6 @@ absl::Status RunCreateTableAsSelect(
     const auto* err = ::duckdb_result_error(&ctas_result);
     std::string detail = err == nullptr ? std::string("") : std::string(err);
     ::duckdb_destroy_result(&ctas_result);
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
     return absl::InvalidArgumentError(
         absl::StrCat("ControlOpExecutor: DuckDB rejected CTAS: ",
                      detail,
@@ -383,8 +393,6 @@ absl::Status RunCreateTableAsSelect(
                                   QuoteIdent(target->table_id));
   absl::StatusOr<std::vector<storage::Row>> after_rows =
       DrainTableRows(conn, quoted_target, *bq_schema);
-  ::duckdb_disconnect(&conn);
-  ::duckdb_close(&db);
   if (!after_rows.ok()) return after_rows.status();
 
   if (is_temp_ctas) {
