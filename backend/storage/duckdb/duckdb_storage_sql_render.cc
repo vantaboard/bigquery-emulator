@@ -120,7 +120,8 @@ absl::StatusOr<std::int64_t> CountParquetRows(DuckDBStorage::Impl* impl,
     return absl::InternalError(
         "CountParquetRows: unexpected COUNT(*) result shape");
   }
-  const std::int64_t count = ::duckdb_value_int64(&result, 0, 0);
+  std::int64_t count = 0;
+  count = ::duckdb_value_int64(&result, 0, 0);
   ::duckdb_destroy_result(&result);
   return count;
 }

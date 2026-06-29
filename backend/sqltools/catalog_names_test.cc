@@ -130,10 +130,10 @@ class FakeCatalogStorage : public storage::Storage {
     return absl::StrCat(id.project_id, "/", id.dataset_id, "/", id.table_id);
   }
 
-  std::map<std::string, std::vector<storage::DatasetId>> datasets_;
-  std::map<std::string, std::vector<storage::TableId>> tables_;
-  std::map<std::string, schema::TableSchema> schemas_;
-  std::map<std::string, std::vector<storage::RoutineRecord>> routines_;
+  std::map<std::string, std::vector<storage::DatasetId>> datasets_{};
+  std::map<std::string, std::vector<storage::TableId>> tables_{};
+  std::map<std::string, schema::TableSchema> schemas_{};
+  std::map<std::string, std::vector<storage::RoutineRecord>> routines_{};
 };
 
 TEST(CatalogNamesTest, PopulateFromStorageIncludesTablesColumnsAndRoutines) {

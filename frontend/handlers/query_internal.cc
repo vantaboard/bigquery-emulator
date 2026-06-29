@@ -226,8 +226,10 @@ backend::engine::QueryRequest ProtoToEngineRequest(
             engine_request.parameters.end(),
             [](const backend::engine::QueryParameter& a,
                const backend::engine::QueryParameter& b) {
-              const int pa = GatewayPositionalParameterIndex(a.name);
-              const int pb = GatewayPositionalParameterIndex(b.name);
+              int pa = 0;
+              int pb = 0;
+              pa = GatewayPositionalParameterIndex(a.name);
+              pb = GatewayPositionalParameterIndex(b.name);
               if (pa >= 0 && pb >= 0) return pa < pb;
               return a.name < b.name;
             });

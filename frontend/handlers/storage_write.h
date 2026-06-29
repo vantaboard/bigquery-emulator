@@ -191,6 +191,12 @@ class StorageWriteService final : public v1::StorageWrite::Service {
       std::int64_t* prior_offset,
       v1::AppendRowsResponse* resp) ABSL_LOCKS_EXCLUDED(mu_);
 
+  ::grpc::Status ProcessAppendRowsRequest(
+      const v1::AppendRowsRequest& req,
+      ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+          stream,
+      absl::string_view bound_stream_name);
+
   ::grpc::Status BindWriteStreamFromRequest(
       const v1::AppendRowsRequest& req,
       std::string* bound_stream_name,

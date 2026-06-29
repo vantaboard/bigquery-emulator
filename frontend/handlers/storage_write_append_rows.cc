@@ -177,6 +177,57 @@ DecodedAppendBatch DecodeAppendRowBatch(
   return ::grpc::Status::OK;
 }
 
+::grpc::Status StorageWriteService::ProcessAppendRowsRequest(
+    const v1::AppendRowsRequest& req,
+    ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+        stream,
+    absl::string_view bound_stream_name) {
+  v1::AppendRowsResponse resp;
+  if (!req.trace_id().empty()) {
+    resp.set_trace_id(req.trace_id());
+  }
+
+  StreamSessionSnapshot session;
+  if (auto session_status =
+          LoadStreamSessionForAppend(bound_stream_name, &session);
+      !session_status.ok()) {
+    return session_status;
+  }
+
+  DecodedAppendBatch batch = DecodeAppendRowBatch(req, session.schema);
+  if (batch.shape_error) {
+    resp.set_error_message(batch.shape_error_detail);
+    return WriteAppendResponse(stream, std::move(resp));
+  }
+
+  std::int64_t prior_offset = 0;
+  if (session.type == v1::WriteStream::BUFFERED ||
+      session.type == v1::WriteStream::PENDING) {
+    if (auto commit_status = CommitBufferedAppendRows(
+            bound_stream_name, std::move(batch.rows), &prior_offset);
+        !commit_status.ok()) {
+      return commit_status;
+    }
+  } else {
+    if (auto commit_status =
+            CommitImmediateAppendRows(bound_stream_name,
+                                      session.table,
+                                      absl::MakeConstSpan(batch.rows),
+                                      &prior_offset,
+                                      &resp);
+        !commit_status.ok()) {
+      return commit_status;
+    }
+    if (resp.has_error_message()) {
+      return WriteAppendResponse(stream, std::move(resp));
+    }
+  }
+
+  resp.mutable_append_result()->set_offset(prior_offset);
+  resp.set_row_count(static_cast<std::int64_t>(batch.rows.size()));
+  return WriteAppendResponse(stream, std::move(resp));
+}
+
 ::grpc::Status StorageWriteService::AppendRows(
     ::grpc::ServerContext* /*context*/,
     ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
@@ -196,66 +247,16 @@ DecodedAppendBatch DecodeAppendRowBatch(
 
   v1::AppendRowsRequest req;
   while (stream->Read(&req)) {
-    v1::AppendRowsResponse resp;
-    if (!req.trace_id().empty()) {
-      resp.set_trace_id(req.trace_id());
-    }
-
     if (auto bind_status =
             BindWriteStreamFromRequest(req, &bound_stream_name, &bound_table);
         !bind_status.ok()) {
       return bind_status;
     }
 
-    StreamSessionSnapshot session;
-    if (auto session_status =
-            LoadStreamSessionForAppend(bound_stream_name, &session);
-        !session_status.ok()) {
-      return session_status;
-    }
-
-    DecodedAppendBatch batch = DecodeAppendRowBatch(req, session.schema);
-    if (batch.shape_error) {
-      resp.set_error_message(batch.shape_error_detail);
-      if (auto write_status = WriteAppendResponse(stream, std::move(resp));
-          !write_status.ok()) {
-        return write_status;
-      }
-      continue;
-    }
-
-    std::int64_t prior_offset = 0;
-    if (session.type == v1::WriteStream::BUFFERED ||
-        session.type == v1::WriteStream::PENDING) {
-      if (auto commit_status = CommitBufferedAppendRows(
-              bound_stream_name, std::move(batch.rows), &prior_offset);
-          !commit_status.ok()) {
-        return commit_status;
-      }
-    } else {
-      if (auto commit_status =
-              CommitImmediateAppendRows(bound_stream_name,
-                                        session.table,
-                                        absl::MakeConstSpan(batch.rows),
-                                        &prior_offset,
-                                        &resp);
-          !commit_status.ok()) {
-        return commit_status;
-      }
-      if (resp.has_error_message()) {
-        if (auto write_status = WriteAppendResponse(stream, std::move(resp));
-            !write_status.ok()) {
-          return write_status;
-        }
-        continue;
-      }
-    }
-
-    resp.mutable_append_result()->set_offset(prior_offset);
-    resp.set_row_count(static_cast<std::int64_t>(batch.rows.size()));
-    if (auto write_status = WriteAppendResponse(stream, resp);
-        !write_status.ok()) {
-      return write_status;
+    if (auto process_status =
+            ProcessAppendRowsRequest(req, stream, bound_stream_name);
+        !process_status.ok()) {
+      return process_status;
     }
   }
   return ::grpc::Status::OK;

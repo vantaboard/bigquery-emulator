@@ -264,7 +264,7 @@ std::string StorageWriteService::Rfc3339Now() const {
 
   struct PendingCommit {
     backend::storage::TableId table;
-    std::vector<backend::storage::Row> rows;
+    std::vector<backend::storage::Row> rows{};
   };
   std::vector<PendingCommit> commits;
 
