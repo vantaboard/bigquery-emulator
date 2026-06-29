@@ -171,6 +171,53 @@ ColumnBindings BuildOuterUnnestNullRow(
   return bindings;
 }
 
+ColumnBindings BuildUnnestRowAtIndex(const ::googlesql::ResolvedArrayScan& scan,
+                                     int n_arrays,
+                                     int idx,
+                                     const std::vector<Value>& arrays,
+                                     const std::vector<int>& sizes,
+                                     const std::vector<bool>& null_array) {
+  ColumnBindings bindings;
+  bindings.reserve(n_arrays + 1);
+  for (int i = 0; i < n_arrays; ++i) {
+    Value element;
+    if (idx < sizes[i] && !null_array[i]) {
+      element = arrays[i].element(idx);
+    } else {
+      element = NullElement(scan.element_column_list(i).type());
+    }
+    bindings.emplace(scan.element_column_list(i).column_id(),
+                     std::move(element));
+  }
+  if (scan.array_offset_column() != nullptr) {
+    bindings.emplace(scan.array_offset_column()->column().column_id(),
+                     Value::Int64(static_cast<int64_t>(idx)));
+  }
+  AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
+  InjectArrayScanInternalColumns(scan, bindings);
+  return bindings;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> BuildUnnestRows(
+    const ::googlesql::ResolvedArrayScan& scan,
+    int n_arrays,
+    int row_count,
+    const std::vector<Value>& arrays,
+    const std::vector<int>& sizes,
+    const std::vector<bool>& null_array) {
+  std::vector<ColumnBindings> rows;
+  if (row_count == 0 && scan.is_outer()) {
+    rows.push_back(BuildOuterUnnestNullRow(scan, n_arrays));
+    return rows;
+  }
+  rows.reserve(row_count);
+  for (int idx = 0; idx < row_count; ++idx) {
+    rows.push_back(
+        BuildUnnestRowAtIndex(scan, n_arrays, idx, arrays, sizes, null_array));
+  }
+  return rows;
+}
+
 }  // namespace
 
 void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
@@ -340,39 +387,7 @@ absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
     row_count = ComputeZipRowCount(zip_mode, sizes, n_arrays);
   }
 
-  std::vector<ColumnBindings> rows;
-  if (row_count == 0 && scan.is_outer()) {
-    rows.push_back(BuildOuterUnnestNullRow(scan, n_arrays));
-    return rows;
-  }
-
-  rows.reserve(row_count);
-  for (int idx = 0; idx < row_count; ++idx) {
-    ColumnBindings bindings;
-    bindings.reserve(n_arrays + 1);
-    for (int i = 0; i < n_arrays; ++i) {
-      Value element;
-      if (idx < sizes[i] && !null_array[i]) {
-        element = arrays[i].element(idx);
-      } else {
-        // PAD reaches here for the array that ran out of elements;
-        // TRUNCATE / STRICT capped `row_count` so they cannot
-        // reach this branch. NULL arrays in PAD also produce
-        // NULL elements per the BQ contract.
-        element = NullElement(scan.element_column_list(i).type());
-      }
-      bindings.emplace(scan.element_column_list(i).column_id(),
-                       std::move(element));
-    }
-    if (scan.array_offset_column() != nullptr) {
-      bindings.emplace(scan.array_offset_column()->column().column_id(),
-                       Value::Int64(static_cast<int64_t>(idx)));
-    }
-    AliasUnnestPublicColumnIds(scan, n_arrays, bindings);
-    InjectArrayScanInternalColumns(scan, bindings);
-    rows.push_back(std::move(bindings));
-  }
-  return rows;
+  return BuildUnnestRows(scan, n_arrays, row_count, arrays, sizes, null_array);
 }
 
 }  // namespace array_struct
