@@ -325,6 +325,121 @@ void MaybeSetBignumericRenderOverride(const BigNumericValue& parsed,
   }
 }
 
+absl::StatusOr<Value> TryParseBignumericCandidates(absl::string_view expanded,
+                                                   const EvalContext* ctx) {
+  BigNumericValue out;
+  absl::Status error;
+  for (const std::string& candidate :
+       {std::string(expanded), absl::StrCat(expanded, ".0")}) {
+    if (auto parsed = BigNumericValue::FromStringWithRounding(
+            candidate, 76, /*round_half_even=*/false);
+        parsed.ok()) {
+      MaybeSetBignumericRenderOverride(*parsed, expanded, ctx);
+      return Value::BigNumeric(*parsed);
+    }
+    if (::googlesql::functions::ParseBigNumeric(candidate, &out, &error)) {
+      MaybeSetBignumericRenderOverride(out, expanded, ctx);
+      return Value::BigNumeric(out);
+    }
+  }
+  return error;
+}
+
+absl::StatusOr<Value> TryParseBignumericNormalizedScientific(
+    absl::string_view input,
+    absl::string_view expanded,
+    const EvalContext* ctx) {
+  const size_t epos = input.find('e');
+  std::string mantissa(input.substr(0, epos));
+  int64_t exponent = 0;
+  if (!absl::SimpleAtoi(input.substr(epos + 1), &exponent)) {
+    return absl::InvalidArgumentError("semantic: invalid bignumeric exponent");
+  }
+  const size_t dot = mantissa.find('.');
+  int64_t digits_before_dot =
+      static_cast<int64_t>(dot == std::string::npos ? mantissa.size() : dot);
+  int64_t norm_exp =
+      exponent + digits_before_dot - (dot == std::string::npos ? 0 : 1);
+  std::string norm_mantissa =
+      dot == std::string::npos
+          ? mantissa
+          : absl::StrCat(mantissa.substr(0, dot), mantissa.substr(dot + 1));
+  while (norm_mantissa.size() > 1 && norm_mantissa[0] == '0') {
+    norm_mantissa.erase(0, 1);
+    --norm_exp;
+  }
+  const std::string normalized = absl::StrCat(norm_mantissa, "e", norm_exp);
+  BigNumericValue out;
+  absl::Status error;
+  if (auto parsed = BigNumericValue::FromStringWithRounding(
+          normalized, 76, /*round_half_even=*/false);
+      parsed.ok()) {
+    MaybeSetBignumericRenderOverride(*parsed, expanded, ctx);
+    return Value::BigNumeric(*parsed);
+  }
+  if (::googlesql::functions::ParseBigNumeric(normalized, &out, &error)) {
+    MaybeSetBignumericRenderOverride(out, expanded, ctx);
+    return Value::BigNumeric(out);
+  }
+  return error;
+}
+
+absl::StatusOr<Value> TryParseBignumericScaledMantissa(
+    absl::string_view mantissa_str,
+    int64_t exponent,
+    const std::optional<std::string>& expanded,
+    const EvalContext* ctx) {
+  auto mantissa_or = BigNumericValue::FromStringWithRounding(
+      std::string(mantissa_str), 76, /*round_half_even=*/false);
+  if (!mantissa_or.ok()) return mantissa_or.status();
+  BigNumericValue scaled = *mantissa_or;
+  if (exponent > 0) {
+    for (int64_t i = 0; i < exponent; ++i) {
+      auto next = scaled.Multiply(BigNumericValue(10));
+      if (!next.ok()) return next.status();
+      scaled = *next;
+    }
+  } else if (exponent < 0) {
+    for (int64_t i = 0; i < -exponent; ++i) {
+      auto next = scaled.Divide(BigNumericValue(10));
+      if (!next.ok()) return next.status();
+      scaled = *next;
+    }
+  }
+  if (expanded.has_value()) {
+    MaybeSetBignumericRenderOverride(scaled, *expanded, ctx);
+  }
+  return Value::BigNumeric(scaled);
+}
+
+absl::StatusOr<Value> TryParseBignumericScientific(absl::string_view input,
+                                                   const EvalContext* ctx) {
+  const std::optional<std::string> expanded = ExpandScientificNotation(input);
+  if (expanded.has_value()) {
+    if (auto parsed = TryParseBignumericCandidates(*expanded, ctx);
+        parsed.ok()) {
+      return parsed;
+    }
+    if (auto normalized =
+            TryParseBignumericNormalizedScientific(input, *expanded, ctx);
+        normalized.ok()) {
+      return normalized;
+    }
+  }
+  const size_t epos = input.find('e');
+  std::string mantissa_str(input.substr(0, epos));
+  int64_t exponent = 0;
+  if (!absl::SimpleAtoi(input.substr(epos + 1), &exponent)) {
+    return absl::InvalidArgumentError("semantic: invalid bignumeric exponent");
+  }
+  const size_t dot = mantissa_str.find('.');
+  if (dot != std::string::npos) {
+    exponent -= static_cast<int64_t>(mantissa_str.size() - dot - 1);
+  }
+  return TryParseBignumericScaledMantissa(
+      mantissa_str, exponent, expanded, ctx);
+}
+
 }  // namespace
 
 absl::StatusOr<Value> ParseBignumeric(const std::vector<Value>& args,
@@ -344,83 +459,9 @@ absl::StatusOr<Value> ParseBignumeric(const std::vector<Value>& args,
     return Value::BigNumeric(out);
   }
   if (input.find('e') != std::string::npos) {
-    const std::optional<std::string> expanded = ExpandScientificNotation(input);
-    if (expanded.has_value()) {
-      for (const std::string& candidate :
-           {*expanded, absl::StrCat(*expanded, ".0")}) {
-        if (auto parsed = BigNumericValue::FromStringWithRounding(
-                candidate, 76, /*round_half_even=*/false);
-            parsed.ok()) {
-          MaybeSetBignumericRenderOverride(*parsed, *expanded, ctx);
-          return Value::BigNumeric(*parsed);
-        }
-        if (::googlesql::functions::ParseBigNumeric(candidate, &out, &error)) {
-          MaybeSetBignumericRenderOverride(out, *expanded, ctx);
-          return Value::BigNumeric(out);
-        }
-      }
-      const size_t epos = input.find('e');
-      std::string mantissa(input.substr(0, epos));
-      int64_t exponent = 0;
-      if (absl::SimpleAtoi(input.substr(epos + 1), &exponent)) {
-        const size_t dot = mantissa.find('.');
-        int64_t digits_before_dot = static_cast<int64_t>(
-            dot == std::string::npos ? mantissa.size() : dot);
-        int64_t norm_exp =
-            exponent + digits_before_dot - (dot == std::string::npos ? 0 : 1);
-        std::string norm_mantissa =
-            dot == std::string::npos ? mantissa
-                                     : absl::StrCat(mantissa.substr(0, dot),
-                                                    mantissa.substr(dot + 1));
-        while (norm_mantissa.size() > 1 && norm_mantissa[0] == '0') {
-          norm_mantissa.erase(0, 1);
-          --norm_exp;
-        }
-        const std::string normalized =
-            absl::StrCat(norm_mantissa, "e", norm_exp);
-        if (auto parsed = BigNumericValue::FromStringWithRounding(
-                normalized, 76, /*round_half_even=*/false);
-            parsed.ok()) {
-          MaybeSetBignumericRenderOverride(*parsed, *expanded, ctx);
-          return Value::BigNumeric(*parsed);
-        }
-        if (::googlesql::functions::ParseBigNumeric(normalized, &out, &error)) {
-          MaybeSetBignumericRenderOverride(out, *expanded, ctx);
-          return Value::BigNumeric(out);
-        }
-      }
-    }
-    const size_t epos = input.find('e');
-    std::string mantissa_str(input.substr(0, epos));
-    int64_t exponent = 0;
-    if (!absl::SimpleAtoi(input.substr(epos + 1), &exponent)) {
-      return error;
-    }
-    const size_t dot = mantissa_str.find('.');
-    if (dot != std::string::npos) {
-      exponent -= static_cast<int64_t>(mantissa_str.size() - dot - 1);
-    }
-    if (auto mantissa_or = BigNumericValue::FromStringWithRounding(
-            mantissa_str, 76, /*round_half_even=*/false);
-        mantissa_or.ok()) {
-      BigNumericValue scaled = *mantissa_or;
-      if (exponent > 0) {
-        for (int64_t i = 0; i < exponent; ++i) {
-          auto next = scaled.Multiply(BigNumericValue(10));
-          if (!next.ok()) return next.status();
-          scaled = *next;
-        }
-      } else if (exponent < 0) {
-        for (int64_t i = 0; i < -exponent; ++i) {
-          auto next = scaled.Divide(BigNumericValue(10));
-          if (!next.ok()) return next.status();
-          scaled = *next;
-        }
-      }
-      if (expanded.has_value()) {
-        MaybeSetBignumericRenderOverride(scaled, *expanded, ctx);
-      }
-      return Value::BigNumeric(scaled);
+    if (auto scientific = TryParseBignumericScientific(input, ctx);
+        scientific.ok()) {
+      return *scientific;
     }
   }
   if (auto rounded = BigNumericValue::FromStringWithRounding(

@@ -27,7 +27,7 @@ namespace semantic {
 namespace functions {
 
 struct RowValue {
-  Value v;
+  Value v{};
   bool is_null = false;
 };
 
@@ -65,7 +65,7 @@ absl::StatusOr<Value> ApproxCountDistinct(
 }
 
 struct SortedNumeric {
-  std::vector<double> values;
+  std::vector<double> values{};
   bool have_null = false;
 };
 
@@ -94,6 +94,57 @@ SortedNumeric SortedNumericValues(const std::vector<RowValue>& rows,
   return out;
 }
 
+std::vector<Value> BuildApproxQuantileElements(
+    int64_t n,
+    const SortedNumeric& sorted,
+    bool respect_nulls,
+    bool distinct,
+    const std::vector<RowValue>& rows) {
+  std::vector<Value> elements;
+  elements.reserve(static_cast<size_t>(n) + 1);
+  const std::vector<double>& vals = sorted.values;
+  if (vals.empty() && !(respect_nulls && sorted.have_null)) {
+    for (int64_t i = 0; i <= n; ++i) {
+      elements.push_back(Value::NullInt64());
+    }
+    return elements;
+  }
+  int64_t null_slots = 0;
+  if (respect_nulls && sorted.have_null) {
+    null_slots = distinct
+                     ? 1
+                     : static_cast<int64_t>(std::count_if(
+                           rows.begin(), rows.end(), [](const RowValue& row) {
+                             return row.is_null;
+                           }));
+  }
+  const int64_t population = null_slots + static_cast<int64_t>(vals.size());
+  for (int64_t i = 0; i <= n; ++i) {
+    if (population <= 0) {
+      elements.push_back(Value::NullInt64());
+      continue;
+    }
+    const double pos = static_cast<double>(i) *
+                       static_cast<double>(population - 1) /
+                       static_cast<double>(n);
+    const int64_t idx = static_cast<int64_t>(
+        pos < 0 ? 0 : std::min(pos, static_cast<double>(population - 1)));
+    if (idx < null_slots) {
+      elements.push_back(Value::NullInt64());
+      continue;
+    }
+    const size_t val_idx = static_cast<size_t>(idx - null_slots);
+    if (vals.empty()) {
+      elements.push_back(Value::NullInt64());
+    } else {
+      const size_t pick =
+          std::min(val_idx, static_cast<size_t>(vals.size() - 1));
+      elements.push_back(Value::Int64(static_cast<int64_t>(vals[pick])));
+    }
+  }
+  return elements;
+}
+
 absl::StatusOr<Value> ApproxQuantiles(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
@@ -117,48 +168,8 @@ absl::StatusOr<Value> ApproxQuantiles(
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
                                                        : nullptr;
-  std::vector<Value> elements;
-  elements.reserve(static_cast<size_t>(n) + 1);
-  const std::vector<double>& vals = sorted.values;
-  if (vals.empty() && !(respect_nulls && sorted.have_null)) {
-    for (int64_t i = 0; i <= n; ++i) {
-      elements.push_back(Value::NullInt64());
-    }
-  } else {
-    int64_t null_slots = 0;
-    if (respect_nulls && sorted.have_null) {
-      null_slots = distinct
-                       ? 1
-                       : static_cast<int64_t>(std::count_if(
-                             rows.begin(), rows.end(), [](const RowValue& row) {
-                               return row.is_null;
-                             }));
-    }
-    const int64_t population = null_slots + static_cast<int64_t>(vals.size());
-    for (int64_t i = 0; i <= n; ++i) {
-      if (population <= 0) {
-        elements.push_back(Value::NullInt64());
-        continue;
-      }
-      const double pos = static_cast<double>(i) *
-                         static_cast<double>(population - 1) /
-                         static_cast<double>(n);
-      const int64_t idx = static_cast<int64_t>(
-          pos < 0 ? 0 : std::min(pos, static_cast<double>(population - 1)));
-      if (idx < null_slots) {
-        elements.push_back(Value::NullInt64());
-        continue;
-      }
-      const size_t val_idx = static_cast<size_t>(idx - null_slots);
-      if (vals.empty()) {
-        elements.push_back(Value::NullInt64());
-      } else {
-        const size_t pick =
-            std::min(val_idx, static_cast<size_t>(vals.size() - 1));
-        elements.push_back(Value::Int64(static_cast<int64_t>(vals[pick])));
-      }
-    }
-  }
+  std::vector<Value> elements =
+      BuildApproxQuantileElements(n, sorted, respect_nulls, distinct, rows);
   if (arr_type == nullptr) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "APPROX_QUANTILES requires ARRAY return type");
@@ -167,7 +178,7 @@ absl::StatusOr<Value> ApproxQuantiles(
 }
 
 struct TopCountEntry {
-  Value key;
+  Value key{};
   int64_t sum = 0;
   bool weight_was_non_null = false;
 };

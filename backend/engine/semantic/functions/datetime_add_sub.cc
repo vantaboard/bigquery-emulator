@@ -128,47 +128,44 @@ absl::StatusOr<Value> DateAddSubDiffTrunc(absl::string_view name,
       absl::StrCat("semantic: unknown date function ", name));
 }
 
-absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
-                                              const std::vector<Value>& args) {
-  if (args.size() < 2) {
+namespace {
+
+absl::StatusOr<Value> DatetimeDiffFromArgs(const std::vector<Value>& args) {
+  if (args.size() != 3) {
     return absl::InvalidArgumentError(
-        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+        "semantic: DATETIME_DIFF expects three arguments");
   }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::Null(args[0].type());
+  if (args[2].is_null()) return Value::NullInt64();
+  auto part = PartFromArg(args[2]);
+  if (!part.ok()) return part.status();
+  int64_t out = 0;
+  if (auto s = ::googlesql::functions::DiffDatetimes(
+          args[0].datetime_value(), args[1].datetime_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
-  if (name == "datetime_diff") {
-    if (args.size() != 3) {
-      return absl::InvalidArgumentError(
-          "semantic: DATETIME_DIFF expects three arguments");
-    }
-    if (args[2].is_null()) return Value::NullInt64();
-    auto part = PartFromArg(args[2]);
-    if (!part.ok()) return part.status();
-    int64_t out = 0;
-    if (auto s = ::googlesql::functions::DiffDatetimes(
-            args[0].datetime_value(), args[1].datetime_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(out);
+  return Value::Int64(out);
+}
+
+absl::StatusOr<Value> DatetimeTruncFromArgs(const std::vector<Value>& args) {
+  if (args.size() != 2) {
+    return absl::InvalidArgumentError(
+        "semantic: DATETIME_TRUNC expects two arguments");
   }
-  if (name == "datetime_trunc") {
-    if (args.size() != 2) {
-      return absl::InvalidArgumentError(
-          "semantic: DATETIME_TRUNC expects two arguments");
-    }
-    if (args[1].is_null()) return Value::NullDatetime();
-    auto part = PartFromArg(args[1]);
-    if (!part.ok()) return part.status();
-    DatetimeValue out;
-    if (auto s = ::googlesql::functions::TruncateDatetime(
-            args[0].datetime_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Datetime(out);
+  if (args[1].is_null()) return Value::NullDatetime();
+  auto part = PartFromArg(args[1]);
+  if (!part.ok()) return part.status();
+  DatetimeValue out;
+  if (auto s = ::googlesql::functions::TruncateDatetime(
+          args[0].datetime_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
+  return Value::Datetime(out);
+}
+
+absl::StatusOr<Value> DatetimeAddSubFromArgs(absl::string_view name,
+                                             const std::vector<Value>& args) {
   if (args.size() != 3) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects three arguments"));
@@ -197,84 +194,78 @@ absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
   return Value::Datetime(out);
 }
 
-absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
-                                               const std::vector<Value>& args) {
-  if (args.size() < 2) {
+absl::StatusOr<int64_t> ValueToUnixMicros(const Value& v) {
+  if (v.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
+    return v.ToUnixMicros();
+  }
+  absl::Time t;
+  if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+          v.datetime_value(), DefaultTimeZone(), &t);
+      !s.ok()) {
+    return s;
+  }
+  return absl::ToUnixMicros(t);
+}
+
+absl::StatusOr<Value> TimestampDiffFromArgs(const std::vector<Value>& args) {
+  if (args.size() != 3) {
     return absl::InvalidArgumentError(
-        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+        "semantic: TIMESTAMP_DIFF expects three arguments");
   }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::NullTimestamp();
-  }
-  if (name == "timestamp_diff") {
-    if (args.size() != 3) {
-      return absl::InvalidArgumentError(
-          "semantic: TIMESTAMP_DIFF expects three arguments");
-    }
-    if (args[2].is_null()) return Value::NullInt64();
-    auto part = PartFromArg(args[2]);
-    if (!part.ok()) return part.status();
-    int64_t out = 0;
-    const Value& lhs = args[0];
-    const Value& rhs = args[1];
-    auto to_micros = [](const Value& v) -> absl::StatusOr<int64_t> {
-      if (v.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
-        return v.ToUnixMicros();
-      }
-      absl::Time t;
-      if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-              v.datetime_value(), DefaultTimeZone(), &t);
-          !s.ok()) {
-        return s;
-      }
-      return absl::ToUnixMicros(t);
-    };
-    if (lhs.type_kind() == ::googlesql::TYPE_DATETIME &&
-        rhs.type_kind() == ::googlesql::TYPE_DATETIME) {
-      if (auto s = ::googlesql::functions::DiffDatetimes(
-              lhs.datetime_value(), rhs.datetime_value(), *part, &out);
-          !s.ok()) {
-        return s;
-      }
-      return Value::Int64(out);
-    }
-    auto t0 = to_micros(lhs);
-    auto t1 = to_micros(rhs);
-    if (!t0.ok()) return t0.status();
-    if (!t1.ok()) return t1.status();
-    if (auto s = ::googlesql::functions::TimestampDiff(
-            *t0, *t1, kMicros, *part, &out);
+  if (args[2].is_null()) return Value::NullInt64();
+  auto part = PartFromArg(args[2]);
+  if (!part.ok()) return part.status();
+  int64_t out = 0;
+  const Value& lhs = args[0];
+  const Value& rhs = args[1];
+  if (lhs.type_kind() == ::googlesql::TYPE_DATETIME &&
+      rhs.type_kind() == ::googlesql::TYPE_DATETIME) {
+    if (auto s = ::googlesql::functions::DiffDatetimes(
+            lhs.datetime_value(), rhs.datetime_value(), *part, &out);
         !s.ok()) {
       return s;
     }
     return Value::Int64(out);
   }
-  if (name == "timestamp_trunc") {
-    if (args.size() < 2 || args.size() > 3) {
-      return absl::InvalidArgumentError(
-          "semantic: TIMESTAMP_TRUNC expects 2 or 3 arguments");
-    }
-    if (args[1].is_null() || (args.size() == 3 && args[2].is_null())) {
-      return Value::NullTimestamp();
-    }
-    auto part = PartFromArg(args[1]);
-    if (!part.ok()) return part.status();
-    int64_t out = 0;
-    if (args.size() == 2) {
-      if (auto s = ::googlesql::functions::TimestampTrunc(
-              args[0].ToUnixMicros(), DefaultTimeZone(), *part, &out);
-          !s.ok()) {
-        return s;
-      }
-    } else {
-      if (auto s = ::googlesql::functions::TimestampTrunc(
-              args[0].ToUnixMicros(), args[2].string_value(), *part, &out);
-          !s.ok()) {
-        return s;
-      }
-    }
-    return Value::TimestampFromUnixMicros(out);
+  auto t0 = ValueToUnixMicros(lhs);
+  auto t1 = ValueToUnixMicros(rhs);
+  if (!t0.ok()) return t0.status();
+  if (!t1.ok()) return t1.status();
+  if (auto s =
+          ::googlesql::functions::TimestampDiff(*t0, *t1, kMicros, *part, &out);
+      !s.ok()) {
+    return s;
   }
+  return Value::Int64(out);
+}
+
+absl::StatusOr<Value> TimestampTruncFromArgs(const std::vector<Value>& args) {
+  if (args.size() < 2 || args.size() > 3) {
+    return absl::InvalidArgumentError(
+        "semantic: TIMESTAMP_TRUNC expects 2 or 3 arguments");
+  }
+  if (args[1].is_null() || (args.size() == 3 && args[2].is_null())) {
+    return Value::NullTimestamp();
+  }
+  auto part = PartFromArg(args[1]);
+  if (!part.ok()) return part.status();
+  int64_t out = 0;
+  if (args.size() == 2) {
+    if (auto s = ::googlesql::functions::TimestampTrunc(
+            args[0].ToUnixMicros(), DefaultTimeZone(), *part, &out);
+        !s.ok()) {
+      return s;
+    }
+  } else if (auto s = ::googlesql::functions::TimestampTrunc(
+                 args[0].ToUnixMicros(), args[2].string_value(), *part, &out);
+             !s.ok()) {
+    return s;
+  }
+  return Value::TimestampFromUnixMicros(out);
+}
+
+absl::StatusOr<Value> TimestampAddSubFromArgs(absl::string_view name,
+                                              const std::vector<Value>& args) {
   if (args.size() != 3) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects three arguments"));
@@ -311,47 +302,42 @@ absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
   return Value::TimestampFromUnixMicros(out);
 }
 
-absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
-                                          const std::vector<Value>& args) {
-  if (args.size() < 2) {
+absl::StatusOr<Value> TimeDiffFromArgs(const std::vector<Value>& args) {
+  if (args.size() != 3) {
     return absl::InvalidArgumentError(
-        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+        "semantic: TIME_DIFF expects three arguments");
   }
-  if (args[0].is_null() || args[1].is_null()) {
-    return Value::NullTime();
+  if (args[2].is_null()) return Value::NullInt64();
+  auto part = PartFromArg(args[2]);
+  if (!part.ok()) return part.status();
+  int64_t out = 0;
+  if (auto s = ::googlesql::functions::DiffTimes(
+          args[0].time_value(), args[1].time_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
-  if (name == "time_diff") {
-    if (args.size() != 3) {
-      return absl::InvalidArgumentError(
-          "semantic: TIME_DIFF expects three arguments");
-    }
-    if (args[2].is_null()) return Value::NullInt64();
-    auto part = PartFromArg(args[2]);
-    if (!part.ok()) return part.status();
-    int64_t out = 0;
-    if (auto s = ::googlesql::functions::DiffTimes(
-            args[0].time_value(), args[1].time_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(out);
+  return Value::Int64(out);
+}
+
+absl::StatusOr<Value> TimeTruncFromArgs(const std::vector<Value>& args) {
+  if (args.size() != 2) {
+    return absl::InvalidArgumentError(
+        "semantic: TIME_TRUNC expects two arguments");
   }
-  if (name == "time_trunc") {
-    if (args.size() != 2) {
-      return absl::InvalidArgumentError(
-          "semantic: TIME_TRUNC expects two arguments");
-    }
-    if (args[1].is_null()) return Value::NullTime();
-    auto part = PartFromArg(args[1]);
-    if (!part.ok()) return part.status();
-    TimeValue out;
-    if (auto s = ::googlesql::functions::TruncateTime(
-            args[0].time_value(), *part, &out);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Time(out);
+  if (args[1].is_null()) return Value::NullTime();
+  auto part = PartFromArg(args[1]);
+  if (!part.ok()) return part.status();
+  TimeValue out;
+  if (auto s = ::googlesql::functions::TruncateTime(
+          args[0].time_value(), *part, &out);
+      !s.ok()) {
+    return s;
   }
+  return Value::Time(out);
+}
+
+absl::StatusOr<Value> TimeAddSubFromArgs(absl::string_view name,
+                                         const std::vector<Value>& args) {
   if (args.size() != 3) {
     return absl::InvalidArgumentError(
         absl::StrCat("semantic: ", name, " expects three arguments"));
@@ -378,6 +364,50 @@ absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
         absl::StrCat("semantic: unknown time function ", name));
   }
   return Value::Time(out);
+}
+
+}  // namespace
+
+absl::StatusOr<Value> DatetimeAddSubDiffTrunc(absl::string_view name,
+                                              const std::vector<Value>& args) {
+  if (args.size() < 2) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::Null(args[0].type());
+  }
+  if (name == "datetime_diff") return DatetimeDiffFromArgs(args);
+  if (name == "datetime_trunc") return DatetimeTruncFromArgs(args);
+  return DatetimeAddSubFromArgs(name, args);
+}
+
+absl::StatusOr<Value> TimestampAddSubDiffTrunc(absl::string_view name,
+                                               const std::vector<Value>& args) {
+  if (args.size() < 2) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::NullTimestamp();
+  }
+  if (name == "timestamp_diff") return TimestampDiffFromArgs(args);
+  if (name == "timestamp_trunc") return TimestampTruncFromArgs(args);
+  return TimestampAddSubFromArgs(name, args);
+}
+
+absl::StatusOr<Value> TimeAddSubDiffTrunc(absl::string_view name,
+                                          const std::vector<Value>& args) {
+  if (args.size() < 2) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("semantic: ", name, " expects at least two arguments"));
+  }
+  if (args[0].is_null() || args[1].is_null()) {
+    return Value::NullTime();
+  }
+  if (name == "time_diff") return TimeDiffFromArgs(args);
+  if (name == "time_trunc") return TimeTruncFromArgs(args);
+  return TimeAddSubFromArgs(name, args);
 }
 
 absl::StatusOr<Value> TimestampBucket(const std::vector<Value>& args) {

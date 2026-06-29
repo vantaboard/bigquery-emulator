@@ -300,19 +300,74 @@ absl::StatusOr<Value> DispatchIsDistinctFrom(absl::string_view name,
   return Value::Bool(distinct);
 }
 
+namespace {
+
+absl::StatusOr<Value> DispatchBitwiseNot(absl::string_view name,
+                                         const std::vector<Value>& args) {
+  if (args.size() != 1) {
+    return absl::InvalidArgumentError(
+        "semantic: bitwise NOT expects exactly one argument");
+  }
+  if (args[0].is_null()) {
+    return Value::NullInt64();
+  }
+  auto v = RequireInt64(args[0], name);
+  if (!v.ok()) return v.status();
+  return Value::Int64(~(*v));
+}
+
+absl::StatusOr<Value> DispatchBitwiseBytesBinary(
+    absl::string_view name, const std::vector<Value>& args) {
+  if (name == "$bitwise_and" &&
+      args[0].type_kind() == ::googlesql::TYPE_BYTES &&
+      args[1].type_kind() == ::googlesql::TYPE_BYTES) {
+    return Value::Bytes(AndBytes(args[0].bytes_value(), args[1].bytes_value()));
+  }
+  if (name == "$bitwise_right_shift" &&
+      args[0].type_kind() == ::googlesql::TYPE_BYTES &&
+      args[1].type_kind() == ::googlesql::TYPE_INT64) {
+    auto shift = RequireInt64(args[1], name);
+    if (!shift.ok()) return shift.status();
+    auto out = ShiftBytesRight(args[0].bytes_value(), *shift);
+    if (!out.ok()) return out.status();
+    return Value::Bytes(*std::move(out));
+  }
+  return absl::InvalidArgumentError(absl::StrCat(
+      "semantic: ", name, " does not support these BYTES operand types"));
+}
+
+absl::StatusOr<Value> DispatchBitwiseInt64Binary(absl::string_view name,
+                                                 int64_t a,
+                                                 int64_t b) {
+  if (name == "$bitwise_and") return Value::Int64(a & b);
+  if (name == "$bitwise_or") return Value::Int64(a | b);
+  if (name == "$bitwise_xor") return Value::Int64(a ^ b);
+  if (name == "$bitwise_left_shift") {
+    if (b < 0) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: shift count out of range");
+    }
+    if (b >= 64) return Value::Int64(0);
+    return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(a) << b));
+  }
+  if (name == "$bitwise_right_shift") {
+    if (b < 0) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               "semantic: shift count out of range");
+    }
+    if (b >= 64) return Value::Int64(0);
+    return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(a) >> b));
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("semantic: unknown bitwise operator ", name));
+}
+
+}  // namespace
+
 absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
                                       const std::vector<Value>& args) {
   if (name == "$bitwise_not") {
-    if (args.size() != 1) {
-      return absl::InvalidArgumentError(
-          "semantic: bitwise NOT expects exactly one argument");
-    }
-    if (args[0].is_null()) {
-      return Value::NullInt64();
-    }
-    auto v = RequireInt64(args[0], name);
-    if (!v.ok()) return v.status();
-    return Value::Int64(~(*v));
+    return DispatchBitwiseNot(name, args);
   }
   if (args.size() != 2) {
     return absl::InvalidArgumentError(
@@ -327,59 +382,13 @@ absl::StatusOr<Value> DispatchBitwise(absl::string_view name,
   }
   if (args[0].type_kind() == ::googlesql::TYPE_BYTES ||
       args[1].type_kind() == ::googlesql::TYPE_BYTES) {
-    if (name == "$bitwise_and" &&
-        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
-        args[1].type_kind() == ::googlesql::TYPE_BYTES) {
-      return Value::Bytes(
-          AndBytes(args[0].bytes_value(), args[1].bytes_value()));
-    }
-    if (name == "$bitwise_right_shift" &&
-        args[0].type_kind() == ::googlesql::TYPE_BYTES &&
-        args[1].type_kind() == ::googlesql::TYPE_INT64) {
-      auto shift = RequireInt64(args[1], name);
-      if (!shift.ok()) return shift.status();
-      auto out = ShiftBytesRight(args[0].bytes_value(), *shift);
-      if (!out.ok()) return out.status();
-      return Value::Bytes(*std::move(out));
-    }
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: ", name, " does not support these BYTES operand types"));
+    return DispatchBitwiseBytesBinary(name, args);
   }
   auto a = RequireInt64(args[0], name);
   if (!a.ok()) return a.status();
   auto b = RequireInt64(args[1], name);
   if (!b.ok()) return b.status();
-  if (name == "$bitwise_and") {
-    return Value::Int64(*a & *b);
-  }
-  if (name == "$bitwise_or") {
-    return Value::Int64(*a | *b);
-  }
-  if (name == "$bitwise_xor") {
-    return Value::Int64(*a ^ *b);
-  }
-  if (name == "$bitwise_left_shift") {
-    if (*b < 0) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: shift count out of range");
-    }
-    if (*b >= 64) {
-      return Value::Int64(0);
-    }
-    return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(*a) << *b));
-  }
-  if (name == "$bitwise_right_shift") {
-    if (*b < 0) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: shift count out of range");
-    }
-    if (*b >= 64) {
-      return Value::Int64(0);
-    }
-    return Value::Int64(static_cast<int64_t>(static_cast<uint64_t>(*a) >> *b));
-  }
-  return absl::InvalidArgumentError(
-      absl::StrCat("semantic: unknown bitwise operator ", name));
+  return DispatchBitwiseInt64Binary(name, *a, *b);
 }
 
 absl::StatusOr<Value> DispatchInterval(const std::vector<Value>& args,

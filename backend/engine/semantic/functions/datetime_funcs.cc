@@ -40,6 +40,128 @@ using ::googlesql::Value;
 using ::googlesql::functions::DateIncrement;
 using ::googlesql::functions::TimestampIncrement;
 
+namespace {
+
+struct DateArrayStep {
+  int64_t step = 1;
+  DateTimestampPart unit = DateTimestampPart::DAY;
+};
+
+absl::StatusOr<DateArrayStep> ParseGenerateDateArrayStep(
+    const std::vector<Value>& args) {
+  DateArrayStep out;
+  if (args.size() < 3 || args[2].is_null()) {
+    return out;
+  }
+  if (args[2].type_kind() == ::googlesql::TYPE_INTERVAL) {
+    const IntervalValue& interval = args[2].interval_value();
+    static constexpr DateTimestampPart kParts[] = {
+        DateTimestampPart::DAY,
+        DateTimestampPart::WEEK,
+        DateTimestampPart::MONTH,
+        DateTimestampPart::QUARTER,
+        DateTimestampPart::YEAR,
+    };
+    for (DateTimestampPart part : kParts) {
+      auto extracted = interval.Extract(part);
+      if (!extracted.ok() || *extracted == 0) continue;
+      out.unit = part;
+      out.step = *extracted;
+      return out;
+    }
+    return absl::InvalidArgumentError(
+        "semantic: GENERATE_DATE_ARRAY step INTERVAL has no supported date "
+        "part");
+  }
+  out.step = args[2].int64_value();
+  if (args.size() == 4) {
+    auto p = PartFromArg(args[3]);
+    if (!p.ok()) return p.status();
+    out.unit = *p;
+  }
+  return out;
+}
+
+absl::StatusOr<Value> ExtractFromInterval(const Value& v,
+                                          DateTimestampPart part) {
+  auto r = v.interval_value().Extract(part);
+  if (!r.ok()) return r.status();
+  return Value::Int64(*r);
+}
+
+absl::StatusOr<Value> ExtractFromDate(const Value& v, DateTimestampPart part) {
+  int32_t value32 = 0;
+  if (auto s = ::googlesql::functions::ExtractFromDate(
+          part, v.date_value(), &value32);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Int64(value32);
+}
+
+absl::StatusOr<Value> ExtractFromDatetime(const Value& v,
+                                          DateTimestampPart part) {
+  int32_t value32 = 0;
+  if (auto s = ::googlesql::functions::ExtractFromDatetime(
+          part, v.datetime_value(), &value32);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Int64(value32);
+}
+
+absl::StatusOr<Value> ExtractFromTime(const Value& v, DateTimestampPart part) {
+  int64_t value64 = 0;
+  if (auto s = ::googlesql::functions::ExtractFromTime(
+          part, v.time_value(), &value64);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Int64(value64);
+}
+
+absl::StatusOr<Value> ExtractFromTimestamp(const Value& v,
+                                           DateTimestampPart part,
+                                           const std::vector<Value>& args) {
+  absl::TimeZone tz = DefaultTimeZone();
+  if (args.size() == 3) {
+    if (auto s =
+            ::googlesql::functions::MakeTimeZone(args[2].string_value(), &tz);
+        !s.ok()) {
+      return s;
+    }
+  }
+  int64_t value64 = 0;
+  if (auto s = ::googlesql::functions::ExtractFromTimestamp(
+          part, v.ToTime(), tz, &value64);
+      !s.ok()) {
+    return s;
+  }
+  return Value::Int64(value64);
+}
+
+absl::StatusOr<Value> ExtractFromValue(const Value& v,
+                                       DateTimestampPart part,
+                                       const std::vector<Value>& args) {
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_INTERVAL:
+      return ExtractFromInterval(v, part);
+    case ::googlesql::TYPE_DATE:
+      return ExtractFromDate(v, part);
+    case ::googlesql::TYPE_DATETIME:
+      return ExtractFromDatetime(v, part);
+    case ::googlesql::TYPE_TIME:
+      return ExtractFromTime(v, part);
+    case ::googlesql::TYPE_TIMESTAMP:
+      return ExtractFromTimestamp(v, part, args);
+    default:
+      return absl::InvalidArgumentError(absl::StrCat(
+          "semantic: EXTRACT unsupported type ", v.type()->DebugString()));
+  }
+}
+
+}  // namespace
+
 absl::StatusOr<Value> MakeInterval(const std::vector<Value>& args) {
   if (args.size() != 6) {
     return absl::InvalidArgumentError(
@@ -80,57 +202,7 @@ absl::StatusOr<Value> Extract(const std::vector<Value>& args,
   }
   auto part = PartFromArg(args[1]);
   if (!part.ok()) return part.status();
-  const Value& v = args[0];
-  if (v.type_kind() == ::googlesql::TYPE_INTERVAL) {
-    auto r = v.interval_value().Extract(*part);
-    if (!r.ok()) return r.status();
-    return Value::Int64(*r);
-  }
-  int32_t value32 = 0;
-  int64_t value64 = 0;
-  if (v.type_kind() == ::googlesql::TYPE_DATE) {
-    if (auto s = ::googlesql::functions::ExtractFromDate(
-            *part, v.date_value(), &value32);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(value32);
-  }
-  if (v.type_kind() == ::googlesql::TYPE_DATETIME) {
-    if (auto s = ::googlesql::functions::ExtractFromDatetime(
-            *part, v.datetime_value(), &value32);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(value32);
-  }
-  if (v.type_kind() == ::googlesql::TYPE_TIME) {
-    if (auto s = ::googlesql::functions::ExtractFromTime(
-            *part, v.time_value(), &value64);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(value64);
-  }
-  if (v.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
-    absl::TimeZone tz = DefaultTimeZone();
-    if (args.size() == 3) {
-      if (auto s =
-              ::googlesql::functions::MakeTimeZone(args[2].string_value(), &tz);
-          !s.ok()) {
-        return s;
-      }
-    }
-    value64 = 0;
-    if (auto s = ::googlesql::functions::ExtractFromTimestamp(
-            *part, v.ToTime(), tz, &value64);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Int64(value64);
-  }
-  return absl::InvalidArgumentError(absl::StrCat(
-      "semantic: EXTRACT unsupported type ", v.type()->DebugString()));
+  return ExtractFromValue(args[0], *part, args);
 }
 
 absl::StatusOr<Value> GenerateDateArray(const std::vector<Value>& args,
@@ -142,44 +214,10 @@ absl::StatusOr<Value> GenerateDateArray(const std::vector<Value>& args,
   if (args[0].is_null() || args[1].is_null()) {
     if (auto n = NullIfAny(args, return_type)) return *n;
   }
-  int64_t step = 1;
-  DateTimestampPart step_unit = DateTimestampPart::DAY;
-  const bool has_step = args.size() >= 3 && !args[2].is_null();
-  if (has_step) {
-    if (args[2].type_kind() == ::googlesql::TYPE_INTERVAL) {
-      const IntervalValue& interval = args[2].interval_value();
-      static constexpr DateTimestampPart kParts[] = {
-          DateTimestampPart::DAY,
-          DateTimestampPart::WEEK,
-          DateTimestampPart::MONTH,
-          DateTimestampPart::QUARTER,
-          DateTimestampPart::YEAR,
-      };
-      bool found = false;
-      for (DateTimestampPart part : kParts) {
-        auto extracted = interval.Extract(part);
-        if (!extracted.ok() || *extracted == 0) continue;
-        step_unit = part;
-        step = *extracted;
-        found = true;
-        break;
-      }
-      if (!found) {
-        return absl::InvalidArgumentError(
-            "semantic: GENERATE_DATE_ARRAY step INTERVAL has no "
-            "supported date part");
-      }
-    } else {
-      step = args[2].int64_value();
-      if (args.size() == 4) {
-        auto p = PartFromArg(args[3]);
-        if (!p.ok()) return p.status();
-        step_unit = *p;
-      }
-    }
-  }
+  auto step_or = ParseGenerateDateArrayStep(args);
+  if (!step_or.ok()) return step_or.status();
   std::vector<int64_t> raw;
-  DateIncrement inc{.unit = step_unit, .value = step};
+  DateIncrement inc{.unit = step_or->unit, .value = step_or->step};
   if (auto s = ::googlesql::functions::GenerateArray<int64_t, DateIncrement>(
           args[0].date_value(), args[1].date_value(), inc, &raw);
       !s.ok()) {

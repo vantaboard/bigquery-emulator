@@ -27,6 +27,64 @@ using datetime_internal::kFormatOpts;
 using datetime_internal::kMicros;
 using datetime_internal::TimeValue;
 
+namespace {
+
+absl::StatusOr<Value> TimestampFromDatetimeArgs(
+    const std::vector<Value>& args) {
+  absl::Time t;
+  if (args.size() == 2 && args[1].type_kind() == ::googlesql::TYPE_STRING) {
+    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+            args[0].datetime_value(), args[1].string_value(), &t);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Timestamp(t);
+  }
+  if (args.size() == 1) {
+    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
+            args[0].datetime_value(), DefaultTimeZone(), &t);
+        !s.ok()) {
+      return s;
+    }
+    return Value::Timestamp(t);
+  }
+  return absl::InvalidArgumentError(
+      "semantic: TIMESTAMP(DATETIME) expects one or two arguments");
+}
+
+absl::StatusOr<Value> TimestampFromDateArg(const Value& date_arg) {
+  int64_t micros = 0;
+  if (auto s = ::googlesql::functions::ConvertDateToTimestamp(
+          date_arg.date_value(), kMicros, DefaultTimeZone(), &micros);
+      !s.ok()) {
+    return s;
+  }
+  return Value::TimestampFromUnixMicros(micros);
+}
+
+absl::StatusOr<Value> TimestampFromStringWithTimezone(
+    absl::string_view text, absl::string_view tz_name) {
+  absl::TimeZone tz;
+  if (auto s = ::googlesql::functions::MakeTimeZone(tz_name, &tz); !s.ok()) {
+    return s;
+  }
+  int64_t micros = 0;
+  const std::string normalized =
+      NormalizeTimestampOffsetSuffix(std::string(text));
+  if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
+          normalized,
+          tz,
+          kMicros,
+          /*allow_tz_in_str=*/false,
+          &micros);
+      !s.ok()) {
+    return s;
+  }
+  return Value::TimestampFromUnixMicros(micros);
+}
+
+}  // namespace
+
 absl::StatusOr<Value> DateConstructor(const std::vector<Value>& args) {
   if (HasNull(args)) return Value::NullDate();
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
@@ -226,72 +284,22 @@ absl::StatusOr<Value> TimestampConstructor(absl::string_view name,
     return args[0];
   }
   if (args[0].type_kind() == ::googlesql::TYPE_DATETIME) {
-    absl::Time t;
-    if (args.size() == 2 && args[1].type_kind() == ::googlesql::TYPE_STRING) {
-      if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-              args[0].datetime_value(), args[1].string_value(), &t);
-          !s.ok()) {
-        return s;
-      }
-    } else if (args.size() == 1) {
-      if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-              args[0].datetime_value(), DefaultTimeZone(), &t);
-          !s.ok()) {
-        return s;
-      }
-    } else {
-      return absl::InvalidArgumentError(
-          "semantic: TIMESTAMP(DATETIME) expects one or two arguments");
-    }
-    return Value::Timestamp(t);
+    return TimestampFromDatetimeArgs(args);
   }
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_DATE) {
-    int64_t micros = 0;
-    if (auto s = ::googlesql::functions::ConvertDateToTimestamp(
-            args[0].date_value(), kMicros, DefaultTimeZone(), &micros);
-        !s.ok()) {
-      return s;
-    }
-    return Value::TimestampFromUnixMicros(micros);
+    return TimestampFromDateArg(args[0]);
   }
   if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_DATETIME &&
       args[1].type_kind() == ::googlesql::TYPE_STRING) {
-    absl::Time t;
-    if (auto s = ::googlesql::functions::ConvertDatetimeToTimestamp(
-            args[0].datetime_value(), args[1].string_value(), &t);
-        !s.ok()) {
-      return s;
-    }
-    return Value::Timestamp(t);
+    return TimestampFromDatetimeArgs(args);
   }
   if (args.size() == 2 && args[0].type_kind() == ::googlesql::TYPE_STRING &&
       args[1].type_kind() == ::googlesql::TYPE_STRING) {
-    absl::TimeZone tz;
-    if (auto s =
-            ::googlesql::functions::MakeTimeZone(args[1].string_value(), &tz);
-        !s.ok()) {
-      return s;
-    }
-    int64_t micros = 0;
-    const std::string text =
-        NormalizeTimestampOffsetSuffix(std::string(args[0].string_value()));
-    if (auto s = ::googlesql::functions::ConvertStringToTimestamp(
-            text,
-            tz,
-            kMicros,
-            /*allow_tz_in_str=*/false,
-            &micros);
-        !s.ok()) {
-      return s;
-    }
-    return Value::TimestampFromUnixMicros(micros);
+    return TimestampFromStringWithTimezone(args[0].string_value(),
+                                           args[1].string_value());
   }
   if (args.size() == 1 && args[0].type_kind() == ::googlesql::TYPE_STRING) {
-    auto parsed = ParseTimestampWireString(args[0].string_value());
-    if (!parsed.ok()) {
-      return parsed.status();
-    }
-    return *parsed;
+    return ParseTimestampWireString(args[0].string_value());
   }
   return absl::InvalidArgumentError(
       "semantic: TIMESTAMP constructor signature not supported");

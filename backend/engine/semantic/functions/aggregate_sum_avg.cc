@@ -338,8 +338,8 @@ absl::StatusOr<Value> AvgAggregateImpl(
 }
 
 struct BuiltinAggregateView {
-  const ::googlesql::Type* return_type;
-  bool distinct_flag;
+  const ::googlesql::Type* return_type = nullptr;
+  bool distinct_flag = false;
   int argument_list_size() const {
     return 1;
   }
