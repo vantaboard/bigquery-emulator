@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_governance.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {

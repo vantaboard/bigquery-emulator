@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -11,12 +12,13 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/duckdb/duckdb_storage_version_log.h"
-#include "duckdb.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

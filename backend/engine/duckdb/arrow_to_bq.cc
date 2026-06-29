@@ -9,6 +9,7 @@
 #include "backend/engine/duckdb/arrow_to_bq_internal.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "duckdb.h"
 
 namespace bigquery_emulator {
 namespace backend {

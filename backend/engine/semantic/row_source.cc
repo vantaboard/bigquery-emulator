@@ -4,7 +4,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"

@@ -1,6 +1,10 @@
 #include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
 
-#include "backend/storage/duckdb/duckdb_storage.h"
+#include <cstdint>
+
+#include "absl/strings/string_view.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

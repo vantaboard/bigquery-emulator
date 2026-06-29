@@ -1,12 +1,9 @@
 #include <cctype>
+#include <cstddef>
 #include <string>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/coordinator/sql_preprocess_internal.h"
 #include "backend/engine/coordinator/sql_preprocess_rewrites_helpers.h"
 

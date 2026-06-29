@@ -1,10 +1,15 @@
 #include "frontend/handlers/handler_common.h"
 
+#include <grpcpp/support/status.h>
+
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "backend/storage/storage.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

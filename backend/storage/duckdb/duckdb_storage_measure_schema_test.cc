@@ -1,3 +1,4 @@
+#include "absl/status/statusor.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_test_fixture.h"

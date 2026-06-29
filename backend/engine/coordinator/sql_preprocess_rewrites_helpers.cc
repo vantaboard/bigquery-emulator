@@ -1,8 +1,11 @@
 #include "backend/engine/coordinator/sql_preprocess_rewrites_helpers.h"
 
 #include <cctype>
+#include <cstddef>
+#include <string>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -14,7 +17,8 @@ bool IsIdentChar(char c) {
   return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
 }
 
-bool MatchCaseInsensitiveAt(absl::string_view sql, size_t pos,
+bool MatchCaseInsensitiveAt(absl::string_view sql,
+                            size_t pos,
                             absl::string_view literal) {
   if (pos + literal.size() > sql.size()) return false;
   for (size_t k = 0; k < literal.size(); ++k) {
@@ -33,8 +37,11 @@ bool IsWordBoundaryAfter(absl::string_view sql, size_t pos, size_t lit_size) {
   return pos + lit_size >= sql.size() || !IsIdentChar(sql[pos + lit_size]);
 }
 
-bool AdvanceSingleQuoted(absl::string_view sql, size_t i, std::string* out,
-                         bool* in_single_quoted, size_t* next_i) {
+bool AdvanceSingleQuoted(absl::string_view sql,
+                         size_t i,
+                         std::string* out,
+                         bool* in_single_quoted,
+                         size_t* next_i) {
   const char c = sql[i];
   out->push_back(c);
   if (c != '\'') return false;
@@ -48,8 +55,11 @@ bool AdvanceSingleQuoted(absl::string_view sql, size_t i, std::string* out,
   return true;
 }
 
-bool AdvanceDoubleQuoted(absl::string_view sql, size_t i, std::string* out,
-                         bool* in_double_quoted, size_t* next_i) {
+bool AdvanceDoubleQuoted(absl::string_view sql,
+                         size_t i,
+                         std::string* out,
+                         bool* in_double_quoted,
+                         size_t* next_i) {
   const char c = sql[i];
   out->push_back(c);
   if (c != '"') return false;
@@ -63,8 +73,10 @@ bool AdvanceDoubleQuoted(absl::string_view sql, size_t i, std::string* out,
   return true;
 }
 
-bool TryAppendAnonymousStructOffsetRewrite(absl::string_view sql, size_t i,
-                                           std::string* out, size_t* next_i) {
+bool TryAppendAnonymousStructOffsetRewrite(absl::string_view sql,
+                                           size_t i,
+                                           std::string* out,
+                                           size_t* next_i) {
   const char c = sql[i];
   if (c != '.' || i + 2 >= sql.size() || sql[i + 1] != '_') {
     return false;
@@ -86,8 +98,10 @@ bool TryAppendAnonymousStructOffsetRewrite(absl::string_view sql, size_t i,
   return true;
 }
 
-bool TryAppendFormatPercentTRewrite(absl::string_view sql, size_t i,
-                                    std::string* out, size_t* next_i) {
+bool TryAppendFormatPercentTRewrite(absl::string_view sql,
+                                    size_t i,
+                                    std::string* out,
+                                    size_t* next_i) {
   const char c = sql[i];
   if ((c != 'F' && c != 'f') || i + 6 >= sql.size() ||
       !MatchCaseInsensitiveAt(sql, i, "format(")) {
@@ -143,8 +157,10 @@ bool TryAppendFormatPercentTRewrite(absl::string_view sql, size_t i,
   return true;
 }
 
-bool TryAppendIntegerAliasRewrite(absl::string_view sql, size_t i,
-                                  std::string* out, size_t* next_i) {
+bool TryAppendIntegerAliasRewrite(absl::string_view sql,
+                                  size_t i,
+                                  std::string* out,
+                                  size_t* next_i) {
   static constexpr absl::string_view kIntegerAlias = "integer";
   const char c = sql[i];
   if ((c != 'I' && c != 'i') || i + kIntegerAlias.size() > sql.size() ||

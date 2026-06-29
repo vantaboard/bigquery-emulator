@@ -10,8 +10,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {

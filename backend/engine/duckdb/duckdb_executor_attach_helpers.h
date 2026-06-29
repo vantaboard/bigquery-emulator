@@ -38,15 +38,16 @@ absl::StatusOr<std::vector<storage::Row>> ScanAllTableRows(
     PhaseRecorder* phase_recorder);
 
 absl::Status InsertScannedRowsAt(::duckdb_connection conn,
-                                   const catalog::StorageTable& table,
-                                   const schema::TableSchema& schema,
-                                   absl::string_view quoted_table_name,
-                                   const std::vector<storage::Row>& rows,
-                                   PhaseRecorder* phase_recorder);
+                                 const catalog::StorageTable& table,
+                                 const schema::TableSchema& schema,
+                                 absl::string_view quoted_table_name,
+                                 const std::vector<storage::Row>& rows,
+                                 PhaseRecorder* phase_recorder);
 
-absl::Status ApplyRowAccessFilterDelete(::duckdb_connection conn,
-                                          absl::string_view quoted_table_name,
-                                          absl::string_view row_access_filter_sql);
+absl::Status ApplyRowAccessFilterDelete(
+    ::duckdb_connection conn,
+    absl::string_view quoted_table_name,
+    absl::string_view row_access_filter_sql);
 
 }  // namespace internal
 }  // namespace duckdb

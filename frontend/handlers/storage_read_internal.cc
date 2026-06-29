@@ -1,5 +1,12 @@
 #include "frontend/handlers/storage_read_internal.h"
 
+#include <cstddef>
+#include <string>
+#include <vector>
+
+#include "absl/strings/string_view.h"
+#include "backend/schema/schema.h"
+
 namespace bigquery_emulator {
 namespace frontend {
 namespace internal {

@@ -1,11 +1,15 @@
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <system_error>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 #include "backend/storage/duckdb/duckdb_storage_version_log.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

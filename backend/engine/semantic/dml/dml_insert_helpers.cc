@@ -38,8 +38,7 @@ absl::StatusOr<std::vector<int>> BuildInsertColumnIndexMapping(
                        col.name(),
                        "' not found in storage table schema"));
     }
-    column_idx_for_insert_position.push_back(
-        IndexOfColumn(schema, col.name()));
+    column_idx_for_insert_position.push_back(IndexOfColumn(schema, col.name()));
   }
   return column_idx_for_insert_position;
 }

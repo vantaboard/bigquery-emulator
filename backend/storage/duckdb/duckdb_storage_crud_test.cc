@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -10,7 +12,7 @@
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_test_fixture.h"
-#include "gmock/gmock.h"
+#include "backend/storage/storage.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

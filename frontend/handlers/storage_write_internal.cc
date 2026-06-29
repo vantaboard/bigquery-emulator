@@ -1,9 +1,12 @@
 #include "frontend/handlers/storage_write_internal.h"
 
 #include <string>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace frontend {

@@ -15,7 +15,6 @@
 
 #include "backend/engine/duckdb/arrow_to_bq.h"
 
-#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>

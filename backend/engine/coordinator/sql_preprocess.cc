@@ -5,6 +5,7 @@
 
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/coordinator/sql_preprocess_internal.h"
 
 namespace bigquery_emulator {

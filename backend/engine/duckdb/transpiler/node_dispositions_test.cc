@@ -1,7 +1,6 @@
 #include "backend/engine/duckdb/transpiler/node_dispositions.h"
 
 #include <set>
-#include <string>
 
 #include "absl/strings/string_view.h"
 #include "backend/engine/disposition.h"

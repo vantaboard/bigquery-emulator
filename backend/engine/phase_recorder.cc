@@ -1,7 +1,12 @@
 #include "backend/engine/phase_recorder.h"
 
+#include <cstdint>
+#include <string>
+
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

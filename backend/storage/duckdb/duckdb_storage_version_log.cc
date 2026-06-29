@@ -1,22 +1,26 @@
 #include "backend/storage/duckdb/duckdb_storage_version_log.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

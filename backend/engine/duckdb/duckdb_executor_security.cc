@@ -1,7 +1,16 @@
 #include "backend/engine/duckdb/duckdb_executor_security.h"
 
+#include <cstddef>
+#include <utility>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/table_governance.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "backend/storage/table_governance.h"
 
 namespace bigquery_emulator {
 namespace backend {

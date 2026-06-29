@@ -1,7 +1,12 @@
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -10,6 +15,7 @@
 #include "absl/strings/string_view.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/emulator.pb.h"
 

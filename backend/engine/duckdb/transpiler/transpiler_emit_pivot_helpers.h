@@ -34,7 +34,7 @@ bool CollectPivotScanParts(const ::googlesql::ResolvedPivotScan* node,
                            PivotScanParts* out);
 
 std::string BuildPivotSelectSql(absl::string_view inner,
-                                  const PivotScanParts& parts);
+                                const PivotScanParts& parts);
 
 struct UnpivotScanParts {
   std::vector<std::string> projected_input_sql;
@@ -50,8 +50,8 @@ bool CollectUnpivotScanParts(const ::googlesql::ResolvedUnpivotScan* node,
                              UnpivotScanParts* out);
 
 std::string BuildUnpivotSelectSql(absl::string_view inner,
-                                    const ::googlesql::ResolvedUnpivotScan* node,
-                                    const UnpivotScanParts& parts);
+                                  const ::googlesql::ResolvedUnpivotScan* node,
+                                  const UnpivotScanParts& parts);
 
 }  // namespace transpiler
 }  // namespace duckdb

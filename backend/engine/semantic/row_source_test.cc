@@ -9,6 +9,7 @@
 
 #include "backend/engine/semantic/row_source.h"
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>

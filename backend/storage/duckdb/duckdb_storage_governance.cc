@@ -1,7 +1,10 @@
 #include "backend/storage/duckdb/duckdb_storage_governance.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -19,6 +22,8 @@
 #include "absl/types/span.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
+#include "backend/storage/table_governance.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {

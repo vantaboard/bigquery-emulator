@@ -1,5 +1,8 @@
+#include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -12,6 +15,7 @@
 #include "absl/synchronization/mutex.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
 #include "duckdb.h"
 
 namespace bigquery_emulator {
