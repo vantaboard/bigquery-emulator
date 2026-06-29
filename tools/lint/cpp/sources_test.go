@@ -24,7 +24,7 @@ func TestFilterFirstParty(t *testing.T) {
 	in := []string{
 		// First party — must pass.
 		SentinelEngine,
-		"backend/engine/engine.h",
+		SentinelEngineH,
 		"backend/engine/duckdb/duckdb_executor.cc",
 		"backend/storage/duckdb/duckdb_storage.cc",
 		SentinelEmulatorMain,
@@ -34,7 +34,7 @@ func TestFilterFirstParty(t *testing.T) {
 		"frontend/handlers/query.h",
 		"frontend/server/server.cc",
 		SentinelSmoke,
-		"tools/googlesql-prebuilt/smoke/smoke_wrappers.cc",
+		SentinelSmokeWrappers,
 
 		// Genrule outputs — explicit exclude.
 		"binaries/emulator_main/version.cc",
@@ -67,7 +67,7 @@ func TestFilterFirstParty(t *testing.T) {
 	want := []string{
 		"backend/engine/duckdb/duckdb_executor.cc",
 		SentinelEngine,
-		"backend/engine/engine.h",
+		SentinelEngineH,
 		"backend/storage/duckdb/duckdb_storage.cc",
 		SentinelEmulatorMain,
 		SentinelEmulatorVersionH,
@@ -76,7 +76,7 @@ func TestFilterFirstParty(t *testing.T) {
 		"frontend/handlers/query.h",
 		"frontend/server/server.cc",
 		SentinelSmoke,
-		"tools/googlesql-prebuilt/smoke/smoke_wrappers.cc",
+		SentinelSmokeWrappers,
 	}
 	got := filterFirstParty(in)
 	if !reflect.DeepEqual(got, want) {

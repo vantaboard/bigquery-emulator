@@ -10,5 +10,7 @@ const (
 	SentinelEmulatorVersionH = "binaries/emulator_main/version.h"
 	SentinelEmulatorVersionT = "binaries/emulator_main/version_test.cc"
 	SentinelEngine           = "backend/engine/engine.cc"
+	SentinelEngineH          = "backend/engine/engine.h"
 	SentinelSmoke            = "tools/googlesql-prebuilt/smoke/smoke.cc"
+	SentinelSmokeWrappers    = "tools/googlesql-prebuilt/smoke/smoke_wrappers.cc"
 )
