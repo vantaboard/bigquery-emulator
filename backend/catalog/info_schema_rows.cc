@@ -47,6 +47,87 @@ bool IsRegionScope(absl::string_view dataset_id) {
   return absl::StartsWith(dataset_id, "region-");
 }
 
+absl::Status AppendRowsForTableKind(InfoSchemaViewKind kind,
+                                    const storage::Storage* storage,
+                                    absl::string_view project_id,
+                                    const storage::TableId& table,
+                                    std::vector<storage::Row>* rows) {
+  switch (kind) {
+    case InfoSchemaViewKind::kTables:
+      rows->push_back(storage::Row{.cells = {Str(project_id),
+                                             Str(table.dataset_id),
+                                             Str(table.table_id),
+                                             Str("BASE TABLE")}});
+      return absl::OkStatus();
+    case InfoSchemaViewKind::kColumns: {
+      absl::StatusOr<schema::TableSchema> table_schema =
+          storage->GetSchema(table);
+      if (!table_schema.ok()) return table_schema.status();
+      for (size_t i = 0; i < table_schema->columns.size(); ++i) {
+        const ColumnSchema& column = table_schema->columns[i];
+        const char* nullable =
+            column.mode == schema::ColumnMode::kRequired ? "NO" : "YES";
+        rows->push_back(storage::Row{
+            .cells = {Str(project_id),
+                      Str(table.dataset_id),
+                      Str(table.table_id),
+                      Str(column.name),
+                      Int(static_cast<int64_t>(i + 1)),
+                      Str(nullable),
+                      Str(info_schema_internal::InfoSchemaDataType(column))}});
+      }
+      return absl::OkStatus();
+    }
+    case InfoSchemaViewKind::kPartitions: {
+      absl::StatusOr<std::int64_t> count = storage->CountRows(table);
+      if (!count.ok()) return count.status();
+      rows->push_back(
+          storage::Row{.cells = {Str(project_id),
+                                 Str(table.dataset_id),
+                                 Str(table.table_id),
+                                 Null(),  // partition_id: unpartitioned table
+                                 Int(*count),
+                                 Null(),  // total_logical_bytes: not tracked
+                                 Null(),  // total_billable_bytes: not tracked
+                                 Null(),  // last_modified_time: not tracked
+                                 Str("ACTIVE")}});
+      return absl::OkStatus();
+    }
+    case InfoSchemaViewKind::kTableStorage: {
+      absl::StatusOr<std::int64_t> count = storage->CountRows(table);
+      if (!count.ok()) return count.status();
+      rows->push_back(
+          storage::Row{.cells = {Str(project_id),  // project_id
+                                 Null(),           // project_number
+                                 Str(project_id),  // table_catalog
+                                 Str(table.dataset_id),
+                                 Str(table.table_id),
+                                 Null(),       // creation_time
+                                 Int(*count),  // total_rows
+                                 Int(0),  // total_partitions (unpartitioned)
+                                 Null(),  // total_logical_bytes
+                                 Null(),  // active_logical_bytes
+                                 Null(),  // long_term_logical_bytes
+                                 Null(),  // current_physical_bytes
+                                 Null(),  // total_physical_bytes
+                                 Null(),  // active_physical_bytes
+                                 Null(),  // long_term_physical_bytes
+                                 Null(),  // time_travel_physical_bytes
+                                 Null(),  // storage_last_modified_time
+                                 Bool(false),  // deleted
+                                 Str("BASE TABLE"),
+                                 Str("NATIVE"),
+                                 Null(),     // fail_safe_physical_bytes
+                                 Null(),     // last_metadata_index_refresh_time
+                                 Null(),     // table_deletion_reason
+                                 Null()}});  // table_deletion_time
+      return absl::OkStatus();
+    }
+    default:
+      return absl::OkStatus();
+  }
+}
+
 }  // namespace
 
 absl::StatusOr<std::vector<storage::Row>> InfoSchemaTable::GenerateRows()
@@ -138,90 +219,18 @@ absl::Status InfoSchemaTable::AppendTableRows(
   }
 
   for (const storage::TableId& table : *tables) {
-    switch (kind_) {
-      case InfoSchemaViewKind::kTables:
-        rows->push_back(storage::Row{.cells = {Str(project_id_),
-                                               Str(table.dataset_id),
-                                               Str(table.table_id),
-                                               Str("BASE TABLE")}});
-        break;
-      case InfoSchemaViewKind::kColumns: {
-        absl::StatusOr<schema::TableSchema> table_schema =
-            storage_->GetSchema(table);
-        if (!table_schema.ok()) return table_schema.status();
-        for (size_t i = 0; i < table_schema->columns.size(); ++i) {
-          const ColumnSchema& column = table_schema->columns[i];
-          const char* nullable =
-              column.mode == schema::ColumnMode::kRequired ? "NO" : "YES";
-          rows->push_back(storage::Row{
-              .cells = {
-                  Str(project_id_),
-                  Str(table.dataset_id),
-                  Str(table.table_id),
-                  Str(column.name),
-                  Int(static_cast<int64_t>(i + 1)),
-                  Str(nullable),
-                  Str(info_schema_internal::InfoSchemaDataType(column))}});
-        }
-        break;
+    if (kind_ == InfoSchemaViewKind::kColumnFieldPaths) {
+      absl::StatusOr<schema::TableSchema> table_schema =
+          storage_->GetSchema(table);
+      if (!table_schema.ok()) return table_schema.status();
+      for (const ColumnSchema& column : table_schema->columns) {
+        AppendFieldPathRows(table, column, column.name, column.name, rows);
       }
-      case InfoSchemaViewKind::kColumnFieldPaths: {
-        absl::StatusOr<schema::TableSchema> table_schema =
-            storage_->GetSchema(table);
-        if (!table_schema.ok()) return table_schema.status();
-        for (const ColumnSchema& column : table_schema->columns) {
-          AppendFieldPathRows(table, column, column.name, column.name, rows);
-        }
-        break;
-      }
-      case InfoSchemaViewKind::kPartitions: {
-        absl::StatusOr<std::int64_t> count = storage_->CountRows(table);
-        if (!count.ok()) return count.status();
-        rows->push_back(
-            storage::Row{.cells = {Str(project_id_),
-                                   Str(table.dataset_id),
-                                   Str(table.table_id),
-                                   Null(),  // partition_id: unpartitioned table
-                                   Int(*count),
-                                   Null(),  // total_logical_bytes: not tracked
-                                   Null(),  // total_billable_bytes: not tracked
-                                   Null(),  // last_modified_time: not tracked
-                                   Str("ACTIVE")}});
-        break;
-      }
-      case InfoSchemaViewKind::kTableStorage: {
-        absl::StatusOr<std::int64_t> count = storage_->CountRows(table);
-        if (!count.ok()) return count.status();
-        rows->push_back(
-            storage::Row{.cells = {Str(project_id_),  // project_id
-                                   Null(),            // project_number
-                                   Str(project_id_),  // table_catalog
-                                   Str(table.dataset_id),
-                                   Str(table.table_id),
-                                   Null(),       // creation_time
-                                   Int(*count),  // total_rows
-                                   Int(0),  // total_partitions (unpartitioned)
-                                   Null(),  // total_logical_bytes
-                                   Null(),  // active_logical_bytes
-                                   Null(),  // long_term_logical_bytes
-                                   Null(),  // current_physical_bytes
-                                   Null(),  // total_physical_bytes
-                                   Null(),  // active_physical_bytes
-                                   Null(),  // long_term_physical_bytes
-                                   Null(),  // time_travel_physical_bytes
-                                   Null(),  // storage_last_modified_time
-                                   Bool(false),  // deleted
-                                   Str("BASE TABLE"),
-                                   Str("NATIVE"),
-                                   Null(),  // fail_safe_physical_bytes
-                                   Null(),  // last_metadata_index_refresh_time
-                                   Null(),  // table_deletion_reason
-                                   Null()}});  // table_deletion_time
-        break;
-      }
-      default:
-        break;
+      continue;
     }
+    absl::Status append_status =
+        AppendRowsForTableKind(kind_, storage_, project_id_, table, rows);
+    if (!append_status.ok()) return append_status;
   }
   return absl::OkStatus();
 }

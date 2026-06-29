@@ -52,6 +52,80 @@ using ::googlesql::TypeFactory;
 
 constexpr absl::string_view kInformationSchema = "INFORMATION_SCHEMA";
 
+struct ParsedFindTablePath {
+  absl::string_view project_id;
+  absl::string_view dataset_id;
+  absl::string_view table_id;
+  absl::string_view info_schema_view;
+};
+
+absl::StatusOr<ParsedFindTablePath> ParseFindTablePath(
+    const absl::Span<const std::string>& path,
+    absl::string_view project_id,
+    absl::string_view default_dataset_id) {
+  auto invalid_path_error = [&path]() -> absl::Status {
+    return absl::NotFoundError(
+        absl::StrCat("Table path must be <dataset>.<table> or "
+                     "<project>.<dataset>.<table>; got ",
+                     path.size(),
+                     " segments"));
+  };
+
+  ParsedFindTablePath parsed;
+  if (path.size() == 1) {
+    absl::string_view single = path[0];
+    const size_t first_dot = single.find('.');
+    if (first_dot != absl::string_view::npos) {
+      const size_t second_dot = single.find('.', first_dot + 1);
+      if (second_dot != absl::string_view::npos) {
+        // Backtick-quoted `project.dataset.table` references arrive as
+        // one path segment; split into three parts instead of treating
+        // everything after the first dot as the table id.
+        parsed.project_id = single.substr(0, first_dot);
+        parsed.dataset_id =
+            single.substr(first_dot + 1, second_dot - first_dot - 1);
+        parsed.table_id = single.substr(second_dot + 1);
+      } else {
+        parsed.project_id = project_id;
+        parsed.dataset_id = single.substr(0, first_dot);
+        parsed.table_id = single.substr(first_dot + 1);
+      }
+      return parsed;
+    }
+    if (default_dataset_id.empty()) return invalid_path_error();
+    parsed.project_id = project_id;
+    parsed.dataset_id = default_dataset_id;
+    parsed.table_id = single;
+    return parsed;
+  }
+
+  if (path.size() == 2) {
+    parsed.project_id = project_id;
+    if (path[0] == kInformationSchema) {
+      parsed.info_schema_view = path[1];
+    } else {
+      parsed.dataset_id = path[0];
+      parsed.table_id = path[1];
+    }
+    return parsed;
+  }
+
+  if (path.size() == 3) {
+    if (path[1] == kInformationSchema) {
+      parsed.project_id = project_id;
+      parsed.dataset_id = path[0];
+      parsed.info_schema_view = path[2];
+    } else {
+      parsed.project_id = path[0];
+      parsed.dataset_id = path[1];
+      parsed.table_id = path[2];
+    }
+    return parsed;
+  }
+
+  return invalid_path_error();
+}
+
 std::optional<InfoSchemaViewKind> ParseInfoSchemaView(
     absl::string_view view_name) {
   if (view_name == "TABLES") return InfoSchemaViewKind::kTables;
@@ -223,61 +297,13 @@ absl::Status GoogleSqlCatalog::FindTable(
   absl::string_view dataset_id;
   absl::string_view table_id;
   absl::string_view info_schema_view;
-
-  if (path.size() == 1) {
-    absl::string_view single = path[0];
-    const size_t first_dot = single.find('.');
-    if (first_dot != absl::string_view::npos) {
-      const size_t second_dot = single.find('.', first_dot + 1);
-      if (second_dot != absl::string_view::npos) {
-        // Backtick-quoted `project.dataset.table` references arrive as
-        // one path segment; split into three parts instead of treating
-        // everything after the first dot as the table id.
-        project_id = single.substr(0, first_dot);
-        dataset_id = single.substr(first_dot + 1, second_dot - first_dot - 1);
-        table_id = single.substr(second_dot + 1);
-      } else {
-        project_id = project_id_;
-        dataset_id = single.substr(0, first_dot);
-        table_id = single.substr(first_dot + 1);
-      }
-    } else if (default_dataset_id_.empty()) {
-      return absl::NotFoundError(
-          absl::StrCat("Table path must be <dataset>.<table> or "
-                       "<project>.<dataset>.<table>; got ",
-                       path.size(),
-                       " segments"));
-    } else {
-      project_id = project_id_;
-      dataset_id = default_dataset_id_;
-      table_id = single;
-    }
-  } else if (path.size() == 2) {
-    if (path[0] == kInformationSchema) {
-      project_id = project_id_;
-      info_schema_view = path[1];
-    } else {
-      project_id = project_id_;
-      dataset_id = path[0];
-      table_id = path[1];
-    }
-  } else if (path.size() == 3) {
-    if (path[1] == kInformationSchema) {
-      project_id = project_id_;
-      dataset_id = path[0];
-      info_schema_view = path[2];
-    } else {
-      project_id = path[0];
-      dataset_id = path[1];
-      table_id = path[2];
-    }
-  } else {
-    return absl::NotFoundError(
-        absl::StrCat("Table path must be <dataset>.<table> or "
-                     "<project>.<dataset>.<table>; got ",
-                     path.size(),
-                     " segments"));
-  }
+  absl::StatusOr<ParsedFindTablePath> parsed_or =
+      ParseFindTablePath(path, project_id_, default_dataset_id_);
+  if (!parsed_or.ok()) return parsed_or.status();
+  project_id = parsed_or->project_id;
+  dataset_id = parsed_or->dataset_id;
+  table_id = parsed_or->table_id;
+  info_schema_view = parsed_or->info_schema_view;
 
   absl::ReleasableMutexLock lock(&mu_);
   if (!info_schema_view.empty()) {

@@ -31,44 +31,64 @@ namespace {
 constexpr absl::string_view kMeasureMarker = "bqemu_measure:";
 
 const ::googlesql::ResolvedExpr* ExtractSingleMeasureExpression(
+    const ::googlesql::ResolvedScan* scan);
+
+const ::googlesql::ResolvedExpr* ExtractFromProjectScan(
+    const ::googlesql::ResolvedProjectScan* project) {
+  if (project == nullptr) return nullptr;
+  if (project->input_scan() != nullptr) {
+    if (const ::googlesql::ResolvedExpr* inner =
+            ExtractSingleMeasureExpression(project->input_scan())) {
+      return inner;
+    }
+  }
+  if (project->expr_list_size() != 1) return nullptr;
+  const ::googlesql::ResolvedComputedColumn* cc = project->expr_list(0);
+  if (cc == nullptr || cc->expr() == nullptr) return nullptr;
+  return cc->expr();
+}
+
+const ::googlesql::ResolvedExpr* ExtractFromAggregateScan(
+    const ::googlesql::ResolvedScan* scan) {
+  const auto* aggregate =
+      dynamic_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
+  if (aggregate == nullptr) return nullptr;
+  if (aggregate->aggregate_list_size() != 1) return nullptr;
+  const ::googlesql::ResolvedComputedColumnBase* cc =
+      aggregate->aggregate_list(0);
+  if (cc == nullptr || cc->expr() == nullptr) return nullptr;
+  return cc->expr();
+}
+
+const ::googlesql::ResolvedScan* NextPassthroughInputScan(
+    const ::googlesql::ResolvedScan* scan) {
+  if (scan == nullptr) return nullptr;
+  switch (scan->node_kind()) {
+    case ::googlesql::RESOLVED_FILTER_SCAN:
+      return scan->GetAs<::googlesql::ResolvedFilterScan>()->input_scan();
+    case ::googlesql::RESOLVED_BARRIER_SCAN:
+      return scan->GetAs<::googlesql::ResolvedBarrierScan>()->input_scan();
+    default:
+      return nullptr;
+  }
+}
+
+const ::googlesql::ResolvedExpr* ExtractSingleMeasureExpression(
     const ::googlesql::ResolvedScan* scan) {
   while (scan != nullptr) {
     switch (scan->node_kind()) {
-      case ::googlesql::RESOLVED_PROJECT_SCAN: {
-        const auto* project = scan->GetAs<::googlesql::ResolvedProjectScan>();
-        if (project == nullptr) return nullptr;
-        if (project->input_scan() != nullptr) {
-          if (const ::googlesql::ResolvedExpr* inner =
-                  ExtractSingleMeasureExpression(project->input_scan())) {
-            return inner;
-          }
-        }
-        if (project->expr_list_size() != 1) return nullptr;
-        const ::googlesql::ResolvedComputedColumn* cc = project->expr_list(0);
-        if (cc == nullptr || cc->expr() == nullptr) return nullptr;
-        return cc->expr();
-      }
+      case ::googlesql::RESOLVED_PROJECT_SCAN:
+        return ExtractFromProjectScan(
+            scan->GetAs<::googlesql::ResolvedProjectScan>());
       case ::googlesql::RESOLVED_AGGREGATE_SCAN:
       case ::googlesql::RESOLVED_ANONYMIZED_AGGREGATE_SCAN:
       case ::googlesql::RESOLVED_DIFFERENTIAL_PRIVACY_AGGREGATE_SCAN:
-      case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN: {
-        const auto* aggregate =
-            dynamic_cast<const ::googlesql::ResolvedAggregateScanBase*>(scan);
-        if (aggregate == nullptr) return nullptr;
-        if (aggregate->aggregate_list_size() != 1) return nullptr;
-        const ::googlesql::ResolvedComputedColumnBase* cc =
-            aggregate->aggregate_list(0);
-        if (cc == nullptr || cc->expr() == nullptr) return nullptr;
-        return cc->expr();
-      }
-      case ::googlesql::RESOLVED_FILTER_SCAN:
-        scan = scan->GetAs<::googlesql::ResolvedFilterScan>()->input_scan();
-        continue;
-      case ::googlesql::RESOLVED_BARRIER_SCAN:
-        scan = scan->GetAs<::googlesql::ResolvedBarrierScan>()->input_scan();
-        continue;
+      case ::googlesql::RESOLVED_AGGREGATION_THRESHOLD_AGGREGATE_SCAN:
+        return ExtractFromAggregateScan(scan);
       default:
-        return nullptr;
+        scan = NextPassthroughInputScan(scan);
+        if (scan == nullptr) return nullptr;
+        continue;
     }
   }
   return nullptr;
