@@ -93,7 +93,7 @@ absl::StatusOr<int64_t> CountRowsInRangeFrame(
     bool has_low,
     const Value& high,
     bool has_high,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   int64_t count = 0;
   for (size_t other = 0; other < input_rows.size(); ++other) {
     if (layout.partition_fps[other] != layout.partition_fps[row_index]) {
@@ -123,7 +123,7 @@ absl::Status ApplyAnalyticCountRange(
     const AnalyticGroupLayout& layout,
     const std::vector<ColumnBindings>& input_rows,
     int out_col_id,
-    EvalContext& ctx,
+    const EvalContext& ctx,
     std::vector<ColumnBindings>& out_rows) {
   const ::googlesql::ResolvedWindowFrame* wf = afn.window_frame();
   const ::googlesql::ResolvedOrderByItem* order_item =
@@ -173,7 +173,7 @@ absl::Status ApplyAnalyticSum(
     const AnalyticGroupLayout& layout,
     const std::vector<ColumnBindings>& input_rows,
     int out_col_id,
-    EvalContext& ctx,
+    const EvalContext& ctx,
     std::vector<ColumnBindings>& out_rows) {
   if (afn.argument_list_size() != 1 || afn.argument_list(0) == nullptr) {
     return absl::InvalidArgumentError(
@@ -207,7 +207,7 @@ absl::Status ApplyAnalyticPercentileCont(
     const AnalyticGroupLayout& layout,
     const std::vector<ColumnBindings>& input_rows,
     int out_col_id,
-    EvalContext& ctx,
+    const EvalContext& ctx,
     std::vector<ColumnBindings>& out_rows) {
   if (afn.argument_list_size() != 2 || afn.argument_list(0) == nullptr ||
       afn.argument_list(1) == nullptr) {
@@ -248,7 +248,7 @@ absl::Status ApplyAnalyticFunction(
     const ::googlesql::ResolvedWindowOrdering* order_spec,
     const AnalyticGroupLayout& layout,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx,
+    const EvalContext& ctx,
     std::vector<ColumnBindings>& out_rows) {
   if (cc.expr() == nullptr ||
       cc.expr()->node_kind() != ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
