@@ -254,7 +254,7 @@ AnalyzeStatementImpl(const QueryRequest& request,
 
 absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
     absl::string_view type_kind_name) {
-  ::googlesql::TypeKind kind = semantic::ParseTypeKindName(type_kind_name);
+  auto kind = semantic::ParseTypeKindName(type_kind_name);
   switch (kind) {
     case ::googlesql::TYPE_BOOL:
       return ::googlesql::types::BoolType();

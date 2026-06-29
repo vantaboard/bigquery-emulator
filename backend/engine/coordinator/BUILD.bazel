@@ -117,6 +117,7 @@ cc_library(
         "sql_preprocess.cc",
         "sql_preprocess_as_paren_rewrites.cc",
         "sql_preprocess_rewrites.cc",
+        "sql_preprocess_rewrites_helpers.cc",
         "sql_preprocess_table_decorators.cc",
     ],
     hdrs = [

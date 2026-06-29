@@ -8,6 +8,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/coordinator/sql_preprocess_internal.h"
+#include "backend/engine/coordinator/sql_preprocess_rewrites_helpers.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -16,10 +17,6 @@ namespace coordinator {
 namespace sql_preprocess_internal {
 
 namespace {
-
-bool IsIdentChar(char c) {
-  return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
-}
 
 // Removes /* ... */ block comments. License headers in bqutils fixtures
 // never embed */ inside the comment body, so a quote-unaware scan is safe
@@ -50,39 +47,26 @@ std::string RewriteAnonymousStructFieldAccess(absl::string_view sql) {
   out.reserve(sql.size());
   bool in_single_quoted = false;
   for (size_t i = 0; i < sql.size(); ++i) {
-    const char c = sql[i];
     if (in_single_quoted) {
-      out.push_back(c);
-      if (c == '\'') {
-        if (i + 1 < sql.size() && sql[i + 1] == '\'') {
-          out.push_back(sql[++i]);
-          continue;
-        }
-        in_single_quoted = false;
+      size_t next = i;
+      if (AdvanceSingleQuoted(sql, i, &out, &in_single_quoted, &next)) {
+        i = next;
+        continue;
       }
+      out.push_back(sql[i]);
       continue;
     }
-    if (c == '\'') {
+    if (sql[i] == '\'') {
       in_single_quoted = true;
-      out.push_back(c);
+      out.push_back(sql[i]);
       continue;
     }
-    if (c == '.' && i + 2 < sql.size() && sql[i + 1] == '_') {
-      size_t j = i + 2;
-      if (std::isdigit(static_cast<unsigned char>(sql[j])) != 0) {
-        size_t start = j;
-        while (j < sql.size() &&
-               std::isdigit(static_cast<unsigned char>(sql[j])) != 0) {
-          ++j;
-        }
-        if (j == sql.size() || !IsIdentChar(sql[j])) {
-          absl::StrAppend(&out, "[OFFSET(", sql.substr(start, j - start), ")]");
-          i = j - 1;
-          continue;
-        }
-      }
+    size_t next = i;
+    if (TryAppendAnonymousStructOffsetRewrite(sql, i, &out, &next)) {
+      i = next;
+      continue;
     }
-    out.push_back(c);
+    out.push_back(sql[i]);
   }
   return out;
 }
@@ -96,97 +80,40 @@ std::string RewriteFormatTypeLiteral(absl::string_view sql) {
   bool in_single = false;
   bool in_double = false;
   for (size_t i = 0; i < sql.size(); ++i) {
-    const char c = sql[i];
     if (in_single) {
-      out.push_back(c);
-      if (c == '\'') {
-        if (i + 1 < sql.size() && sql[i + 1] == '\'') {
-          out.push_back(sql[++i]);
-          continue;
-        }
-        in_single = false;
+      size_t next = i;
+      if (AdvanceSingleQuoted(sql, i, &out, &in_single, &next)) {
+        i = next;
+        continue;
       }
+      out.push_back(sql[i]);
       continue;
     }
     if (in_double) {
-      out.push_back(c);
-      if (c == '"') {
-        if (i + 1 < sql.size() && sql[i + 1] == '"') {
-          out.push_back(sql[++i]);
-          continue;
-        }
-        in_double = false;
+      size_t next = i;
+      if (AdvanceDoubleQuoted(sql, i, &out, &in_double, &next)) {
+        i = next;
+        continue;
       }
+      out.push_back(sql[i]);
       continue;
     }
-    if (c == '\'') {
+    if (sql[i] == '\'') {
       in_single = true;
-      out.push_back(c);
+      out.push_back(sql[i]);
       continue;
     }
-    if (c == '"') {
+    if (sql[i] == '"') {
       in_double = true;
-      out.push_back(c);
+      out.push_back(sql[i]);
       continue;
     }
-    if ((c == 'F' || c == 'f') && i + 6 < sql.size()) {
-      const auto match_ci = [&](absl::string_view lit) {
-        if (i + lit.size() > sql.size()) return false;
-        for (size_t k = 0; k < lit.size(); ++k) {
-          if (std::tolower(static_cast<unsigned char>(sql[i + k])) != lit[k]) {
-            return false;
-          }
-        }
-        return true;
-      };
-      if (match_ci("format(")) {
-        size_t j = i + 7;
-        while (j < sql.size() &&
-               std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
-          ++j;
-        }
-        if (j < sql.size() && sql[j] == '\'') {
-          ++j;
-          if (j + 2 < sql.size() && sql[j] == '%' && sql[j + 1] == 'T' &&
-              sql[j + 2] == '\'') {
-            j += 3;
-            while (j < sql.size() &&
-                   std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
-              ++j;
-            }
-            if (j < sql.size() && sql[j] == ',') {
-              ++j;
-              while (j < sql.size() &&
-                     std::isspace(static_cast<unsigned char>(sql[j])) != 0) {
-                ++j;
-              }
-              size_t expr_start = j;
-              int depth = 0;
-              while (j < sql.size()) {
-                const char ch = sql[j];
-                if (ch == '(') {
-                  ++depth;
-                } else if (ch == ')') {
-                  if (depth == 0) break;
-                  --depth;
-                } else if (ch == ',' && depth == 0) {
-                  break;
-                }
-                ++j;
-              }
-              if (j > expr_start) {
-                out.append("emu_format_t(");
-                out.append(sql.substr(expr_start, j - expr_start));
-                out.push_back(')');
-                i = j;
-                continue;
-              }
-            }
-          }
-        }
-      }
+    size_t next = i;
+    if (TryAppendFormatPercentTRewrite(sql, i, &out, &next)) {
+      i = next;
+      continue;
     }
-    out.push_back(c);
+    out.push_back(sql[i]);
   }
   return out;
 }
@@ -199,61 +126,40 @@ std::string RewriteIntegerTypeAlias(absl::string_view sql) {
   bool in_single = false;
   bool in_double = false;
   for (size_t i = 0; i < sql.size(); ++i) {
-    const char c = sql[i];
     if (in_single) {
-      out.push_back(c);
-      if (c == '\'') {
-        if (i + 1 < sql.size() && sql[i + 1] == '\'') {
-          out.push_back(sql[++i]);
-          continue;
-        }
-        in_single = false;
+      size_t next = i;
+      if (AdvanceSingleQuoted(sql, i, &out, &in_single, &next)) {
+        i = next;
+        continue;
       }
+      out.push_back(sql[i]);
       continue;
     }
     if (in_double) {
-      out.push_back(c);
-      if (c == '"') {
-        if (i + 1 < sql.size() && sql[i + 1] == '"') {
-          out.push_back(sql[++i]);
-          continue;
-        }
-        in_double = false;
-      }
-      continue;
-    }
-    if (c == '\'') {
-      in_single = true;
-      out.push_back(c);
-      continue;
-    }
-    if (c == '"') {
-      in_double = true;
-      out.push_back(c);
-      continue;
-    }
-    if ((c == 'I' || c == 'i') && i + 7 <= sql.size()) {
-      const auto match_ci = [&](absl::string_view lit) {
-        if (i + lit.size() > sql.size()) return false;
-        for (size_t k = 0; k < lit.size(); ++k) {
-          if (std::tolower(static_cast<unsigned char>(sql[i + k])) != lit[k]) {
-            return false;
-          }
-        }
-        const bool before_ok = i == 0 || !IsIdentChar(sql[i - 1]);
-        const bool after_ok =
-            i + lit.size() >= sql.size() || !IsIdentChar(sql[i + lit.size()]);
-        return before_ok && after_ok;
-      };
-      static constexpr absl::string_view kIntegerAlias = "integer";
-      if (match_ci(kIntegerAlias)) {
-        out.append("INT64");
-        // for-loop ++i must land on the first char after the matched alias.
-        i += kIntegerAlias.size() - 1;
+      size_t next = i;
+      if (AdvanceDoubleQuoted(sql, i, &out, &in_double, &next)) {
+        i = next;
         continue;
       }
+      out.push_back(sql[i]);
+      continue;
     }
-    out.push_back(c);
+    if (sql[i] == '\'') {
+      in_single = true;
+      out.push_back(sql[i]);
+      continue;
+    }
+    if (sql[i] == '"') {
+      in_double = true;
+      out.push_back(sql[i]);
+      continue;
+    }
+    size_t next = i;
+    if (TryAppendIntegerAliasRewrite(sql, i, &out, &next)) {
+      i = next;
+      continue;
+    }
+    out.push_back(sql[i]);
   }
   return out;
 }
