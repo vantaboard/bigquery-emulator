@@ -1,5 +1,6 @@
 #include "backend/catalog/stored_procedure.h"
 
+#include <string>
 #include <utility>
 
 namespace bigquery_emulator {

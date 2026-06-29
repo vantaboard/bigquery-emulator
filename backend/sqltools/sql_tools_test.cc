@@ -1,6 +1,8 @@
 #include "backend/sqltools/sql_tools.h"
 
-#include "backend/sqltools/sql_references.h"
+#include <string>
+
+#include "absl/status/statusor.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"

@@ -1,24 +1,8 @@
-#include "frontend/handlers/query_internal.h"
 
-#include <algorithm>
-#include <array>
-#include <charconv>
 #include <cmath>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/strings/escaping.h"
-#include "absl/strings/match.h"
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
-#include "backend/engine/semantic/value.h"
-#include "backend/schema/schema.h"
 #include "googlesql/public/error_helpers.h"
-#include "googlesql/public/error_location.pb.h"
 #include "googlesql/public/language_options.h"
-#include "googlesql/public/options.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

@@ -1,10 +1,4 @@
-#include "backend/engine/semantic/outer_row_eval.h"
 
-#include <string>
-#include <utility>
-
-#include "absl/strings/str_cat.h"
-#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 
 namespace bigquery_emulator {
 namespace backend {

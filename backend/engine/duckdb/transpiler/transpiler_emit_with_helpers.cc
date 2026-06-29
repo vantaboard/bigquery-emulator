@@ -1,10 +1,10 @@
 #include "backend/engine/duckdb/transpiler/transpiler_emit_with_helpers.h"
 
 #include <string>
-#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 
 namespace bigquery_emulator {

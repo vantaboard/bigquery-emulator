@@ -13,12 +13,12 @@
 #include "backend/engine/semantic/executor.h"
 
 #include <algorithm>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/storage/storage.h"

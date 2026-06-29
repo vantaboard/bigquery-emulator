@@ -1,43 +1,10 @@
-#include "backend/engine/coordinator/script_executor.h"
 
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/strip.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/procedure_registry.h"
-#include "backend/catalog/stored_procedure.h"
-#include "backend/engine/coordinator/local_coordinator_analyze.h"
-#include "backend/engine/coordinator/local_coordinator_engine.h"
-#include "backend/engine/coordinator/script_execute_immediate.h"
-#include "backend/engine/coordinator/script_executor_internal.h"
 #if defined(BIGQUERY_EMULATOR_HAS_GOOGLESQL_SCRIPTING)
-#include "backend/engine/coordinator/script_googlesql_runner.h"
 #endif
-#include "backend/engine/coordinator/script_executor_set.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/executor.h"
-#include "backend/engine/semantic/row_source.h"
-#include "backend/engine/semantic/script/assert_stmt.h"
-#include "backend/engine/semantic/script/assignment_stmt.h"
-#include "backend/engine/semantic/script/declare_stmt.h"
-#include "backend/engine/semantic/script/script_driver.h"
-#include "backend/engine/semantic/value.h"
-#include "backend/schema/schema.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/parse_resume_location.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

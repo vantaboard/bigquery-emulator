@@ -1,18 +1,6 @@
-#include "backend/catalog/tvf_registry.h"
 
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
-#include "backend/catalog/create_tvf_util.h"
+#include "absl/base/thread_annotations.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/table_valued_function.h"

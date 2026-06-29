@@ -1,13 +1,8 @@
-#include <memory>
 #include <utility>
-#include <vector>
 
 #include "backend/engine/semantic/eval_context.h"
-#include "backend/engine/semantic/scan_eval.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 

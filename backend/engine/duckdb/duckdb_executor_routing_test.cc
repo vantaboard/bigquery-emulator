@@ -4,7 +4,6 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <memory>
 #include <random>
 #include <string>
 #include <system_error>
@@ -12,10 +11,9 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "backend/catalog/googlesql_catalog.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/engine.h"
-#include "backend/storage/duckdb/duckdb_storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"

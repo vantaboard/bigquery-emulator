@@ -1,12 +1,6 @@
-#include "backend/engine/semantic/stubs/dispatch.h"
 
-#include <optional>
-#include <string>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/value.h"
 #include "gmock/gmock.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"

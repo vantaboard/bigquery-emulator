@@ -1,7 +1,13 @@
 // Measure-function and KEYS stub integration tests for LocalCoordinatorEngine.
 
-#include "backend/engine/coordinator/local_coordinator_analyze.h"
+#include <gtest/gtest.h>
+
+#include <cstddef>
+#include <cstdint>
+
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

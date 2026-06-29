@@ -1,39 +1,6 @@
 #include <cmath>
-#include <memory>
-#include <optional>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_replace.h"
-#include "absl/strings/string_view.h"
-#include "absl/types/span.h"
-#include "backend/catalog/create_function_util.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/storage_table.h"
-#include "backend/catalog/udf_registry.h"
-#include "backend/engine/control/control_op_internal.h"
-#include "backend/engine/duckdb/arrow_to_bq.h"
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/udf/registrar.h"
-#include "backend/engine/engine.h"
-#include "backend/engine/semantic/value.h"
-#include "backend/schema/googlesql_to_bq.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
-#include "duckdb.h"
 #include "googlesql/public/catalog.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_ast_visitor.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
-#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

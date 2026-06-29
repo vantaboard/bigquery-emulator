@@ -1,8 +1,6 @@
-#include "backend/engine/semantic/functions/hll_funcs.h"
 
-#include <vector>
+#include <string>
 
-#include "backend/engine/semantic/value.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

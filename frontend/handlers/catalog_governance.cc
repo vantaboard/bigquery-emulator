@@ -1,10 +1,17 @@
+#include <grpcpp/server_context.h>
+#include <grpcpp/support/status.h>
+
 #include <string>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/storage/storage.h"
+#include "backend/storage/table_governance.h"
 #include "frontend/handlers/catalog.h"
 #include "frontend/handlers/handler_common.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

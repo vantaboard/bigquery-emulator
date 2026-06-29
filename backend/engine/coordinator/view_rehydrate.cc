@@ -1,20 +1,7 @@
-#include "backend/engine/coordinator/view_rehydrate.h"
 
-#include <memory>
-#include <utility>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/udf_registration_catalog.h"
-#include "backend/catalog/udf_registry.h"
-#include "backend/catalog/view_registry.h"
-#include "backend/engine/coordinator/local_coordinator_analyze.h"
-#include "backend/engine/engine.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/language_options.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

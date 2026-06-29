@@ -1,35 +1,12 @@
-#include <algorithm>
-#include <functional>
-#include <optional>
-#include <string>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_replace.h"
-#include "absl/strings/string_view.h"
-#include "absl/time/time.h"
-#include "backend/engine/disposition.h"
-#include "backend/engine/duckdb/transpiler/functions.h"
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_emit_datetime.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-#include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
-#include "googlesql/public/options.pb.h"
 #include "googlesql/public/sql_function.h"
 #include "googlesql/public/templated_sql_function.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node.h"
 
 namespace bigquery_emulator {

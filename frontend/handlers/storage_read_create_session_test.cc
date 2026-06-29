@@ -1,8 +1,11 @@
 // Direct (no gRPC socket) tests for `StorageReadService::CreateReadSession`.
 
-#include "frontend/handlers/storage_read_internal.h"
+#include <grpcpp/support/status.h>
+#include <gtest/gtest.h>
+
+#include "backend/schema/schema.h"
 #include "frontend/handlers/storage_read_test_fixture.h"
-#include "grpcpp/grpcpp.h"
+#include "proto/storage_read.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

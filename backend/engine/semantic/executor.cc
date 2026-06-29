@@ -1,37 +1,7 @@
-#include "backend/engine/semantic/executor.h"
 
-#include <cstddef>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "backend/engine/engine.h"
-#include "backend/engine/semantic/dml/dml_executor.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/row_source.h"
-#include "backend/engine/semantic/scan_eval.h"
-#include "backend/engine/semantic/script/assert_stmt.h"
-#include "backend/engine/semantic/script/assignment_stmt.h"
-#include "backend/engine/semantic/script/declare_stmt.h"
-#include "backend/engine/semantic/script/script_driver.h"
-#include "backend/engine/semantic/system_variables.h"
-#include "backend/engine/semantic/value.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_column.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,13 +1,12 @@
+#include "absl/status/status.h"
 #include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "backend/engine/semantic/eval_expr_test_fixture.h"
 #include "backend/engine/semantic/expression_column_bindings.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

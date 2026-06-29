@@ -1,15 +1,6 @@
-#include "backend/catalog/create_view_util.h"
 
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "googlesql/public/simple_catalog.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,20 +1,10 @@
-#include "backend/schema/googlesql_to_bq.h"
 
-#include <memory>
-#include <string>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/range_type.h"
 #include "googlesql/public/types/struct_type.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_column.h"
-#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

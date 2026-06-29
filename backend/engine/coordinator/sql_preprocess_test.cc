@@ -2,13 +2,14 @@
 
 #include <string>
 
+#include "absl/status/status.h"
 #include "absl/strings/match.h"
-#include "backend/catalog/create_function_util.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"

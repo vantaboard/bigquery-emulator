@@ -1,15 +1,7 @@
-#include "backend/catalog/wildcard_table_suffix_filter.h"
 
-#include <algorithm>
-#include <optional>
-#include <string>
-#include <vector>
 
-#include "absl/strings/ascii.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

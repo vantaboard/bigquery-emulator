@@ -1,25 +1,5 @@
-#include "frontend/handlers/catalog.h"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/types/span.h"
-#include "backend/catalog/measure_catalog.h"
-#include "backend/catalog/view_registry.h"
-#include "backend/schema/googlesql_to_bq.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
 #include "googlesql/public/catalog.h"
 
 namespace bigquery_emulator {

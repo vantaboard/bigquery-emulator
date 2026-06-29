@@ -1,16 +1,13 @@
-#include "backend/engine/semantic/system_variables.h"
 
+#include <cstddef>
 #include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/struct_type.h"

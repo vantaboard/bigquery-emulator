@@ -1,13 +1,7 @@
-#include "backend/engine/duckdb/transpiler/transpiler_emit_datetime.h"
 
-#include <optional>
-#include <string>
 
-#include "absl/strings/str_cat.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

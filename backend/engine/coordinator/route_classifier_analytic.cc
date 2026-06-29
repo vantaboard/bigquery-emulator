@@ -1,6 +1,4 @@
-#include "backend/engine/coordinator/route_classifier_visitor.h"
 #include "googlesql/public/type.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

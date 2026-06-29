@@ -1,23 +1,23 @@
 #include "frontend/handlers/storage_write.h"
 
+#include <grpcpp/server_context.h>
+#include <grpcpp/support/status.h>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <iomanip>
-#include <map>
-#include <memory>
 #include <sstream>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
+#include "frontend/handlers/handler_common.h"
 #include "frontend/handlers/storage_write_internal.h"
 #include "proto/storage_write.pb.h"
 

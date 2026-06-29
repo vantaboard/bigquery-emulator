@@ -1,17 +1,6 @@
-#include "backend/engine/semantic/functions/hll_funcs.h"
 
-#include <algorithm>
-#include <cstdint>
 #include <cstring>
-#include <optional>
-#include <string>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/error.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {

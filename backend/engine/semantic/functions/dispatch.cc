@@ -1,21 +1,5 @@
-#include "backend/engine/semantic/functions/dispatch.h"
 
-#include <optional>
-#include <vector>
 
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/eval_context.h"
-#include "backend/engine/semantic/functions/array_funcs.h"
-#include "backend/engine/semantic/functions/datetime_funcs.h"
-#include "backend/engine/semantic/functions/geog_funcs.h"
-#include "backend/engine/semantic/functions/json_funcs.h"
-#include "backend/engine/semantic/functions/numeric_edges.h"
-#include "backend/engine/semantic/functions/operator_funcs.h"
-#include "backend/engine/semantic/functions/range_funcs.h"
-#include "backend/engine/semantic/functions/specialized_funcs.h"
-#include "backend/engine/semantic/functions/string_funcs.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {

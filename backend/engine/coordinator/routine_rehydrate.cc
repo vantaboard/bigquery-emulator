@@ -1,25 +1,7 @@
-#include "backend/engine/coordinator/routine_rehydrate.h"
 
-#include <memory>
-#include <utility>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "backend/catalog/create_function_util.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/js_udf_registry.h"
-#include "backend/catalog/procedure_registry.h"
-#include "backend/catalog/python_udf_registry.h"
-#include "backend/catalog/routine_persistence.h"
-#include "backend/catalog/tvf_registry.h"
-#include "backend/catalog/udf_registration_catalog.h"
-#include "backend/catalog/udf_registry.h"
-#include "backend/engine/coordinator/local_coordinator_analyze.h"
-#include "backend/engine/engine.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/language_options.h"
-#include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

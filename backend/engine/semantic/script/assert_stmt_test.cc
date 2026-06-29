@@ -18,11 +18,10 @@
 
 #include "backend/engine/semantic/script/assert_stmt.h"
 
-#include <memory>
 #include <string>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/script/script_driver.h"
@@ -36,6 +35,7 @@
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

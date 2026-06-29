@@ -10,14 +10,14 @@
 #include "backend/engine/semantic/value.h"
 
 #include <cstdint>
+#include <string>
 
-#include "absl/status/status.h"
 #include "absl/time/time.h"
-#include "backend/engine/semantic/error.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
 #include "gtest/gtest.h"

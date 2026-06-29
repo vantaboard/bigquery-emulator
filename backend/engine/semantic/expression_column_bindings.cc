@@ -1,7 +1,7 @@
-#include "backend/engine/semantic/expression_column_bindings.h"
 
-#include "absl/strings/str_cat.h"
-#include "backend/engine/semantic/error.h"
+#include "absl/status/status.h"
+#include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/frame_stack.h"
 
 namespace bigquery_emulator {
 namespace backend {

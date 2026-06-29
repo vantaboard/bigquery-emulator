@@ -1,15 +1,20 @@
 // Extended `EvalExpr` coverage (parameters, intervals, argument refs).
 
-#include <cmath>
-#include <memory>
+#include <gtest/gtest.h>
 
+#include <cmath>
+
+#include "absl/status/status.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "backend/engine/semantic/eval_expr_test_fixture.h"
-#include "backend/engine/semantic/value.h"
+#include "backend/engine/semantic/frame_stack.h"
 #include "googlesql/public/analyzer_options.h"
+#include "googlesql/public/options.pb.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -6,20 +6,12 @@
 // scalar, ARRAY/STRUCT containers, and the error cases for kinds we
 // do not yet model.
 
-#include "backend/schema/googlesql_to_bq.h"
-
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "gtest/gtest.h"
-#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

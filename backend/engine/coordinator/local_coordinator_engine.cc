@@ -1,43 +1,9 @@
-#include "backend/engine/coordinator/local_coordinator_engine.h"
 
-#include <memory>
-#include <utility>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/strip.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "backend/catalog/create_function_util.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/catalog/js_udf_registry.h"
-#include "backend/catalog/procedure_registry.h"
-#include "backend/catalog/python_udf_registry.h"
-#include "backend/catalog/routine_persistence.h"
-#include "backend/catalog/tvf_registry.h"
-#include "backend/catalog/udf_registration_catalog.h"
-#include "backend/catalog/udf_registry.h"
-#include "backend/catalog/view_persistence.h"
-#include "backend/catalog/view_registry.h"
-#include "backend/engine/control/control_op_internal.h"
-#include "backend/engine/control/stubs/create_model.h"
-#include "backend/engine/coordinator/executor.h"
-#include "backend/engine/coordinator/local_coordinator_analyze.h"
-#include "backend/engine/coordinator/route_classifier.h"
-#include "backend/engine/coordinator/script_executor.h"
-#include "backend/engine/disposition.h"
-#include "backend/engine/engine.h"
-#include "backend/engine/semantic/script/script_driver.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
-#include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/type_factory.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
-#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

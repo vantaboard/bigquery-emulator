@@ -1,8 +1,4 @@
-#include "backend/engine/semantic/script/declare_stmt.h"
 
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

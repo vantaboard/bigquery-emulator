@@ -1,12 +1,4 @@
-#include "backend/engine/coordinator/route_classifier.h"
 
-#include <utility>
-
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/coordinator/route_classifier_visitor.h"
-#include "backend/engine/duckdb/transpiler/node_dispositions.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

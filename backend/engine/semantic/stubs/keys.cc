@@ -1,13 +1,8 @@
-#include "backend/engine/semantic/stubs/keys.h"
 
-#include <cstdint>
 #include <string>
-#include <vector>
 
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/type.pb.h"
 #include "googlesql/public/value.h"

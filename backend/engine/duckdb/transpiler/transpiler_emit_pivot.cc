@@ -1,10 +1,4 @@
-#include <string>
 
-#include "absl/strings/str_cat.h"
-#include "backend/engine/duckdb/transpiler/transpiler.h"
-#include "backend/engine/duckdb/transpiler/transpiler_emit_pivot_helpers.h"
-#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

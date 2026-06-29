@@ -1,13 +1,5 @@
-#include "backend/catalog/emulator_ml_tvf_extensions.h"
 
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/base/call_once.h"
-#include "absl/strings/str_join.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"

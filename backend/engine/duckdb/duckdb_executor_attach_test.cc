@@ -1,6 +1,5 @@
 #include <vector>
 
-#include "absl/types/span.h"
 #include "backend/engine/duckdb/duckdb_executor_test_fixture.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"

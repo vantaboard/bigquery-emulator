@@ -1,8 +1,9 @@
 // Tests for `EvalExpr` (core expression forms).
 
+#include <gtest/gtest.h>
+
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr_test_fixture.h"
-#include "backend/engine/semantic/value.h"
 
 namespace bigquery_emulator {
 namespace backend {

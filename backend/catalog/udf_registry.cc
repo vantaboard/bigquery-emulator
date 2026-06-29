@@ -1,20 +1,6 @@
-#include "backend/catalog/udf_registry.h"
 
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/status.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/types/span.h"
-#include "backend/catalog/js_udf_registry.h"
-#include "backend/catalog/python_udf_registry.h"
+#include "absl/base/thread_annotations.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"

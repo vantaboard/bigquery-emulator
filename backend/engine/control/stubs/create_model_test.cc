@@ -1,12 +1,6 @@
-#include "backend/engine/control/stubs/create_model.h"
 
-#include <memory>
-#include <string>
 
-#include "absl/status/status.h"
 #include "gmock/gmock.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

@@ -1,14 +1,15 @@
 // LocalCoordinatorEngine integration tests: analyze, dry-run, DDL, DML.
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
-#include <map>
 #include <optional>
-#include <set>
 #include <utility>
 
 #include "absl/status/status.h"
-#include "absl/strings/match.h"
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

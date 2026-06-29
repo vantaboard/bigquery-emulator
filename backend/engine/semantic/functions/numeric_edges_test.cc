@@ -4,17 +4,10 @@
 // directly with hand-built `Value` arguments. End-to-end coverage
 // (analyzer -> dispatch -> result) lives in `dispatch_test.cc`.
 
-#include "backend/engine/semantic/functions/numeric_edges.h"
-
 #include <cmath>
-#include <cstdint>
-#include <limits>
-#include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
 #include "gtest/gtest.h"

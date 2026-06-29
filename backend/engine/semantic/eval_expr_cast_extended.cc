@@ -1,19 +1,7 @@
-#include <optional>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/time/time.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr_internal.h"
-#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/cast.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/type.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,10 +1,9 @@
 #include "backend/sqltools/sql_tools_complete_helpers.h"
 
 #include <cctype>
+#include <cstddef>
 #include <string>
-#include <vector>
 
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/string_view.h"
 #include "googlesql/public/parse_tokens.h"
 

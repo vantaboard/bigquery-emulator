@@ -1,12 +1,9 @@
-#include "backend/engine/semantic/functions/string_funcs.h"
 
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <memory>
 #include <string>
-#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -14,12 +11,9 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/time/time.h"
 #include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/functions/hash.h"
-#include "googlesql/public/functions/normalize_mode.pb.h"
 #include "googlesql/public/functions/numeric.h"
 #include "googlesql/public/functions/regexp.h"
 #include "googlesql/public/functions/string.h"

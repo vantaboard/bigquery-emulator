@@ -1,12 +1,6 @@
-#include "backend/catalog/udf_registration_catalog.h"
 
-#include <memory>
-#include <string>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/synchronization/mutex.h"
-#include "backend/catalog/procedure_registry.h"
-#include "backend/catalog/udf_registry.h"
+#include "absl/base/thread_annotations.h"
 
 namespace bigquery_emulator {
 namespace backend {

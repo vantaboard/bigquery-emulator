@@ -1,14 +1,5 @@
-#include "backend/catalog/emulator_builtin_extensions.h"
 
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/base/call_once.h"
-#include "absl/status/status.h"
-#include "absl/strings/string_view.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"

@@ -1,9 +1,4 @@
-#include "backend/engine/control/stubs/create_model.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

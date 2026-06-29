@@ -1,6 +1,10 @@
 // LocalCoordinatorEngine integration tests for user-reported query fixes.
 
+#include <gtest/gtest.h>
+
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
+#include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
 
 namespace bigquery_emulator {
 namespace backend {

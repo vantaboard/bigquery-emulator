@@ -1,19 +1,6 @@
-#include "backend/catalog/view_registry.h"
 
-#include <algorithm>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/status/status.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/synchronization/mutex.h"
-#include "backend/catalog/create_view_util.h"
-#include "backend/catalog/view_persistence.h"
+#include "absl/base/thread_annotations.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 

@@ -1,9 +1,7 @@
-#include <vector>
+#include <cstddef>
 
-#include "absl/status/statusor.h"
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
-#include "backend/engine/semantic/functions/operator_funcs.h"
-#include "backend/engine/semantic/value.h"
 
 namespace bigquery_emulator {
 namespace backend {

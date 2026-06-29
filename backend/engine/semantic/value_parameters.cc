@@ -1,7 +1,7 @@
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -10,10 +10,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "absl/strings/strip.h"
-#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/value.h"
@@ -21,6 +18,7 @@
 #include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"

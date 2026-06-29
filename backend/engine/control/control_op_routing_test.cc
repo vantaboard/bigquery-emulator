@@ -4,7 +4,6 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <memory>
 #include <random>
 #include <string>
 #include <system_error>
@@ -12,17 +11,14 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/engine/control/control_op_executor.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
-#include "backend/storage/duckdb/duckdb_storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/language_options.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/type_factory.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

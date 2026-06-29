@@ -1,9 +1,8 @@
-#include "backend/engine/semantic/functions/operator_funcs.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -11,7 +10,6 @@
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/functions/datetime_funcs.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/datetime.pb.h"
 #include "googlesql/public/interval_value.h"
 #include "googlesql/public/type.h"

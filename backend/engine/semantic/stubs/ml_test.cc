@@ -1,15 +1,8 @@
-#include "backend/engine/semantic/stubs/ml.h"
 
-#include <memory>
-#include <string>
-#include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/catalog/emulator_ml_test_catalog.h"
-#include "backend/catalog/emulator_ml_tvf_extensions.h"
-#include "backend/engine/semantic/eval_tvf.h"
-#include "backend/engine/semantic/value.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/semantic/eval_context.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
@@ -19,7 +12,6 @@
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 

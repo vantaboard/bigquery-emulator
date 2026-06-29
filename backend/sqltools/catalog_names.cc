@@ -1,10 +1,4 @@
-#include "backend/sqltools/catalog_names.h"
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "backend/catalog/view_registry.h"
-#include "backend/schema/schema.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,6 +1,5 @@
 #include "backend/engine/duckdb/transpiler/transpiler_emit_expr_helpers.h"
 
-#include <optional>
 #include <string>
 
 #include "absl/strings/str_cat.h"

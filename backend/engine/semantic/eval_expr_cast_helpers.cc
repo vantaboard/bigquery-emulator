@@ -1,15 +1,4 @@
-#include <optional>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/status/statusor.h"
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr_internal.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/parse_date_time.h"
 #include "googlesql/public/functions/string.h"
 #include "googlesql/public/type.h"

@@ -10,18 +10,15 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "backend/catalog/storage_table.h"
 #include "backend/engine/engine.h"
-#include "backend/engine/semantic/error.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
@@ -33,9 +30,9 @@
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "gtest/gtest.h"
 
 namespace bigquery_emulator {

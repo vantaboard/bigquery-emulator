@@ -1,23 +1,7 @@
-#include "backend/engine/semantic/eval_udaf.h"
 
-#include <cstddef>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/eval_expr_internal.h"
-#include "backend/engine/semantic/frame_stack.h"
-#include "backend/engine/semantic/functions/specialized_funcs.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

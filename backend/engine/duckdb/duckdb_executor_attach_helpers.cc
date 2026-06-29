@@ -1,16 +1,24 @@
 #include "backend/engine/duckdb/duckdb_executor_attach_helpers.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
+#include "backend/engine/phase_recorder.h"
+#include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,6 +1,13 @@
 // DryRun and validation tests for `QueryService`.
 
+#include <grpcpp/support/status.h>
+#include <gtest/gtest.h>
+
+#include <string>
+
+#include "frontend/handlers/query.h"
 #include "frontend/handlers/query_test_fixture.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

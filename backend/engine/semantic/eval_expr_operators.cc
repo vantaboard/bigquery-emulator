@@ -1,26 +1,8 @@
 #include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <limits>
-#include <optional>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <vector>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/match.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr_internal.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
-#include "googlesql/public/functions/datetime.pb.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/value.h"
 
 namespace bigquery_emulator {

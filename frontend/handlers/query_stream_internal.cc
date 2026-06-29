@@ -1,11 +1,4 @@
-#include <string>
 
-#include "absl/strings/str_cat.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "backend/engine/phase_recorder.h"
-#include "backend/schema/schema.h"
-#include "frontend/handlers/query_internal.h"
 
 namespace bigquery_emulator {
 namespace frontend {

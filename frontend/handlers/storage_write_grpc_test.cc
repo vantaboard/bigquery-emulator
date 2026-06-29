@@ -1,5 +1,7 @@
 // In-process gRPC tests for `StorageWriteService` streaming RPCs.
 
+#include <grpcpp/support/status.h>
+
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -7,22 +9,19 @@
 #include <random>
 #include <string>
 #include <system_error>
-#include <utility>
 #include <vector>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
-#include "frontend/handlers/storage_write.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/security/credentials.h"
 #include "grpcpp/security/server_credentials.h"
-#include "grpcpp/server.h"
 #include "grpcpp/server_builder.h"
 #include "gtest/gtest.h"
-#include "proto/storage_write.grpc.pb.h"
 #include "proto/storage_write.pb.h"
 
 namespace bigquery_emulator {

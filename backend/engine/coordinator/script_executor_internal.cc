@@ -1,14 +1,5 @@
-#include "backend/engine/coordinator/script_executor_internal.h"
 
-#include <memory>
-#include <string>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
-#include "absl/strings/strip.h"
-#include "backend/catalog/googlesql_catalog.h"
-#include "backend/engine/semantic/frame_stack.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/simple_catalog.h"
 

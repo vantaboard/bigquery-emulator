@@ -1,10 +1,4 @@
-#include "backend/engine/semantic/script/assignment_stmt.h"
 
-#include "absl/strings/str_cat.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

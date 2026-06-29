@@ -1,13 +1,17 @@
+#include <grpcpp/server_context.h>
+#include <grpcpp/support/status.h>
+
+#include <cstddef>
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "backend/storage/storage.h"
+#include "frontend/handlers/handler_common.h"
 #include "frontend/handlers/storage_write.h"
-#include "frontend/handlers/storage_write_internal.h"
 #include "proto/storage_write.pb.h"
 
 namespace bigquery_emulator {

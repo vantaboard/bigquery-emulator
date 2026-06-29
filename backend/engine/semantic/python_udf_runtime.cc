@@ -1,27 +1,10 @@
-#include "backend/engine/semantic/python_udf_runtime.h"
 
-#include <sys/wait.h>
 #include <unistd.h>
 
-#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <limits>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/ascii.h"
-#include "absl/strings/escaping.h"
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/error.h"
 
 namespace bigquery_emulator {
 namespace backend {

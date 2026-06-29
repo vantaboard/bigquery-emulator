@@ -10,18 +10,8 @@
 // `ResolvedGetRowField` IS reachable in BigQuery (e.g. value-table
 // field access `t.f`), so its evaluator stays here.
 
-#include <string>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "backend/engine/semantic/eval_context.h"
-#include "backend/engine/semantic/eval_expr.h"
-#include "backend/engine/semantic/eval_expr_internal.h"
-#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {
