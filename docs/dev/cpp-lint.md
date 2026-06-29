@@ -75,6 +75,7 @@ four buckets:
 | Complexity | `readability-function-size` (line/statement/branch/nesting/parameter caps), `readability-function-cognitive-complexity` |
 | Modernization | `modernize-*`, `performance-*`, `portability-*` |
 | Style maintainability | `readability-*` (with the noisy ones turned off) |
+| Include hygiene | `misc-include-cleaner` (unused / indirect `#include`s; same class of hint as clangd Include Cleaner) |
 
 Header filter: `^(backend|binaries|frontend|tools/googlesql-prebuilt/smoke)/.*\.(h|hpp|hh)$`.
 Without it, every Abseil / GoogleSQL / gRPC header pulled in by an
@@ -84,7 +85,17 @@ Posture: every configured check runs as an error
 (`WarningsAsErrors: '*'` in `.clang-tidy`, `-warnings-as-errors='*'`
 on the CLI in `task lint:cpp:tidy`). A finding fails CI; clear it
 in-tree or scope a `// NOLINT(check-name)` suppression with a
-reason. The CI job
+reason.
+
+**Include Cleaner:** `misc-include-cleaner` flags headers that are
+not used directly in the translation unit (for example a leftover
+`#include` after a refactor). The same diagnostics appear in the
+editor via clangd when `--clang-tidy` is enabled. Many findings
+autofix with `clang-tidy --fix` on the affected file; the slow lane
+(`task lint:cpp:tidy`, `task lint:cpp:tidy-files`) is where they
+are enforced.
+
+The CI job
 ([`.github/workflows/ci.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml))
 gates on this lane (no `continue-on-error`).
 

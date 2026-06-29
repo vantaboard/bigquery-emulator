@@ -18,7 +18,9 @@
 #          select cppcoreguidelines), 2. complexity (readability-function-size,
 #          readability-function-cognitive-complexity), 3. modernization (modernize-*, performance-*,
 #          portability-*), and
-#       4. style maintainability (readability-*).
+#       4. style maintainability (readability-*), and
+#       5. include hygiene (misc-include-cleaner; aligns with
+#          clangd Include Cleaner IDE hints).
 #   * Repo-specific carve-outs:
 #       - googletest's TEST_P / TEST_F macros generate names that
 #         trip several `readability-identifier-naming` and
@@ -78,6 +80,9 @@ Checks: >
 
   # Portability checks that catch host-dependent assumptions.
   portability-*,
+
+  # Include hygiene (matches clangd "Include Cleaner" IDE hints).
+  misc-include-cleaner,
 
   # Style + readability.
   readability-*,

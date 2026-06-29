@@ -15,7 +15,8 @@
 #        task lint:cpp:format      (clang-format dry-run on first-party .cc/.h)
 #        task lint:cpp:format-fix  (apply clang-format -i)
 #        task lint:cpp:source      (file-length / banned-logging / status checks)
-#        task lint:cpp:tidy        (clang-tidy, compile-aware, slow lane)
+#        task lint:cpp:tidy        (clang-tidy, compile-aware, slow lane;
+#                                   includes misc-include-cleaner / Include Cleaner)
 #        task lint:cpp:tidy-parallel (per-file clang-tidy with JOBS parallelism)
 #        task lint:cpp:tidy-report (parse lint-cpp-tidy.log → CSV + triage doc)
 #        task lint:cpp:cppcheck    (cppcheck, slow secondary-analysis lane)
