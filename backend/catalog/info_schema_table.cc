@@ -246,8 +246,7 @@ class InfoSchemaEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
     current_row_.clear();
     current_row_.reserve(column_idxs_.size());
     for (size_t i = 0; i < column_idxs_.size(); ++i) {
-      const int src = column_idxs_[i];
-      const storage::Value& cell = row.cells[src];
+      const storage::Value& cell = row.cells[column_idxs_[i]];
       if (cell.is_null()) {
         current_row_.push_back(Value::Null(column_types_[i]));
         continue;
@@ -275,14 +274,14 @@ class InfoSchemaEvaluatorIterator : public ::googlesql::EvaluatorTableIterator {
   }
 
  private:
-  std::vector<storage::Row> rows_;
-  TableSchema schema_;
-  std::vector<int> column_idxs_;
-  std::vector<std::string> column_names_;
-  std::vector<const Type*> column_types_;
+  std::vector<storage::Row> rows_{};
+  TableSchema schema_{};
+  std::vector<int> column_idxs_{};
+  std::vector<std::string> column_names_{};
+  std::vector<const Type*> column_types_{};
   size_t row_idx_ = 0;
-  std::vector<Value> current_row_;
-  absl::Status status_;
+  std::vector<Value> current_row_{};
+  absl::Status status_{};
 };
 
 }  // namespace

@@ -56,10 +56,10 @@ class WildcardTable : public VirtualCatalogTable {
 
   storage::TableId wildcard_id_;
   std::string table_prefix_;
-  std::vector<WildcardColumnMap> matched_tables_;
-  schema::TableSchema union_schema_;
-  const storage::Storage* storage_;
-  ::googlesql::TypeFactory* type_factory_;
+  std::vector<WildcardColumnMap> matched_tables_{};
+  schema::TableSchema union_schema_{};
+  const storage::Storage* storage_ = nullptr;
+  ::googlesql::TypeFactory* type_factory_ = nullptr;
 };
 
 }  // namespace catalog

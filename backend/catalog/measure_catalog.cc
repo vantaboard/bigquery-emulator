@@ -334,9 +334,8 @@ absl::StatusOr<const ::googlesql::ResolvedExpr*> ResolveMeasureExpression(
       measure_expr, **catalog_expr, language, table.Name());
   if (!validated.ok()) return validated;
 
-  const ::googlesql::ResolvedExpr* held = catalog_expr->get();
   measure_resolved_exprs.push_back(std::move(*catalog_expr));
-  return held;
+  return measure_resolved_exprs.back().get();
 }
 
 absl::Status AddMeasureColumnToTable(

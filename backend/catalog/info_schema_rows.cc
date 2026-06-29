@@ -65,7 +65,7 @@ absl::Status AppendRowsForTableKind(InfoSchemaViewKind kind,
       if (!table_schema.ok()) return table_schema.status();
       for (size_t i = 0; i < table_schema->columns.size(); ++i) {
         const ColumnSchema& column = table_schema->columns[i];
-        const char* nullable =
+        auto nullable =
             column.mode == schema::ColumnMode::kRequired ? "NO" : "YES";
         rows->push_back(storage::Row{
             .cells = {Str(project_id),

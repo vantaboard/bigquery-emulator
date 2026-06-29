@@ -86,8 +86,8 @@ class InfoSchemaTable : public VirtualCatalogTable {
   InfoSchemaViewKind kind_;
   std::string project_id_;
   std::string dataset_id_;
-  const storage::Storage* storage_;
-  ::googlesql::TypeFactory* type_factory_;
+  const storage::Storage* storage_ = nullptr;
+  ::googlesql::TypeFactory* type_factory_ = nullptr;
   schema::TableSchema row_schema_;
 };
 
