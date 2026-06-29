@@ -70,14 +70,18 @@ cc_library(
     name = "duckdb_executor",
     srcs = [
         "duckdb_executor_attach.cc",
+        "duckdb_executor_attach_helpers.cc",
         "duckdb_executor_ddl.cc",
         "duckdb_executor_dml.cc",
         "duckdb_executor_insert_select.cc",
+        "duckdb_executor_insert_select_helpers.cc",
         "duckdb_executor_literals.cc",
         "duckdb_executor_query.cc",
     ],
     hdrs = [
         "duckdb_executor.h",
+        "duckdb_executor_attach_helpers.h",
+        "duckdb_executor_insert_select_helpers.h",
         "duckdb_executor_internal.h",
     ],
     deps = [
