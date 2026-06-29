@@ -374,8 +374,8 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // index `i` is the 0-based DuckDB placeholder slot (slot `i` is
   // `$<i+1>`). Named parameter lookups go through
   // `name_to_slot_` for dedup; positional ones always append.
-  std::vector<ParameterRef> parameter_order_;
-  absl::flat_hash_map<std::string, int> name_to_slot_;
+  std::vector<ParameterRef> parameter_order_{};
+  absl::flat_hash_map<std::string, int> name_to_slot_{};
 
   // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes
   // one entry per recursive CTE before lowering its body; the
@@ -389,7 +389,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
     std::string cte_name;
     std::vector<std::string> column_names;
   };
-  std::vector<RecursiveCteContext> recursive_cte_stack_;
+  std::vector<RecursiveCteContext> recursive_cte_stack_{};
 
   // Set when the immediately-wrapped scan emit is a JOIN that projects
   // analyzer columns under `__bq_j_<column_id>` aliases.
@@ -409,10 +409,10 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   bool input_rn_ordering_ = false;
   // Final ORDER BY keys derived from the first analytic group's
   // PARTITION BY / ORDER BY spec (BigQuery result ordering).
-  std::vector<std::string> output_order_items_;
+  std::vector<std::string> output_order_items_{};
   // Parallel `ResolvedColumn::column_id()` for each output_order_items_
   // entry; -1 when the key is not a simple column ref (expr / rn).
-  std::vector<int> output_order_column_ids_;
+  std::vector<int> output_order_column_ids_{};
   // True when the user-visible SELECT list includes `__bq_input_rn`.
   bool output_includes_input_rn_ = false;
   // Suppresses appending `__bq_input_rn` to ProjectScan output when
@@ -420,7 +420,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   bool suppress_rn_in_project_ = false;
   // User-visible output column names from `ResolvedQueryStmt`; used to
   // decide whether PARTITION BY keys belong in the final ORDER BY.
-  std::vector<std::string> query_output_column_names_;
+  std::vector<std::string> query_output_column_names_{};
 };
 
 }  // namespace transpiler

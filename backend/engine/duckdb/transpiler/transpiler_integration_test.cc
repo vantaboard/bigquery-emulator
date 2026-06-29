@@ -330,7 +330,8 @@ TEST_F(TranspilerTest, TranspileClusteredTableSampleQuery) {
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
   ASSERT_TRUE(
       options.AddQueryParameter("wallet", type_factory_->get_string()).ok());
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(R"sql(
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith(R"sql(
 SELECT
   COUNT(1) AS transactions,
   SUM(amount) AS total_paid,
@@ -339,7 +340,7 @@ FROM transactions
 WHERE timestamp > TIMESTAMP('2015-01-01')
   AND origin = @wallet
 )sql",
-                                                           options);
+                     options);
   ASSERT_NE(stmt, nullptr);
   TestTranspiler t;
   std::string sql = t.Transpile(stmt);

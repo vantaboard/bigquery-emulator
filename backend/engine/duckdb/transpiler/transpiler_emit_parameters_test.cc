@@ -19,8 +19,8 @@ TEST_F(TranspilerTest, EmitParameterNamed) {
   ASSERT_TRUE(
       options.AddQueryParameter("customer_id", type_factory_->get_int64())
           .ok());
-  const ::googlesql::ResolvedStatement* stmt =
-      AnalyzeWith("SELECT @customer_id AS x", options);
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith("SELECT @customer_id AS x", options);
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_PARAMETER);
@@ -44,8 +44,8 @@ TEST_F(TranspilerTest, EmitParameterReuseSharesSlot) {
   // Use the parameter twice in distinct projections: GoogleSQL
   // produces two `ResolvedParameter` nodes (one per reference) but
   // both carry the same `name()`, so the dedup collapses them.
-  const ::googlesql::ResolvedStatement* stmt =
-      AnalyzeWith("SELECT @threshold AS a, @threshold AS b", options);
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith("SELECT @threshold AS a, @threshold AS b", options);
   ASSERT_NE(stmt, nullptr);
   const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
   ASSERT_NE(q, nullptr);
@@ -78,8 +78,8 @@ TEST_F(TranspilerTest, EmitParameterPositionalAssignsFreshSlots) {
       options.AddPositionalQueryParameter(type_factory_->get_int64()).ok());
   ASSERT_TRUE(
       options.AddPositionalQueryParameter(type_factory_->get_string()).ok());
-  const ::googlesql::ResolvedStatement* stmt =
-      AnalyzeWith("SELECT ? AS a, ? AS b", options);
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith("SELECT ? AS a, ? AS b", options);
   ASSERT_NE(stmt, nullptr);
   const auto* q = stmt->GetAs<::googlesql::ResolvedQueryStmt>();
   ASSERT_NE(q, nullptr);
@@ -110,8 +110,9 @@ TEST_F(TranspilerTest, EmitLimitOffsetScanWithNamedParameter) {
   // entry.
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
   ASSERT_TRUE(options.AddQueryParameter("n", type_factory_->get_int64()).ok());
-  const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(
-      "SELECT * FROM people ORDER BY id LIMIT @n OFFSET @n", options);
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith("SELECT * FROM people ORDER BY id LIMIT @n OFFSET @n",
+                     options);
   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);
   ASSERT_NE(scan, nullptr);
   ASSERT_EQ(scan->node_kind(), ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN);
@@ -132,8 +133,8 @@ TEST_F(TranspilerTest, EmitParameterInsideFunctionArgument) {
   // so the surrounding emit composes fully.
   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();
   ASSERT_TRUE(options.AddQueryParameter("s", type_factory_->get_string()).ok());
-  const ::googlesql::ResolvedStatement* stmt =
-      AnalyzeWith("SELECT IFNULL(@s, 'x') FROM people", options);
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = AnalyzeWith("SELECT IFNULL(@s, 'x') FROM people", options);
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
@@ -153,8 +154,8 @@ TEST_F(TranspilerTest, EmitCastInt64ToString) {
   // composes both via `EmitColumnRef` + `ToDuckDBSqlType`, so the
   // result threads quoted-identifier and DuckDB type-name conventions
   // together.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT CAST(id AS STRING) FROM people");
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = Analyze("SELECT CAST(id AS STRING) FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
@@ -168,8 +169,8 @@ TEST_F(TranspilerTest, EmitCastStringToInt64) {
   // expected DuckDB `BIGINT` (BQ INT64 -> DuckDB BIGINT, see
   // `types.cc`). The shape is symmetrical to the int->string case
   // above and pins the type-name mapping for INT64.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT CAST(name AS INT64) FROM people");
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = Analyze("SELECT CAST(name AS INT64) FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
@@ -182,8 +183,8 @@ TEST_F(TranspilerTest, EmitSafeCastUsesTryCast) {
   // `SAFE_CAST(<expr> AS T)` sets `return_null_on_error()` on the
   // ResolvedCast; we lower it to DuckDB's `TRY_CAST(...)` which
   // matches BigQuery's "return NULL on conversion failure" contract.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT SAFE_CAST(name AS INT64) FROM people");
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = Analyze("SELECT SAFE_CAST(name AS INT64) FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);
@@ -198,8 +199,8 @@ TEST_F(TranspilerTest, EmitCastNestedInsideFunctionCall) {
   // routes the cast through `EmitCast`. The full lower stays on the
   // DuckDB path because both COALESCE (disposition table) and CAST
   // (whitelisted target) are first-class.
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT COALESCE(CAST(id AS STRING), 'x') FROM people");
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = Analyze("SELECT COALESCE(CAST(id AS STRING), 'x') FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);
@@ -237,8 +238,8 @@ TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {
   // a `ResolvedLiteral` -- a folded array-of-int64 would skip the
   // ResolvedCast entirely and the test would fail with "expected
   // RESOLVED_CAST, got RESOLVED_LITERAL".
-  const ::googlesql::ResolvedStatement* stmt =
-      Analyze("SELECT CAST([id] AS ARRAY<STRING>) FROM people");
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = Analyze("SELECT CAST([id] AS ARRAY<STRING>) FROM people");
   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);
   ASSERT_NE(expr, nullptr);
   ASSERT_EQ(expr->node_kind(), ::googlesql::RESOLVED_CAST);

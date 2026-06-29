@@ -67,8 +67,8 @@ absl::Status ExecuteExecuteImmediate(
   absl::StatusOr<std::unique_ptr<const ::googlesql::AnalyzerOutput>> output =
       AnalyzeStatementImpl(dynamic_request, catalog, /*all_statements=*/true);
   if (!output.ok()) return output.status();
-  const ::googlesql::ResolvedStatement* resolved =
-      (*output)->resolved_statement();
+  const ::googlesql::ResolvedStatement* resolved = nullptr;
+  resolved = (*output)->resolved_statement();
   if (resolved == nullptr) {
     return absl::InternalError(
         "script::ExecuteExecuteImmediate: analyzer returned null statement");

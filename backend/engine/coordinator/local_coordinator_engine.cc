@@ -87,8 +87,8 @@ catalog::GoogleSqlCatalog* GetRegistrationCatalog(
 
 absl::Status ExecuteCreateFunctionDdl(const QueryRequest& request,
                                       catalog::GoogleSqlCatalog* bq_catalog) {
-  catalog::GoogleSqlCatalog* reg_catalog =
-      GetRegistrationCatalog(bq_catalog, request);
+  catalog::GoogleSqlCatalog* reg_catalog = nullptr;
+  reg_catalog = GetRegistrationCatalog(bq_catalog, request);
   if (reg_catalog == nullptr) {
     return absl::InternalError(
         "LocalCoordinatorEngine::ExecuteDdl: CREATE FUNCTION registration "
@@ -135,8 +135,8 @@ absl::Status ExecuteCreateViewTvfProcedureDdl(
     const QueryRequest& request,
     catalog::GoogleSqlCatalog* bq_catalog,
     const ::googlesql::ResolvedStatement& stmt) {
-  catalog::GoogleSqlCatalog* reg_catalog =
-      GetRegistrationCatalog(bq_catalog, request);
+  catalog::GoogleSqlCatalog* reg_catalog = nullptr;
+  reg_catalog = GetRegistrationCatalog(bq_catalog, request);
   if (reg_catalog == nullptr) {
     return absl::InternalError(
         "LocalCoordinatorEngine::ExecuteDdl: registration catalog "

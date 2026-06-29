@@ -41,10 +41,10 @@ struct TestSampleScanArgs {
   std::string method;
   ::googlesql::ResolvedSampleScan::SampleUnit unit =
       ::googlesql::ResolvedSampleScan::PERCENT;
-  std::unique_ptr<const ::googlesql::ResolvedExpr> size;
-  std::unique_ptr<const ::googlesql::ResolvedExpr> repeatable;
-  std::unique_ptr<const ::googlesql::ResolvedColumnHolder> weight;
-  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> partition_by;
+  std::unique_ptr<const ::googlesql::ResolvedExpr> size{};
+  std::unique_ptr<const ::googlesql::ResolvedExpr> repeatable{};
+  std::unique_ptr<const ::googlesql::ResolvedColumnHolder> weight{};
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> partition_by{};
 };
 std::unique_ptr<::googlesql::ResolvedSampleScan> MakeTestSampleScan(
     TestSampleScanArgs args) {

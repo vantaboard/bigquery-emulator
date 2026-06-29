@@ -92,14 +92,16 @@ int Transpiler::LookupOrAssignNamedParameter(absl::string_view name) {
   std::string key(name);
   auto it = name_to_slot_.find(key);
   if (it != name_to_slot_.end()) return it->second;
-  int slot = static_cast<int>(parameter_order_.size()) + 1;
+  int slot = 0;
+  slot = static_cast<int>(parameter_order_.size()) + 1;
   parameter_order_.push_back({key, /*position=*/0});
   name_to_slot_.emplace(std::move(key), slot);
   return slot;
 }
 
 int Transpiler::AssignPositionalParameter(int analyzer_position) {
-  int slot = static_cast<int>(parameter_order_.size()) + 1;
+  int slot = 0;
+  slot = static_cast<int>(parameter_order_.size()) + 1;
   parameter_order_.push_back({/*name=*/std::string(),
                               /*position=*/analyzer_position});
   return slot;

@@ -158,8 +158,8 @@ TEST_F(StubExecutorsTest, UnsupportedMessageNamesOffendingFamily) {
       type_factory_.get(),
       &last_output_);
   ASSERT_TRUE(s.ok()) << s;
-  const ::googlesql::ResolvedStatement* stmt =
-      last_output_->resolved_statement();
+  const ::googlesql::ResolvedStatement* stmt = nullptr;
+  stmt = last_output_->resolved_statement();
   ASSERT_NE(stmt, nullptr);
   UnsupportedExecutor exec;
   auto out = exec.ExecuteQuery(MakeRequest(), *stmt, catalog_.get());

@@ -32,9 +32,9 @@ class MaterializedEvaluatorTableIterator
   absl::Status Cancel() override;
 
  private:
-  std::vector<std::string> column_names_;
-  std::vector<const ::googlesql::Type*> column_types_;
-  std::vector<std::vector<::googlesql::Value>> rows_;
+  std::vector<std::string> column_names_{};
+  std::vector<const ::googlesql::Type*> column_types_{};
+  std::vector<std::vector<::googlesql::Value>> rows_{};
   int cursor_ = -1;
   absl::Status status_;
 };
