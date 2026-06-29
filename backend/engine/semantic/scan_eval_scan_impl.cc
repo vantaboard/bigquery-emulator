@@ -103,7 +103,12 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeLimitOffsetScan(
     end = std::min(end, start + static_cast<size_t>(limit));
   }
 
-  return std::vector<ColumnBindings>(rows.begin() + start, rows.begin() + end);
+  std::vector<ColumnBindings> window;
+  window.reserve(end - start);
+  for (size_t i = start; i < end; ++i) {
+    window.push_back(std::move(rows[i]));
+  }
+  return window;
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(

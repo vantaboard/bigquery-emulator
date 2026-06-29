@@ -127,8 +127,10 @@ absl::Status PopulateDatasetTables(
     absl::string_view dataset_id,
     absl::string_view default_dataset_id,
     const absl::flat_hash_set<std::string>& view_keys) {
+  const storage::DatasetId dataset{std::string(project_id),
+                                   std::string(dataset_id)};
   absl::StatusOr<std::vector<storage::TableId>> tables =
-      storage->ListTables(storage::DatasetId{project_id, dataset_id});
+      storage->ListTables(dataset);
   if (!tables.ok()) {
     return tables.status();
   }
@@ -173,8 +175,10 @@ absl::Status PopulateDatasetRoutines(CatalogNames* names,
                                      absl::string_view project_id,
                                      absl::string_view dataset_id,
                                      absl::string_view default_dataset_id) {
+  const storage::DatasetId dataset{std::string(project_id),
+                                   std::string(dataset_id)};
   absl::StatusOr<std::vector<storage::RoutineRecord>> routines =
-      storage->ListRoutines(storage::DatasetId{project_id, dataset_id});
+      storage->ListRoutines(dataset);
   if (!routines.ok()) {
     return routines.status();
   }

@@ -26,10 +26,10 @@ namespace semantic {
 using scan_eval_internal::MaterializeScanImpl;
 using scan_eval_internal::StripBarrierScans;
 
-namespace {
-
 absl::StatusOr<const ::googlesql::ResolvedProjectScan*> FindOutputProjectScan(
     const ::googlesql::ResolvedScan* scan);
+
+namespace {
 
 void BindCorrelatedSubqueryColumns(
     const ::googlesql::ResolvedSubqueryExpr& node,
