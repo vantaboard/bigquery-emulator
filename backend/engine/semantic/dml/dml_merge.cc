@@ -112,17 +112,17 @@ absl::Status ApplyMergeSets(storage::Row& mutated,
 }
 
 struct TargetMergeState {
-  ColumnBindings target_bind;
-  storage::Row row;
+  ColumnBindings target_bind{};
+  storage::Row row{};
   bool has_source_match = false;
   int match_count = 0;
-  ColumnBindings matched_bind;
+  ColumnBindings matched_bind{};
   bool acted = false;
   bool deleted = false;
 };
 
 struct SourceMergeState {
-  ColumnBindings source_bind;
+  ColumnBindings source_bind{};
   bool has_target_match = false;
   bool acted = false;
 };
@@ -241,15 +241,15 @@ absl::Status ApplyNotMatchedByTargetMergeWhen(
     std::vector<int> column_idx;
     column_idx.reserve(when.insert_column_list_size());
     for (int c = 0; c < when.insert_column_list_size(); ++c) {
-      const int idx = IndexOfColumn(schema, when.insert_column_list(c).name());
-      if (idx < 0) {
+      if (IndexOfColumn(schema, when.insert_column_list(c).name()) < 0) {
         ctx.columns = nullptr;
         return absl::InternalError(
             absl::StrCat("semantic/dml: MERGE INSERT column '",
                          when.insert_column_list(c).name(),
                          "' not found in target schema"));
       }
-      column_idx.push_back(idx);
+      column_idx.push_back(
+          IndexOfColumn(schema, when.insert_column_list(c).name()));
     }
     auto built = BuildInsertRow(*when.insert_row(), column_idx, schema, ctx);
     ctx.columns = nullptr;

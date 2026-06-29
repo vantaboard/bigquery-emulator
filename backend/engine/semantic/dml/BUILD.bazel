@@ -16,7 +16,7 @@ cc_library(
     name = "dml_executor",
     srcs = [
         "dml_executor_common.cc",
-        "dml_insert.cc",
+        "dml_insert_helpers.cc",
         "dml_merge.cc",
         "dml_mutate.cc",
         "dml_mutate_helpers.cc",
