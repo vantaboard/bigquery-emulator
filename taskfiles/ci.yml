@@ -50,6 +50,8 @@ tasks:
     # `compile_commands.json` (`task lint:cpp:compile-commands`); CI
     # likewise gates that lane behind a successful Bazel build of the
     # engine. Local maintainers can run `task lint:cpp:tidy`
-    # explicitly after generating the compile DB.
+    # explicitly after generating the compile DB, or use
+    # `task lint:cpp:tidy-files FILES="path/a.cc path/b.cc"` for
+    # focused reruns on changed files.
     cmds:
       - task: :lint:cpp:cppcheck

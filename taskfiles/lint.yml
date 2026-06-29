@@ -428,6 +428,37 @@ tasks:
         # shellcheck disable=SC2086  # intentional word-split for the file list
         clang-tidy -p . -warnings-as-errors='*' $files
 
+  cpp:tidy-files:
+    desc: |
+      clang-tidy on an explicit FILES list (space-separated paths).
+      Use for targeted reruns while iterating on triaged failures.
+    vars:
+      FILES: '{{.FILES | default ""}}'
+    cmds:
+      - |
+        export FILES="{{.FILES}}"
+        bash -c '
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if ! command -v clang-tidy >/dev/null 2>&1; then
+          echo "lint:cpp:tidy-files: clang-tidy not found on PATH" >&2
+          exit 1
+        fi
+        if [ ! -f compile_commands.json ]; then
+          echo "lint:cpp:tidy-files: compile_commands.json missing; run task lint:cpp:compile-commands" >&2
+          exit 1
+        fi
+        files="${FILES:-}"
+        if [ -z "${files// }" ]; then
+          echo "lint:cpp:tidy-files: FILES is empty" >&2
+          echo "  Usage: task lint:cpp:tidy-files FILES='path/a.cc path/b.cc'" >&2
+          exit 2
+        fi
+        # shellcheck disable=SC2086  # intentional word-split for the file list
+        clang-tidy -p . -warnings-as-errors='"'"'*'"'"' $files
+        '
+
   cpp:tidy-parallel:
     desc: |
       Per-file clang-tidy with bounded parallelism (same flags as cpp:tidy).
