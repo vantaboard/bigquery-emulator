@@ -35,21 +35,8 @@ bool StructTypesCompatibleByPosition(const ::googlesql::StructType* source,
   return true;
 }
 
-}  // namespace
-
-std::optional<absl::StatusOr<Value>> TryCastValueToType(
-    Value inner,
-    const ::googlesql::Type* source,
-    const ::googlesql::Type* target,
-    bool return_null_on_error) {
-  if (target == nullptr) {
-    return absl::InvalidArgumentError("semantic: cast target type is null");
-  }
-  if (source != nullptr && source->Equals(target)) {
-    return inner;
-  }
-  if (inner.is_null()) return NullOfType(target);
-
+std::optional<absl::StatusOr<Value>> TryCastStringBytesPair(
+    Value inner, const ::googlesql::Type* target, bool return_null_on_error) {
   if (target->kind() == ::googlesql::TYPE_BYTES &&
       inner.type_kind() == ::googlesql::TYPE_STRING) {
     return Value::Bytes(std::string(inner.string_value()));
@@ -90,54 +77,111 @@ std::optional<absl::StatusOr<Value>> TryCastValueToType(
                                           text,
                                           "'"));
   }
-  if (target->IsArray() && inner.type()->IsArray()) {
-    const ::googlesql::ArrayType* target_arr = target->AsArray();
-    const ::googlesql::ArrayType* source_arr = inner.type()->AsArray();
-    const ::googlesql::Type* target_elem = target_arr->element_type();
-    const ::googlesql::Type* source_elem = source_arr->element_type();
-    if (target_elem == nullptr || source_elem == nullptr) {
-      return absl::InvalidArgumentError(
-          "semantic: cast array missing element type");
-    }
-    if (source_elem->Equals(target_elem)) {
-      return inner;
-    }
-    std::vector<Value> elements;
-    elements.reserve(inner.num_elements());
-    for (int i = 0; i < inner.num_elements(); ++i) {
-      auto cast_elem = TryCastValueToType(
-          inner.element(i), source_elem, target_elem, return_null_on_error);
-      if (!cast_elem.has_value()) {
-        return std::nullopt;
-      }
-      if (!cast_elem->ok()) return cast_elem->status();
-      elements.push_back(*std::move(*cast_elem));
-    }
-    return Value::Array(target_arr, std::move(elements));
+  return std::nullopt;
+}
+
+std::optional<absl::StatusOr<Value>> TryCastArrayElements(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error);
+
+std::optional<absl::StatusOr<Value>> TryCastStructFields(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error);
+
+}  // namespace
+
+std::optional<absl::StatusOr<Value>> TryCastValueToType(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error) {
+  if (target == nullptr) {
+    return absl::InvalidArgumentError("semantic: cast target type is null");
   }
-  if (target->IsStruct() && inner.type()->IsStruct()) {
-    const ::googlesql::StructType* target_st = target->AsStruct();
-    const ::googlesql::StructType* source_st = inner.type()->AsStruct();
-    if (!StructTypesCompatibleByPosition(source_st, target_st)) {
-      if (return_null_on_error) return NullOfType(target);
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: CAST from ",
-                       source != nullptr ? source->DebugString() : "<null>",
-                       " to ",
-                       target->DebugString(),
-                       " is not yet implemented"));
-    }
-    std::vector<Value> fields;
-    fields.reserve(inner.num_fields());
-    for (int i = 0; i < inner.num_fields(); ++i) {
-      fields.push_back(inner.field(i));
-    }
-    return Value::Struct(target_st, std::move(fields));
+  if (source != nullptr && source->Equals(target)) {
+    return inner;
+  }
+  if (inner.is_null()) return NullOfType(target);
+
+  if (auto cast = TryCastStringBytesPair(inner, target, return_null_on_error)) {
+    return *cast;
+  }
+  if (auto cast =
+          TryCastArrayElements(inner, source, target, return_null_on_error)) {
+    return *cast;
+  }
+  if (auto cast =
+          TryCastStructFields(inner, source, target, return_null_on_error)) {
+    return *cast;
   }
 
   return std::nullopt;
 }
+
+namespace {
+
+std::optional<absl::StatusOr<Value>> TryCastArrayElements(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error) {
+  if (!target->IsArray() || !inner.type()->IsArray()) return std::nullopt;
+  const ::googlesql::ArrayType* target_arr = target->AsArray();
+  const ::googlesql::ArrayType* source_arr = inner.type()->AsArray();
+  const ::googlesql::Type* target_elem = target_arr->element_type();
+  const ::googlesql::Type* source_elem = source_arr->element_type();
+  if (target_elem == nullptr || source_elem == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: cast array missing element type");
+  }
+  if (source_elem->Equals(target_elem)) {
+    return inner;
+  }
+  std::vector<Value> elements;
+  elements.reserve(inner.num_elements());
+  for (int i = 0; i < inner.num_elements(); ++i) {
+    auto cast_elem = TryCastValueToType(
+        inner.element(i), source_elem, target_elem, return_null_on_error);
+    if (!cast_elem.has_value()) {
+      return std::nullopt;
+    }
+    if (!cast_elem->ok()) return cast_elem->status();
+    elements.push_back(*std::move(*cast_elem));
+  }
+  return Value::Array(target_arr, std::move(elements));
+}
+
+std::optional<absl::StatusOr<Value>> TryCastStructFields(
+    Value inner,
+    const ::googlesql::Type* source,
+    const ::googlesql::Type* target,
+    bool return_null_on_error) {
+  if (!target->IsStruct() || !inner.type()->IsStruct()) return std::nullopt;
+  const ::googlesql::StructType* target_st = target->AsStruct();
+  const ::googlesql::StructType* source_st = inner.type()->AsStruct();
+  if (!StructTypesCompatibleByPosition(source_st, target_st)) {
+    if (return_null_on_error) return NullOfType(target);
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        absl::StrCat("semantic: CAST from ",
+                     source != nullptr ? source->DebugString() : "<null>",
+                     " to ",
+                     target->DebugString(),
+                     " is not yet implemented"));
+  }
+  std::vector<Value> fields;
+  fields.reserve(inner.num_fields());
+  for (int i = 0; i < inner.num_fields(); ++i) {
+    fields.push_back(inner.field(i));
+  }
+  return Value::Struct(target_st, std::move(fields));
+}
+
+}  // namespace
 
 }  // namespace eval_expr_internal
 }  // namespace semantic

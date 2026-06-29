@@ -1,3 +1,4 @@
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -192,85 +193,61 @@ absl::StatusOr<Value> EvalWithSideEffects(
   return EvalExpr(*call.argument_list(0), ctx);
 }
 
-absl::StatusOr<Value> EvalFunctionCall(
-    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
-  if (call.function() == nullptr) {
-    return absl::InvalidArgumentError(
-        "semantic: ResolvedFunctionCall has null function");
-  }
-  const ::googlesql::Function* fn = call.function();
-  if (ctx.udaf != nullptr && fn != nullptr && fn->IsAggregate()) {
-    return EvalUdafInnerFunctionCall(call, *ctx.udaf, ctx);
-  }
-  if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
-          call.function_call_info();
-      info != nullptr) {
-    if (const auto* templated =
-            dynamic_cast<const ::googlesql::TemplatedSQLFunctionCall*>(
-                info.get());
-        templated != nullptr && templated->expr() != nullptr) {
-      return EvalSqlUdfBody(call, *templated->expr(), ctx);
-    }
-  }
-  if (fn != nullptr &&
-      fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
-    const auto* sql_fn = dynamic_cast<const ::googlesql::SQLFunction*>(fn);
-    if (sql_fn == nullptr) {
-      return absl::InvalidArgumentError(
-          "semantic: SQL UDF call is not an SQL function");
-    }
-    if (sql_fn->FunctionExpression() != nullptr &&
-        catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
-      return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);
-    }
-  }
-  if (fn != nullptr && fn->GetGroup() == "External_function" &&
-      catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
-    const catalog::JsUdfDefinition* js_def =
-        catalog::LookupProjectJsUdf(ctx.project_id, fn->Name());
-    if (js_def != nullptr) {
-      std::vector<Value> arg_values;
-      std::vector<const ::googlesql::Type*> arg_types;
-      arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
-      arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
-      for (int i = 0; i < call.argument_list_size(); ++i) {
-        auto v = EvalExpr(*call.argument_list(i), ctx);
-        if (!v.ok()) return v.status();
-        const ::googlesql::Type* arg_type = call.argument_list(i)->type();
-        arg_types.push_back(arg_type);
-        if (v->is_null()) {
-          arg_values.push_back(NullOfType(arg_type));
-        } else {
-          arg_values.push_back(*std::move(v));
-        }
+namespace {
+
+absl::StatusOr<Value> EvalRegisteredExternalUdf(
+    const ::googlesql::ResolvedFunctionCall& call,
+    const ::googlesql::Function& fn,
+    const EvalContext& ctx) {
+  const catalog::JsUdfDefinition* js_def =
+      catalog::LookupProjectJsUdf(ctx.project_id, fn.Name());
+  if (js_def != nullptr) {
+    std::vector<Value> arg_values;
+    std::vector<const ::googlesql::Type*> arg_types;
+    arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
+    arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
+    for (int i = 0; i < call.argument_list_size(); ++i) {
+      auto v = EvalExpr(*call.argument_list(i), ctx);
+      if (!v.ok()) return v.status();
+      const ::googlesql::Type* arg_type = call.argument_list(i)->type();
+      arg_types.push_back(arg_type);
+      if (v->is_null()) {
+        arg_values.push_back(NullOfType(arg_type));
+      } else {
+        arg_values.push_back(*std::move(v));
       }
-      return EvalJsUdfCall(*js_def, arg_values, call.type(), arg_types);
     }
-    const catalog::PythonUdfDefinition* py_def =
-        catalog::LookupProjectPythonUdf(ctx.project_id, fn->Name());
-    if (py_def != nullptr) {
-      std::vector<Value> arg_values;
-      std::vector<const ::googlesql::Type*> arg_types;
-      arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
-      arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
-      for (int i = 0; i < call.argument_list_size(); ++i) {
-        auto v = EvalExpr(*call.argument_list(i), ctx);
-        if (!v.ok()) return v.status();
-        const ::googlesql::Type* arg_type = call.argument_list(i)->type();
-        arg_types.push_back(arg_type);
-        if (v->is_null()) {
-          arg_values.push_back(NullOfType(arg_type));
-        } else {
-          arg_values.push_back(*std::move(v));
-        }
-      }
-      return EvalPythonUdfCall(
-          fn->Name(), *py_def, arg_values, call.type(), arg_types);
-    }
-    return absl::InternalError(
-        "External-language UDF metadata is missing for registered function");
+    return EvalJsUdfCall(*js_def, arg_values, call.type(), arg_types);
   }
-  const std::string name = LowerFunctionDispatchName(call.function());
+  const catalog::PythonUdfDefinition* py_def =
+      catalog::LookupProjectPythonUdf(ctx.project_id, fn.Name());
+  if (py_def != nullptr) {
+    std::vector<Value> arg_values;
+    std::vector<const ::googlesql::Type*> arg_types;
+    arg_values.reserve(static_cast<size_t>(call.argument_list_size()));
+    arg_types.reserve(static_cast<size_t>(call.argument_list_size()));
+    for (int i = 0; i < call.argument_list_size(); ++i) {
+      auto v = EvalExpr(*call.argument_list(i), ctx);
+      if (!v.ok()) return v.status();
+      const ::googlesql::Type* arg_type = call.argument_list(i)->type();
+      arg_types.push_back(arg_type);
+      if (v->is_null()) {
+        arg_values.push_back(NullOfType(arg_type));
+      } else {
+        arg_values.push_back(*std::move(v));
+      }
+    }
+    return EvalPythonUdfCall(
+        fn.Name(), *py_def, arg_values, call.type(), arg_types);
+  }
+  return absl::InternalError(
+      "External-language UDF metadata is missing for registered function");
+}
+
+absl::StatusOr<Value> EvalLazyBuiltinByName(
+    absl::string_view name,
+    const ::googlesql::ResolvedFunctionCall& call,
+    const EvalContext& ctx) {
   if (name == "$with_side_effects") {
     return EvalWithSideEffects(call, ctx);
   }
@@ -302,6 +279,12 @@ absl::StatusOr<Value> EvalFunctionCall(
     std::vector<Value> args = {*std::move(msg)};
     return DispatchFunctionByName(name, args, call.type(), &ctx);
   }
+  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                           "semantic: lazy builtin not handled");
+}
+
+absl::StatusOr<std::vector<Value>> CollectFunctionCallArgs(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
   std::vector<Value> args;
   args.reserve(call.argument_list_size());
   for (int i = 0; i < call.argument_list_size(); ++i) {
@@ -312,28 +295,78 @@ absl::StatusOr<Value> EvalFunctionCall(
     }
     auto v = EvalExpr(*arg, ctx);
     if (!v.ok()) {
-      // SAFE_ERROR_MODE swallows evaluation failures from any
-      // operand and converts them into NULL of the return type.
-      if (call.error_mode() ==
-              ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE &&
-          (v.status().code() == absl::StatusCode::kInvalidArgument ||
-           v.status().code() == absl::StatusCode::kOutOfRange)) {
-        return NullOfType(call.type());
-      }
       return v.status();
     }
     args.push_back(*std::move(v));
   }
-  // Use `FullName(/*include_group=*/false)` so namespaced families
-  // like `KEYS.NEW_KEYSET` / `NET.HOST` / `HLL_COUNT.MERGE`
-  // resolve to their dotted, lowercased dispatch key
-  // (`keys.new_keyset`, `net.host`, `hll_count.merge`). The route
-  // classifier (`route_classifier.cc::CheckFunction`) uses the
-  // same name shape when promoting `local_stub` / `semantic_executor`
-  // dispositions, so the names line up across the two sides. For
-  // non-namespaced functions (`concat`, `abs`, `safe_divide`)
-  // `FullName(false) == Name()`, so this is a no-op.
-  auto result = DispatchFunctionByName(name, args, call.type(), &ctx);
+  return args;
+}
+
+std::optional<absl::StatusOr<Value>> TryEvalSqlUdfFromCall(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  const ::googlesql::Function* fn = call.function();
+  if (const std::shared_ptr<::googlesql::ResolvedFunctionCallInfo>& info =
+          call.function_call_info();
+      info != nullptr) {
+    if (const auto* templated =
+            dynamic_cast<const ::googlesql::TemplatedSQLFunctionCall*>(
+                info.get());
+        templated != nullptr && templated->expr() != nullptr) {
+      return EvalSqlUdfBody(call, *templated->expr(), ctx);
+    }
+  }
+  if (fn != nullptr &&
+      fn->GetGroup() == ::googlesql::SQLFunction::kSQLFunctionGroup) {
+    const auto* sql_fn = dynamic_cast<const ::googlesql::SQLFunction*>(fn);
+    if (sql_fn == nullptr) {
+      return absl::InvalidArgumentError(
+          "semantic: SQL UDF call is not an SQL function");
+    }
+    if (sql_fn->FunctionExpression() != nullptr &&
+        catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
+      return EvalSqlUdfBody(call, *sql_fn->FunctionExpression(), ctx);
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+absl::StatusOr<Value> EvalFunctionCall(
+    const ::googlesql::ResolvedFunctionCall& call, const EvalContext& ctx) {
+  if (call.function() == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedFunctionCall has null function");
+  }
+  const ::googlesql::Function* fn = call.function();
+  if (ctx.udaf != nullptr && fn != nullptr && fn->IsAggregate()) {
+    return EvalUdafInnerFunctionCall(call, *ctx.udaf, ctx);
+  }
+  if (auto udf = TryEvalSqlUdfFromCall(call, ctx)) {
+    return *std::move(*udf);
+  }
+  if (fn != nullptr && fn->GetGroup() == "External_function" &&
+      catalog::IsProjectRegisteredFunction(ctx.project_id, fn->Name())) {
+    return EvalRegisteredExternalUdf(call, *fn, ctx);
+  }
+  const std::string name = LowerFunctionDispatchName(call.function());
+  if (name == "$with_side_effects" || name == "emu_format_t" || name == "if" ||
+      name == "ifnull" || name == "$case_no_value" ||
+      name == "$case_with_value" ||
+      (name == "error" && call.argument_list_size() == 1)) {
+    return EvalLazyBuiltinByName(name, call, ctx);
+  }
+  auto args_or = CollectFunctionCallArgs(call, ctx);
+  if (!args_or.ok()) {
+    if (call.error_mode() ==
+            ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE &&
+        (args_or.status().code() == absl::StatusCode::kInvalidArgument ||
+         args_or.status().code() == absl::StatusCode::kOutOfRange)) {
+      return NullOfType(call.type());
+    }
+    return args_or.status();
+  }
+  auto result = DispatchFunctionByName(name, *args_or, call.type(), &ctx);
   if (!result.ok() &&
       call.error_mode() ==
           ::googlesql::ResolvedFunctionCallBase::SAFE_ERROR_MODE) {

@@ -246,6 +246,149 @@ absl::StatusOr<Value> EvalResolvedWithExpr(
   return EvalExpr(*node.expr(), inner_ctx);
 }
 
+absl::StatusOr<Value> EvalResolvedCastExpr(
+    const ::googlesql::ResolvedCast& cast, const EvalContext& ctx) {
+  if (cast.expr() == nullptr) {
+    return absl::InvalidArgumentError("semantic: ResolvedCast has null expr");
+  }
+  auto inner = EvalExpr(*cast.expr(), ctx);
+  if (!inner.ok()) {
+    if (cast.return_null_on_error() && cast.type() != nullptr) {
+      return NullOfType(cast.type());
+    }
+    return inner;
+  }
+  const ::googlesql::Type* source = cast.expr()->type();
+  return EvalResolvedCast(cast, *std::move(inner), source);
+}
+
+absl::StatusOr<Value> EvalResolvedArgumentRefExpr(
+    const ::googlesql::ResolvedArgumentRef& ref, const EvalContext& ctx) {
+  if (ctx.arguments == nullptr) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: ResolvedArgumentRef '",
+                     ref.name(),
+                     "' evaluated without an invocation frame; UDF / "
+                     "TVF body executors must populate "
+                     "EvalContext::arguments before calling EvalExpr"));
+  }
+  absl::StatusOr<Value> bound = ctx.arguments->Lookup(ref.name());
+  if (!bound.ok()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        absl::StrCat("semantic: ResolvedArgumentRef '",
+                     ref.name(),
+                     "' has no binding on the invocation frame: ",
+                     bound.status().message()));
+  }
+  return *std::move(bound);
+}
+
+absl::StatusOr<Value> EvalResolvedGetStructFieldExpr(
+    const ::googlesql::ResolvedGetStructField& node,
+    const ::googlesql::ResolvedExpr& expr,
+    const EvalContext& ctx) {
+  if (node.expr() == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedGetStructField has null expr");
+  }
+  auto base = EvalExpr(*node.expr(), ctx);
+  if (!base.ok()) return base.status();
+  if (base->is_null()) return NullOfType(expr.type());
+  if (!base->type()->IsStruct()) {
+    return absl::InvalidArgumentError(
+        "semantic: GetStructField base is not STRUCT");
+  }
+  const int field_idx = node.field_idx();
+  if (field_idx < 0 || field_idx >= base->num_fields()) {
+    return absl::InvalidArgumentError(
+        "semantic: GetStructField index out of range");
+  }
+  return base->field(field_idx);
+}
+
+absl::StatusOr<Value> EvalResolvedGetJsonFieldExpr(
+    const ::googlesql::ResolvedGetJsonField& node,
+    const ::googlesql::ResolvedExpr& expr,
+    const EvalContext& ctx) {
+  if (node.expr() == nullptr) {
+    return absl::InvalidArgumentError(
+        "semantic: ResolvedGetJsonField has null expr");
+  }
+  auto base = EvalExpr(*node.expr(), ctx);
+  if (!base.ok()) return base.status();
+  return functions::JsonGetField(*base, node.field_name(), expr.type());
+}
+
+absl::StatusOr<Value> EvalResolvedSystemVariableExpr(
+    const ::googlesql::ResolvedSystemVariable& node, const EvalContext& ctx) {
+  if (ctx.script_system_variables != nullptr) {
+    auto it = ctx.script_system_variables->find(node.name_path());
+    if (it != ctx.script_system_variables->end()) {
+      return it->second;
+    }
+  }
+  return GetSystemVariable(ctx.project_id, node.name_path());
+}
+
+absl::StatusOr<Value> EvalResolvedAggregateFunctionCallExpr(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const EvalContext& ctx) {
+  if (ctx.udaf != nullptr) {
+    return EvalUdafInnerAggregate(agg, *ctx.udaf, ctx);
+  }
+  return MakeSemanticError(
+      SemanticErrorReason::kNotImplemented,
+      "semantic: aggregate function call outside SQL UDAF body evaluation "
+      "is not yet implemented");
+}
+
+absl::StatusOr<Value> EvalResolvedExpressionColumnExpr(
+    const ::googlesql::ResolvedExpressionColumn& col, const EvalContext& ctx) {
+  if (ctx.columns_by_name != nullptr) {
+    auto it = ctx.columns_by_name->find(col.name());
+    if (it != ctx.columns_by_name->end()) {
+      return it->second;
+    }
+  }
+  if (ctx.script_variables != nullptr) {
+    absl::StatusOr<Value> bound = ctx.script_variables->Lookup(col.name());
+    if (bound.ok()) return *std::move(bound);
+  }
+  return MakeSemanticError(
+      SemanticErrorReason::kInvalidArgument,
+      absl::StrCat("semantic: no binding for expression column '",
+                   col.name(),
+                   "'; populate EvalContext::columns_by_name or "
+                   "script_variables before evaluating AnalyzeExpression "
+                   "output"));
+}
+
+absl::StatusOr<Value> EvalResolvedCatalogColumnRefExpr(
+    const ::googlesql::ResolvedCatalogColumnRef& ref) {
+  if (!ref.name().empty()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        "semantic: ResolvedCatalogColumnRef graph-property references "
+        "are out of scope locally (Graph / GQL is unsupported and not "
+        "planned; see docs/ENGINE_POLICY.md)");
+  }
+  if (ref.column() == nullptr) {
+    return MakeSemanticError(
+        SemanticErrorReason::kInvalidArgument,
+        "semantic: ResolvedCatalogColumnRef has neither catalog column "
+        "nor graph property name");
+  }
+  return MakeSemanticError(
+      SemanticErrorReason::kNotImplemented,
+      absl::StrCat("semantic: ResolvedCatalogColumnRef for catalog column '",
+                   ref.column()->Name(),
+                   "' is not reachable from PRODUCT_EXTERNAL query SQL "
+                   "today; DDL expression contexts remain unsupported "
+                   "(see ROADMAP §Catalog / sequence helpers)"));
+}
+
 }  // namespace
 
 absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
@@ -259,62 +402,12 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
     case ::googlesql::RESOLVED_FUNCTION_CALL:
       return EvalFunctionCall(*expr.GetAs<::googlesql::ResolvedFunctionCall>(),
                               ctx);
-    case ::googlesql::RESOLVED_CAST: {
-      const auto& cast = *expr.GetAs<::googlesql::ResolvedCast>();
-      if (cast.expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedCast has null expr");
-      }
-      auto inner = EvalExpr(*cast.expr(), ctx);
-      if (!inner.ok()) {
-        if (cast.return_null_on_error() && cast.type() != nullptr) {
-          return NullOfType(cast.type());
-        }
-        return inner;
-      }
-      const ::googlesql::Type* source = cast.expr()->type();
-      return EvalResolvedCast(cast, *std::move(inner), source);
-    }
-    case ::googlesql::RESOLVED_ARGUMENT_REF: {
-      // `ResolvedArgumentRef` reads an argument of the enclosing
-      // SQL UDF / TVF invocation. The caller (UDF / TVF executor
-      // body) pushes a `FrameStack` frame at invocation, declares
-      // each argument by name, and points `ctx.arguments` at the
-      // frame stack. The analyzer canonicalizes argument names to
-      // lower-case at registration, so the frame stack's case-
-      // insensitive `Lookup` returns the right binding even if a
-      // body case-shifts the reference (e.g. `RETURN X` vs. the
-      // signature's `x`).
-      //
-      // Argument references arriving here with no frame stack
-      // (i.e. `ctx.arguments == nullptr`) mean either: (a) the
-      // analyzer emitted a `ResolvedArgumentRef` outside a UDF /
-      // TVF body (engine wiring bug), or (b) the body is being
-      // evaluated without the invocation frame plumbed through
-      // (caller bug). Either way we surface a structured
-      // `kInvalidArgument` so the gateway envelope names the
-      // missing argument rather than silently substituting NULL.
-      const auto& ref = *expr.GetAs<::googlesql::ResolvedArgumentRef>();
-      if (ctx.arguments == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            absl::StrCat("semantic: ResolvedArgumentRef '",
-                         ref.name(),
-                         "' evaluated without an invocation frame; UDF / "
-                         "TVF body executors must populate "
-                         "EvalContext::arguments before calling EvalExpr"));
-      }
-      absl::StatusOr<Value> bound = ctx.arguments->Lookup(ref.name());
-      if (!bound.ok()) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            absl::StrCat("semantic: ResolvedArgumentRef '",
-                         ref.name(),
-                         "' has no binding on the invocation frame: ",
-                         bound.status().message()));
-      }
-      return *std::move(bound);
-    }
+    case ::googlesql::RESOLVED_CAST:
+      return EvalResolvedCastExpr(*expr.GetAs<::googlesql::ResolvedCast>(),
+                                  ctx);
+    case ::googlesql::RESOLVED_ARGUMENT_REF:
+      return EvalResolvedArgumentRefExpr(
+          *expr.GetAs<::googlesql::ResolvedArgumentRef>(), ctx);
     case ::googlesql::RESOLVED_COLUMN_REF:
       return LookupColumnRef(*expr.GetAs<::googlesql::ResolvedColumnRef>(),
                              ctx);
@@ -324,110 +417,33 @@ absl::StatusOr<Value> EvalExpr(const ::googlesql::ResolvedExpr& expr,
     case ::googlesql::RESOLVED_MAKE_STRUCT:
       return EvalResolvedMakeStruct(
           *expr.GetAs<::googlesql::ResolvedMakeStruct>(), ctx);
-    case ::googlesql::RESOLVED_GET_STRUCT_FIELD: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedGetStructField>();
-      if (node.expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedGetStructField has null expr");
-      }
-      auto base = EvalExpr(*node.expr(), ctx);
-      if (!base.ok()) return base.status();
-      if (base->is_null()) return NullOfType(expr.type());
-      if (!base->type()->IsStruct()) {
-        return absl::InvalidArgumentError(
-            "semantic: GetStructField base is not STRUCT");
-      }
-      const int idx = node.field_idx();
-      if (idx < 0 || idx >= base->num_fields()) {
-        return absl::InvalidArgumentError(
-            "semantic: GetStructField index out of range");
-      }
-      return base->field(idx);
-    }
-    case ::googlesql::RESOLVED_GET_JSON_FIELD: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedGetJsonField>();
-      if (node.expr() == nullptr) {
-        return absl::InvalidArgumentError(
-            "semantic: ResolvedGetJsonField has null expr");
-      }
-      auto base = EvalExpr(*node.expr(), ctx);
-      if (!base.ok()) return base.status();
-      return functions::JsonGetField(*base, node.field_name(), expr.type());
-    }
+    case ::googlesql::RESOLVED_GET_STRUCT_FIELD:
+      return EvalResolvedGetStructFieldExpr(
+          *expr.GetAs<::googlesql::ResolvedGetStructField>(), expr, ctx);
+    case ::googlesql::RESOLVED_GET_JSON_FIELD:
+      return EvalResolvedGetJsonFieldExpr(
+          *expr.GetAs<::googlesql::ResolvedGetJsonField>(), expr, ctx);
     case ::googlesql::RESOLVED_WITH_EXPR:
       return EvalResolvedWithExpr(*expr.GetAs<::googlesql::ResolvedWithExpr>(),
                                   ctx);
     case ::googlesql::RESOLVED_SUBQUERY_EXPR:
       return EvalSubqueryExpr(*expr.GetAs<::googlesql::ResolvedSubqueryExpr>(),
                               ctx);
-    case ::googlesql::RESOLVED_SYSTEM_VARIABLE: {
-      const auto& node = *expr.GetAs<::googlesql::ResolvedSystemVariable>();
-      if (ctx.script_system_variables != nullptr) {
-        auto it = ctx.script_system_variables->find(node.name_path());
-        if (it != ctx.script_system_variables->end()) {
-          return it->second;
-        }
-      }
-      return GetSystemVariable(ctx.project_id, node.name_path());
-    }
+    case ::googlesql::RESOLVED_SYSTEM_VARIABLE:
+      return EvalResolvedSystemVariableExpr(
+          *expr.GetAs<::googlesql::ResolvedSystemVariable>(), ctx);
     case ::googlesql::RESOLVED_AGGREGATE_FUNCTION_CALL:
-      if (ctx.udaf != nullptr) {
-        return EvalUdafInnerAggregate(
-            *expr.GetAs<::googlesql::ResolvedAggregateFunctionCall>(),
-            *ctx.udaf,
-            ctx);
-      }
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: aggregate function call outside SQL UDAF body evaluation "
-          "is not yet implemented");
+      return EvalResolvedAggregateFunctionCallExpr(
+          *expr.GetAs<::googlesql::ResolvedAggregateFunctionCall>(), ctx);
     case ::googlesql::RESOLVED_GET_ROW_FIELD:
       return eval_expr_internal::EvalGetRowField(
           *expr.GetAs<::googlesql::ResolvedGetRowField>(), ctx);
-    case ::googlesql::RESOLVED_EXPRESSION_COLUMN: {
-      const auto& col = *expr.GetAs<::googlesql::ResolvedExpressionColumn>();
-      if (ctx.columns_by_name != nullptr) {
-        auto it = ctx.columns_by_name->find(col.name());
-        if (it != ctx.columns_by_name->end()) {
-          return it->second;
-        }
-      }
-      if (ctx.script_variables != nullptr) {
-        absl::StatusOr<Value> bound = ctx.script_variables->Lookup(col.name());
-        if (bound.ok()) return *std::move(bound);
-      }
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          absl::StrCat("semantic: no binding for expression column '",
-                       col.name(),
-                       "'; populate EvalContext::columns_by_name or "
-                       "script_variables before evaluating AnalyzeExpression "
-                       "output"));
-    }
-    case ::googlesql::RESOLVED_CATALOG_COLUMN_REF: {
-      const auto& ref = *expr.GetAs<::googlesql::ResolvedCatalogColumnRef>();
-      if (!ref.name().empty()) {
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            "semantic: ResolvedCatalogColumnRef graph-property references "
-            "are out of scope locally (Graph / GQL is unsupported and not "
-            "planned; see docs/ENGINE_POLICY.md)");
-      }
-      if (ref.column() == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: ResolvedCatalogColumnRef has neither catalog column "
-            "nor graph property name");
-      }
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat(
-              "semantic: ResolvedCatalogColumnRef for catalog column '",
-              ref.column()->Name(),
-              "' is not reachable from PRODUCT_EXTERNAL query SQL "
-              "today; DDL expression contexts remain unsupported "
-              "(see ROADMAP §Catalog / sequence helpers)"));
-    }
+    case ::googlesql::RESOLVED_EXPRESSION_COLUMN:
+      return EvalResolvedExpressionColumnExpr(
+          *expr.GetAs<::googlesql::ResolvedExpressionColumn>(), ctx);
+    case ::googlesql::RESOLVED_CATALOG_COLUMN_REF:
+      return EvalResolvedCatalogColumnRefExpr(
+          *expr.GetAs<::googlesql::ResolvedCatalogColumnRef>());
     default:
       return MakeSemanticError(SemanticErrorReason::kNotImplemented,
                                absl::StrCat("semantic: ResolvedExpr kind ",
