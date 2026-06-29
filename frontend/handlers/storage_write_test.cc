@@ -9,20 +9,26 @@
 // `storage_read_test.cc` uses for `ReadRows`) and drive the streaming
 // reply through a client stub.
 
-#include <grpcpp/support/status.h>
+#include "frontend/handlers/storage_write.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <random>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
+#include "backend/storage/storage.h"
+#include "grpcpp/grpcpp.h"
 #include "gtest/gtest.h"
 #include "proto/emulator.pb.h"
+#include "proto/storage_write.grpc.pb.h"
 #include "proto/storage_write.pb.h"
 
 namespace bigquery_emulator {

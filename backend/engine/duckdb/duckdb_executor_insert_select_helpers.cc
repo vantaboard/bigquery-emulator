@@ -1,6 +1,6 @@
 #include "backend/engine/duckdb/duckdb_executor_insert_select_helpers.h"
 
-#include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -8,14 +8,11 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "backend/catalog/storage_table.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
-#include "backend/engine/engine.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/storage.h"
-#include "duckdb.h"
+#include "backend/schema/googlesql_to_bq.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

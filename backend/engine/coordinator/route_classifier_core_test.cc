@@ -1,8 +1,5 @@
 // Route classifier tests: core routing and array-scan promotion.
 
-#include <gtest/gtest.h>
-
-#include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/coordinator/route_classifier_test_fixture.h"
 #include "backend/engine/disposition.h"
 #include "googlesql/public/value.h"

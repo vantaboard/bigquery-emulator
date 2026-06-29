@@ -1,4 +1,12 @@
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/duckdb/duckdb_executor_attach_helpers.h"
+#include "backend/engine/duckdb/duckdb_executor_internal.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,6 +1,18 @@
+#include "backend/catalog/procedure_registry.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "backend/catalog/create_procedure_util.h"
+#include "backend/catalog/stored_procedure.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/simple_catalog.h"
 

@@ -1,4 +1,15 @@
+#include "backend/catalog/view_persistence.h"
 
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

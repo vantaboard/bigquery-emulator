@@ -1,4 +1,11 @@
+#include "frontend/handlers/sqltools.h"
 
+#include "absl/status/statusor.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/sqltools/catalog_names.h"
+#include "backend/sqltools/sql_references.h"
+#include "backend/sqltools/sql_tools.h"
+#include "frontend/handlers/query_internal.h"
 #include "googlesql/public/types/type_factory.h"
 
 namespace bigquery_emulator {

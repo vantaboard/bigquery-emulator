@@ -1,11 +1,14 @@
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/wildcard_table.h"
 #include "backend/catalog/wildcard_table_util.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"

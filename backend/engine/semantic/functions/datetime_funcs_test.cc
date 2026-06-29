@@ -1,4 +1,6 @@
+#include "backend/engine/semantic/functions/datetime_funcs.h"
 
+#include <vector>
 
 #include "googlesql/public/value.h"
 #include "gtest/gtest.h"

@@ -1,15 +1,15 @@
 #include <algorithm>
 #include <cctype>
-#include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/str_split.h"
 #include "backend/sqltools/sql_tools.h"
 #include "backend/sqltools/sql_tools_complete_helpers.h"
 #include "googlesql/public/catalog.h"

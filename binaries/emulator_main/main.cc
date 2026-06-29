@@ -18,13 +18,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
 
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
 #include "backend/engine/coordinator/routine_rehydrate.h"
 #include "backend/engine/coordinator/view_rehydrate.h"
+#include "backend/engine/engine.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
+#include "backend/storage/storage.h"
 #include "binaries/emulator_main/version.h"
 #include "frontend/server/server.h"
 

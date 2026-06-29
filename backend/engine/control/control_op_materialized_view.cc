@@ -1,4 +1,25 @@
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/engine/control/control_op_internal.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/duckdb/udf/registrar.h"
+#include "backend/engine/engine.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

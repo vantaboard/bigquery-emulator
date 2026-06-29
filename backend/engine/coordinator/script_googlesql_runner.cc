@@ -1,5 +1,21 @@
+#include "backend/engine/coordinator/script_googlesql_runner.h"
 
+#include <memory>
+#include <string>
+#include <utility>
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/strip.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/coordinator/local_coordinator_analyze.h"
+#include "backend/engine/coordinator/script_executor_internal.h"
+#include "backend/engine/coordinator/script_statement_evaluator.h"
+#include "backend/engine/semantic/row_source.h"
+#include "backend/engine/semantic/script/script_driver.h"
+#include "backend/engine/semantic/value.h"
+#include "backend/schema/schema.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/scripting/script_executor.h"
 

@@ -1,9 +1,3 @@
-#include <gtest/gtest.h>
-
-#include <cstdint>
-#include <string>
-
-#include "absl/strings/string_view.h"
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
 #include "googlesql/public/types/array_type.h"
 

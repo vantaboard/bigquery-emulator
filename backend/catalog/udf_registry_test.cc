@@ -12,7 +12,10 @@
 
 #include "backend/catalog/udf_registry.h"
 
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"

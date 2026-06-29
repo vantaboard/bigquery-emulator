@@ -1,10 +1,18 @@
+#include "backend/catalog/emulator_ml_tvf_extensions.h"
 
+#include <memory>
+#include <string>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_join.h"
+#include "backend/catalog/emulator_ml_test_catalog.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "gtest/gtest.h"
 

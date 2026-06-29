@@ -1,17 +1,10 @@
 #include "backend/catalog/googlesql_catalog_find_helpers.h"
 
-#include <cstddef>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
-#include "absl/types/span.h"
-#include "backend/catalog/info_schema_table.h"
-#include "backend/schema/schema.h"
 #include "googlesql/public/types/struct_type.h"
 
 namespace bigquery_emulator {

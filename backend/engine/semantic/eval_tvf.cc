@@ -1,7 +1,24 @@
+#include "backend/engine/semantic/eval_tvf.h"
 
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/scan_eval.h"
+#include "backend/engine/semantic/scan_eval_internal.h"
+#include "backend/engine/semantic/stubs/ml.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/sql_tvf.h"
 #include "googlesql/public/templated_sql_tvf.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

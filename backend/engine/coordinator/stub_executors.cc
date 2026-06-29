@@ -1,4 +1,16 @@
+#include "backend/engine/coordinator/stub_executors.h"
 
+#include <memory>
+#include <string>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/coordinator/route_classifier.h"
+#include "backend/engine/disposition.h"
+#include "backend/engine/engine.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

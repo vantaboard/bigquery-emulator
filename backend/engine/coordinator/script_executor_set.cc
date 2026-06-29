@@ -1,6 +1,21 @@
+#include "backend/engine/coordinator/script_executor_set.h"
 
 #include <cctype>
+#include <memory>
+#include <string>
+#include <utility>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/strip.h"
+#include "backend/engine/coordinator/local_coordinator_analyze.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/expression_column_bindings.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_output.h"
 

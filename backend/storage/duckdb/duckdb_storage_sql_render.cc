@@ -1,4 +1,18 @@
+#include <filesystem>
+#include <string>
+#include <system_error>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "backend/catalog/measure_catalog.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/row_restriction.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
 
 namespace bigquery_emulator {
 namespace backend {

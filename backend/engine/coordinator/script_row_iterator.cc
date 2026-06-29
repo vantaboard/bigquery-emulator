@@ -1,8 +1,6 @@
 #include "backend/engine/coordinator/script_row_iterator.h"
 
-#include <string>
-
-#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 
 namespace bigquery_emulator {
 namespace backend {

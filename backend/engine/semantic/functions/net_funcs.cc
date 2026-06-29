@@ -1,4 +1,23 @@
+#include <array>
+#include <cstdint>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/hll_funcs.h"
+#include "backend/engine/semantic/functions/kll_funcs.h"
+#include "backend/engine/semantic/functions/specialized_funcs.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/net.h"
 #include "googlesql/public/type.h"
 

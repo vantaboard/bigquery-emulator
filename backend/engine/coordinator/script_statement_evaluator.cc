@@ -1,5 +1,29 @@
+#include "backend/engine/coordinator/script_statement_evaluator.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/stored_procedure.h"
+#include "backend/engine/coordinator/local_coordinator_analyze.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
+#include "backend/engine/coordinator/script_executor_internal.h"
+#include "backend/engine/coordinator/script_row_iterator.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/expression_column_bindings.h"
+#include "backend/engine/semantic/row_source.h"
+#include "backend/engine/semantic/system_variables.h"
+#include "backend/engine/semantic/value.h"
+#include "googlesql/proto/script_exception.pb.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/scripting/error_helpers.h"

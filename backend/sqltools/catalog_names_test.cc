@@ -1,15 +1,14 @@
 #include "backend/sqltools/catalog_names.h"
 
-#include <cstdint>
+#include <map>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/schema/schema.h"
-#include "backend/sqltools/sql_tools.h"
 #include "backend/storage/storage.h"
 #include "gtest/gtest.h"
 

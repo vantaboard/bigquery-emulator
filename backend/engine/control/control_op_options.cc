@@ -1,4 +1,19 @@
+#include "backend/engine/control/control_op_options.h"
 
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/control/gcs_uri_resolver.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

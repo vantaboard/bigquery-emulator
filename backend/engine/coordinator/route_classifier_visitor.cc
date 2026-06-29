@@ -1,7 +1,13 @@
+#include "backend/engine/coordinator/route_classifier_visitor.h"
 
+#include <utility>
 
+#include "absl/strings/str_cat.h"
+#include "backend/engine/duckdb/transpiler/node_dispositions.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_collation.h"
 #include "googlesql/resolved_ast/resolved_node.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

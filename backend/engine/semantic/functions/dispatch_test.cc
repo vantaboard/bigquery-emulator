@@ -6,12 +6,20 @@
 // resolves to a dispatch-table function and asserts both the
 // observable cell and any structured error reason.
 
+#include "backend/engine/semantic/functions/dispatch.h"
+
 #include <cmath>
+#include <memory>
+#include <optional>
 #include <string>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"

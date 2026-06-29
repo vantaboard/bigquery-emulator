@@ -1,11 +1,25 @@
+#include "backend/sqltools/sql_references.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/catalog/view_registry.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/parse_resume_location.h"
 #include "googlesql/public/parse_tokens.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 
 namespace bigquery_emulator {
 namespace backend {

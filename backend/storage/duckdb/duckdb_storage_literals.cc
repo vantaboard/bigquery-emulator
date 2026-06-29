@@ -1,5 +1,4 @@
 #include <cmath>
-#include <cstdint>
 #include <cstdlib>
 #include <optional>
 #include <string>
@@ -14,10 +13,13 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/row_restriction.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/functions/datetime.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,14 +1,6 @@
 // StreamQueryResults / ExecuteQuery tests for `QueryService`.
 
-#include <grpcpp/support/status.h>
-#include <gtest/gtest.h>
-
-#include <cstdint>
-#include <string>
-
-#include "backend/storage/storage.h"
 #include "frontend/handlers/query_test_fixture.h"
-#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

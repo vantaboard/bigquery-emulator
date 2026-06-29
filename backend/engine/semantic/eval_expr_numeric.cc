@@ -1,4 +1,12 @@
+#include <optional>
+#include <type_traits>
 
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/numeric_value.h"
 
 namespace bigquery_emulator {

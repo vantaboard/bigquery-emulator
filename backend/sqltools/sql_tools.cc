@@ -2,12 +2,16 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstddef>
 #include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "googlesql/parser/ast_node.h"
 #include "googlesql/parser/parser.h"
 #include "googlesql/public/error_helpers.h"

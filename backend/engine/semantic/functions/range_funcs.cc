@@ -1,9 +1,12 @@
+#include "backend/engine/semantic/functions/range_funcs.h"
 
+#include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/range_type.h"
 #include "googlesql/public/value.h"
 

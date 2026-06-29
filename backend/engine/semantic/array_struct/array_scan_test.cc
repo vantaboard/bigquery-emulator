@@ -7,9 +7,17 @@
 // engine sees at runtime. The tests cover each shape family the
 // classifier promotes to the semantic executor.
 
+#include "backend/engine/semantic/array_struct/array_scan.h"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "absl/status/status.h"
-#include "absl/strings/string_view.h"
-#include "backend/engine/semantic/eval_context.h"
+#include "absl/status/statusor.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"

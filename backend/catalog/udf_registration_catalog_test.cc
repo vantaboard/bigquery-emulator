@@ -2,8 +2,11 @@
 // after the catalog was first constructed (CREATE PROCEDURE in setup, CALL in
 // a later script). See udf_registration_catalog.cc reuse branch.
 
+#include "backend/catalog/udf_registration_catalog.h"
+
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <random>
 #include <string>
 #include <system_error>
@@ -11,8 +14,12 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/stored_procedure.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"

@@ -1,7 +1,22 @@
+#include "backend/engine/semantic/array_struct/array_scan.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

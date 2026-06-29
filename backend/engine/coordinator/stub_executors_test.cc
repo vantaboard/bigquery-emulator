@@ -7,7 +7,12 @@
 
 #include "backend/engine/coordinator/stub_executors.h"
 
+#include <memory>
+#include <vector>
+
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/engine.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"

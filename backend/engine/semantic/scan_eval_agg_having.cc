@@ -1,4 +1,12 @@
+#include <optional>
+#include <vector>
 
+#include "absl/status/statusor.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/scan_eval_internal.h"
+#include "backend/engine/semantic/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

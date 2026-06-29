@@ -1,27 +1,16 @@
 // In-process gRPC tests for `StorageReadService::ReadRows`.
 
-#include <grpcpp/support/status.h>
-#include <gtest/gtest.h>
-
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
-#include <memory>
-#include <string>
-#include <system_error>
-
 #include "absl/strings/str_cat.h"
-#include "backend/schema/schema.h"
-#include "backend/storage/duckdb/duckdb_storage.h"
-#include "backend/storage/storage.h"
+#include "absl/types/span.h"
 #include "frontend/handlers/storage_read_test_fixture.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/grpcpp.h"
 #include "grpcpp/security/credentials.h"
 #include "grpcpp/security/server_credentials.h"
+#include "grpcpp/server.h"
 #include "grpcpp/server_builder.h"
 #include "proto/emulator.pb.h"
-#include "proto/storage_read.pb.h"
+#include "proto/storage_read.grpc.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {

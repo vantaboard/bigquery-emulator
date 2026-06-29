@@ -1,4 +1,9 @@
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/duckdb/duckdb_executor.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

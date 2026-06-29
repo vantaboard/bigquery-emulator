@@ -1,7 +1,20 @@
+#include "backend/catalog/routine_persistence.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/engine.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/language_options.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

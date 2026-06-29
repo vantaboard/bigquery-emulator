@@ -1,7 +1,17 @@
 #include <cmath>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
 
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/specialized_funcs.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

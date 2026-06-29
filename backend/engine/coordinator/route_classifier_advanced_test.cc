@@ -1,13 +1,9 @@
 // Route classifier tests: subqueries, hand-built nodes, and edge cases.
 
-#include <gtest/gtest.h>
-
-#include "backend/engine/coordinator/route_classifier.h"
 #include "backend/engine/coordinator/route_classifier_test_fixture.h"
 #include "backend/engine/disposition.h"
 #include "googlesql/public/id_string.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_column.h"
 
 namespace bigquery_emulator {

@@ -15,6 +15,7 @@
 #include "backend/engine/semantic/frame_stack.h"
 
 #include "absl/status/status.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/value.h"
 #include "gtest/gtest.h"
 

@@ -1,13 +1,34 @@
+#include "backend/engine/coordinator/local_coordinator_analyze.h"
 
+#include <memory>
+#include <utility>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/strip.h"
+#include "absl/time/time.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/semantic/system_variables.h"
+#include "backend/engine/semantic/value.h"
+#include "backend/schema/googlesql_to_bq.h"
+#include "backend/schema/schema.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"
+#include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

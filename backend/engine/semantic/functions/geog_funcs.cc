@@ -1,16 +1,22 @@
+#include "backend/engine/semantic/functions/geog_funcs.h"
 
 #include <cmath>
-#include <cstdint>
 #include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
-#include "googlesql/public/type.pb.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
+#include "backend/engine/semantic/geography_value.h"
+#include "backend/engine/semantic/value.h"
 
 namespace bigquery_emulator {
 namespace backend {

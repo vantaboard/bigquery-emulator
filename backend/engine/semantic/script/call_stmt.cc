@@ -1,4 +1,7 @@
+#include "backend/engine/semantic/script/call_stmt.h"
 
+#include "backend/engine/semantic/error.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

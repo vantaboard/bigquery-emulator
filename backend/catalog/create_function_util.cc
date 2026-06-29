@@ -1,8 +1,19 @@
+#include "backend/catalog/create_function_util.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_join.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
 #include "googlesql/public/templated_sql_function.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_enums.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

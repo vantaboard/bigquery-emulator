@@ -1,6 +1,12 @@
+#include "backend/catalog/create_tvf_util.h"
 
+#include <memory>
+#include <utility>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "googlesql/public/sql_tvf.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

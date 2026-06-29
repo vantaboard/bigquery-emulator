@@ -1,3 +1,4 @@
+#include "backend/catalog/measure_catalog.h"
 
 #include "backend/schema/schema.h"
 #include "gtest/gtest.h"

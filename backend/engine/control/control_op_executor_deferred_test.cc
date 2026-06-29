@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <random>
 #include <string>
 #include <system_error>
@@ -13,11 +14,14 @@
 #include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/engine/control/control_op_executor.h"
+#include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"

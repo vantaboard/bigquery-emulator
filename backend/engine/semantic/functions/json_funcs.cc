@@ -1,18 +1,24 @@
+#include "backend/engine/semantic/functions/json_funcs.h"
 
-#include <cstddef>
-#include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
+#include "backend/engine/semantic/geography_value.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/json.h"
 #include "googlesql/public/json_value.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 #include "googlesql/public/value.h"
 
 namespace bigquery_emulator {

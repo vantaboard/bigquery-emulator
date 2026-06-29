@@ -1,5 +1,16 @@
+#include "backend/catalog/measure_catalog.h"
 
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/strip.h"
 #include "googlesql/common/measure_utils.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
@@ -7,6 +18,9 @@
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

@@ -1,11 +1,34 @@
+#include "backend/engine/semantic/eval_expr.h"
 
 #include <cmath>
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/eval_udaf.h"
+#include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/functions/datetime_funcs_internal.h"
+#include "backend/engine/semantic/functions/json_funcs.h"
+#include "backend/engine/semantic/system_variables.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/constant.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
 #include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

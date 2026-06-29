@@ -1,10 +1,6 @@
-#include <gtest/gtest.h>
-
+#include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
-#include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/struct_type.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
-#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

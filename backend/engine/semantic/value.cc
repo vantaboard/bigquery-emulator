@@ -4,17 +4,23 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/geography_value.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/civil_time.h"

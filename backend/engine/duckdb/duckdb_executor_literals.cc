@@ -1,4 +1,37 @@
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_replace.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/catalog/virtual_table.h"
+#include "backend/engine/duckdb/arrow_to_bq.h"
+#include "backend/engine/duckdb/duckdb_executor_internal.h"
+#include "backend/engine/duckdb/transpiler/transpiler.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
+#include "backend/engine/semantic/value.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/duckdb/duckdb_storage_internal.h"
+#include "backend/storage/storage.h"
+#include "duckdb.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_visitor.h"
 
 namespace bigquery_emulator {
 namespace backend {

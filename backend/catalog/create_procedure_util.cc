@@ -1,4 +1,12 @@
+#include "backend/catalog/create_procedure_util.h"
 
+#include <memory>
+#include <utility>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "backend/catalog/stored_procedure.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

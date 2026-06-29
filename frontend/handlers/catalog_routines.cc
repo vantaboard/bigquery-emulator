@@ -1,4 +1,17 @@
+#include <string>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/routine_persistence.h"
+#include "backend/catalog/tvf_registry.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/engine/coordinator/routine_rehydrate.h"
+#include "backend/storage/storage.h"
+#include "frontend/handlers/catalog.h"
+#include "frontend/handlers/handler_common.h"
 
 namespace bigquery_emulator {
 namespace frontend {

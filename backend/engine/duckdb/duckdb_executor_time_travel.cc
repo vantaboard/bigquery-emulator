@@ -1,6 +1,12 @@
+#include "backend/engine/duckdb/duckdb_executor_time_travel.h"
 
+#include "absl/status/statusor.h"
+#include "absl/time/time.h"
+#include "backend/engine/semantic/eval_context.h"
+#include "backend/engine/semantic/eval_expr.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/value.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace backend {

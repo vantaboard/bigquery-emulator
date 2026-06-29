@@ -1,6 +1,12 @@
 // Unit tests for the string-functions semantic-executor helpers.
 
+#include "backend/engine/semantic/functions/string_funcs.h"
+
+#include <vector>
+
+#include "absl/status/status.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/value.h"
 #include "gtest/gtest.h"
 

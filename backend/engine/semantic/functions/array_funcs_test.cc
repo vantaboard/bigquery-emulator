@@ -1,5 +1,8 @@
+#include "backend/engine/semantic/functions/array_funcs.h"
 
+#include <vector>
 
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/value.h"

@@ -1,7 +1,4 @@
-#include <gtest/gtest.h>
-
-#include "backend/engine/disposition.h"
-#include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
 
 namespace bigquery_emulator {
 namespace backend {

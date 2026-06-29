@@ -1,9 +1,33 @@
+#include "frontend/handlers/query.h"
 
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "backend/catalog/googlesql_catalog.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/engine/coordinator/local_coordinator_engine.h"
+#include "backend/engine/coordinator/route_classifier.h"
+#include "backend/engine/coordinator/sql_preprocess.h"
+#include "backend/engine/disposition.h"
+#include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
+#include "backend/engine/semantic/system_variables.h"
+#include "backend/schema/googlesql_to_bq.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "frontend/handlers/query_internal.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
 #include "googlesql/public/analyzer_output.h"
 #include "googlesql/public/types/type_factory.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
 
 namespace bigquery_emulator {
 namespace frontend {

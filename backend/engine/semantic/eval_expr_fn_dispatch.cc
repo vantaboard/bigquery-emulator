@@ -1,4 +1,20 @@
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/functions/datetime_funcs.h"
+#include "backend/engine/semantic/functions/dispatch.h"
+#include "backend/engine/semantic/functions/geog_funcs.h"
+#include "backend/engine/semantic/functions/operator_funcs.h"
+#include "backend/engine/semantic/stubs/dispatch.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/type.h"
 

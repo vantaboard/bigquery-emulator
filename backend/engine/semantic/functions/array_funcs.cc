@@ -1,15 +1,16 @@
+#include "backend/engine/semantic/functions/array_funcs.h"
 
 #include <cstdint>
-#include <optional>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/str_join.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/generate_array.h"
 #include "googlesql/public/type.h"
-#include "googlesql/public/type.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

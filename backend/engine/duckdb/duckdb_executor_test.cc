@@ -13,13 +13,14 @@
 #include "backend/engine/duckdb/duckdb_executor.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "backend/engine/duckdb/duckdb_executor_test_fixture.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/schema/schema.h"

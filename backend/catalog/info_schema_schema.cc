@@ -1,4 +1,3 @@
-#include <cstddef>
 #include <string>
 
 #include "absl/strings/str_cat.h"

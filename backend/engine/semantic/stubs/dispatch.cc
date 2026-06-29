@@ -1,8 +1,13 @@
+#include "backend/engine/semantic/stubs/dispatch.h"
 
 #include <optional>
+#include <vector>
 
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/stubs/keys.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {

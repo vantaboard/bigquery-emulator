@@ -1,6 +1,33 @@
+#include "backend/catalog/googlesql_catalog.h"
 
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
+#include "backend/catalog/emulator_builtin_extensions.h"
+#include "backend/catalog/emulator_ml_tvf_extensions.h"
+#include "backend/catalog/googlesql_catalog_find_helpers.h"
+#include "backend/catalog/info_schema_table.h"
+#include "backend/catalog/measure_catalog.h"
+#include "backend/catalog/procedure_registry.h"
+#include "backend/catalog/storage_table.h"
+#include "backend/catalog/tvf_registry.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/catalog/view_registry.h"
+#include "backend/catalog/wildcard_table.h"
+#include "backend/catalog/wildcard_table_util.h"
+#include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/catalog.h"
 #include "googlesql/public/language_options.h"

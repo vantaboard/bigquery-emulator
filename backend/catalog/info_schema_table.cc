@@ -7,10 +7,12 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "backend/catalog/info_schema_internal.h"
+#include "backend/catalog/storage_table.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"

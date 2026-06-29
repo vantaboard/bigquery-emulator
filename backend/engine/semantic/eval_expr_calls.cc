@@ -1,8 +1,31 @@
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
+#include "backend/catalog/js_udf_registry.h"
+#include "backend/catalog/python_udf_registry.h"
+#include "backend/catalog/udf_registry.h"
+#include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/eval_udaf.h"
+#include "backend/engine/semantic/frame_stack.h"
+#include "backend/engine/semantic/functions/dispatch.h"
+#include "backend/engine/semantic/functions/geog_funcs.h"
+#include "backend/engine/semantic/js_udf_runtime.h"
+#include "backend/engine/semantic/python_udf_runtime.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
 #include "googlesql/public/templated_sql_function.h"
 #include "googlesql/public/type.h"
+#include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
 namespace bigquery_emulator {
 namespace backend {

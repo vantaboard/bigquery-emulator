@@ -1,6 +1,17 @@
+#include "backend/engine/semantic/js_udf_runtime.h"
 
 #include <cmath>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "backend/engine/semantic/error.h"
 #include "duktape.h"
 
 namespace bigquery_emulator {

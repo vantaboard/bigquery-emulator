@@ -1,14 +1,19 @@
 #include <cctype>
-#include <cstdint>
 #include <cstring>
-#include <optional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_context.h"
 #include "backend/engine/semantic/functions/string_extra_internal.h"
+#include "backend/engine/semantic/functions/string_funcs.h"
+#include "backend/engine/semantic/value.h"
 #include "googlesql/public/functions/hash.h"
 #include "googlesql/public/functions/normalize_mode.pb.h"
 #include "googlesql/public/functions/numeric.h"

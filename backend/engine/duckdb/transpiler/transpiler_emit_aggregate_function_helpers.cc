@@ -1,12 +1,12 @@
+#include "backend/engine/duckdb/transpiler/transpiler_emit_aggregate_function_helpers.h"
 
 #include <string>
+#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "absl/strings/string_view.h"
 #include "backend/engine/disposition.h"
-#include "backend/engine/duckdb/transpiler/functions.h"
 
 namespace bigquery_emulator {
 namespace backend {
