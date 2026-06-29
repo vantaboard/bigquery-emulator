@@ -49,7 +49,8 @@ std::string BuildRecursiveNormalizedSelect(
     }
     const ::googlesql::ResolvedColumn& out_col = item->output_column_list(j);
     const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
-    const std::string src_name = RecursiveChildEmitColumnName(child, out_col, j);
+    const std::string src_name =
+        RecursiveChildEmitColumnName(child, out_col, j);
     std::string src_q = internal::QuoteIdent(src_name);
     if (src_name == cte_col.name()) {
       normalized.push_back(std::move(src_q));
@@ -91,8 +92,8 @@ std::string BuildRecursiveAnchorSelect(
     const ::googlesql::ResolvedColumn& cte_col = node->column_list(j);
     std::string dst_q = internal::QuoteIdent(anchor_names[j]);
     if (j == depth_col_idx) {
-      std::string depth_expr =
-          BuildRecursiveDepthExpr(depth_mod, emit_expr, cte_col, is_recursive_arm);
+      std::string depth_expr = BuildRecursiveDepthExpr(
+          depth_mod, emit_expr, cte_col, is_recursive_arm);
       if (depth_expr.empty()) return "";
       anchor_projs.push_back(absl::StrCat(depth_expr, " AS ", dst_q));
       continue;

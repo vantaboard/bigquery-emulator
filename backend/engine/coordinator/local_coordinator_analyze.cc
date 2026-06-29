@@ -295,57 +295,74 @@ absl::StatusOr<const ::googlesql::Type*> ParameterTypeForKind(
 }
 
 absl::StatusOr<const ::googlesql::Type*> ParameterTypeForQueryParameter(
+    const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory);
+
+absl::StatusOr<const ::googlesql::Type*> ParseStructParameterType(
+    const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory) {
+  if (type_factory == nullptr) {
+    return absl::InvalidArgumentError(
+        "LocalCoordinatorEngine: STRUCT parameter requires type_factory");
+  }
+  std::vector<::googlesql::StructType::StructField> fields;
+  for (absl::string_view part : absl::StrSplit(parameter.type_json, ',')) {
+    part = absl::StripAsciiWhitespace(part);
+    if (part.empty()) continue;
+    const size_t colon = part.find(':');
+    if (colon == absl::string_view::npos) continue;
+    const absl::string_view field_name = part.substr(0, colon);
+    const absl::string_view field_kind =
+        absl::StripAsciiWhitespace(part.substr(colon + 1));
+    auto field_type_or = ParameterTypeForKind(field_kind);
+    if (!field_type_or.ok()) return field_type_or.status();
+    fields.emplace_back(std::string(field_name), *field_type_or);
+  }
+  if (fields.empty()) {
+    return absl::InvalidArgumentError(
+        "LocalCoordinatorEngine: STRUCT parameter missing type_json");
+  }
+  const ::googlesql::StructType* struct_type = nullptr;
+  absl::Status s = type_factory->MakeStructType(fields, &struct_type);
+  if (!s.ok()) return s;
+  return struct_type;
+}
+
+QueryParameter ArrayElementParameter(const QueryParameter& parameter) {
+  QueryParameter element;
+  if (absl::StartsWith(parameter.type_json, "STRUCT:")) {
+    element.type_kind = "STRUCT";
+    element.type_json = parameter.type_json.substr(7);
+  } else {
+    element.type_kind = std::string(parameter.type_json);
+  }
+  return element;
+}
+
+absl::StatusOr<const ::googlesql::Type*> ParseArrayParameterType(
+    const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory) {
+  if (type_factory == nullptr) {
+    return absl::InvalidArgumentError(
+        "LocalCoordinatorEngine: ARRAY parameter requires type_factory");
+  }
+  if (parameter.type_json.empty()) {
+    return absl::InvalidArgumentError(
+        "LocalCoordinatorEngine: ARRAY parameter missing type_json");
+  }
+  auto element_type_or = ParameterTypeForQueryParameter(
+      ArrayElementParameter(parameter), type_factory);
+  if (!element_type_or.ok()) return element_type_or.status();
+  const ::googlesql::ArrayType* array_type = nullptr;
+  absl::Status s = type_factory->MakeArrayType(*element_type_or, &array_type);
+  if (!s.ok()) return s;
+  return array_type;
+}
+
+absl::StatusOr<const ::googlesql::Type*> ParameterTypeForQueryParameter(
     const QueryParameter& parameter, ::googlesql::TypeFactory* type_factory) {
   if (parameter.type_kind == "STRUCT") {
-    if (type_factory == nullptr) {
-      return absl::InvalidArgumentError(
-          "LocalCoordinatorEngine: STRUCT parameter requires type_factory");
-    }
-    std::vector<::googlesql::StructType::StructField> fields;
-    for (absl::string_view part : absl::StrSplit(parameter.type_json, ',')) {
-      part = absl::StripAsciiWhitespace(part);
-      if (part.empty()) continue;
-      const size_t colon = part.find(':');
-      if (colon == absl::string_view::npos) continue;
-      const absl::string_view field_name = part.substr(0, colon);
-      const absl::string_view field_kind =
-          absl::StripAsciiWhitespace(part.substr(colon + 1));
-      auto field_type_or = ParameterTypeForKind(field_kind);
-      if (!field_type_or.ok()) return field_type_or.status();
-      fields.emplace_back(std::string(field_name), *field_type_or);
-    }
-    if (fields.empty()) {
-      return absl::InvalidArgumentError(
-          "LocalCoordinatorEngine: STRUCT parameter missing type_json");
-    }
-    const ::googlesql::StructType* struct_type = nullptr;
-    absl::Status s = type_factory->MakeStructType(fields, &struct_type);
-    if (!s.ok()) return s;
-    return struct_type;
+    return ParseStructParameterType(parameter, type_factory);
   }
   if (parameter.type_kind == "ARRAY") {
-    if (type_factory == nullptr) {
-      return absl::InvalidArgumentError(
-          "LocalCoordinatorEngine: ARRAY parameter requires type_factory");
-    }
-    if (parameter.type_json.empty()) {
-      return absl::InvalidArgumentError(
-          "LocalCoordinatorEngine: ARRAY parameter missing type_json");
-    }
-    QueryParameter element;
-    if (absl::StartsWith(parameter.type_json, "STRUCT:")) {
-      element.type_kind = "STRUCT";
-      element.type_json = parameter.type_json.substr(7);
-    } else {
-      element.type_kind = std::string(parameter.type_json);
-    }
-    auto element_type_or =
-        ParameterTypeForQueryParameter(element, type_factory);
-    if (!element_type_or.ok()) return element_type_or.status();
-    const ::googlesql::ArrayType* array_type = nullptr;
-    absl::Status s = type_factory->MakeArrayType(*element_type_or, &array_type);
-    if (!s.ok()) return s;
-    return array_type;
+    return ParseArrayParameterType(parameter, type_factory);
   }
   return ParameterTypeForKind(parameter.type_kind);
 }

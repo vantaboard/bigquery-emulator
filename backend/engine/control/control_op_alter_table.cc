@@ -231,6 +231,45 @@ absl::Status RebuildTableWithColumns(storage::Storage& storage,
   return storage.AppendRows(target, rows);
 }
 
+absl::Status ApplyAlterAction(const ::googlesql::ResolvedAlterAction* action,
+                              const storage::TableId& target,
+                              schema::TableSchema* schema,
+                              std::vector<schema::ColumnSchema>* added_columns,
+                              bool* schema_changed) {
+  switch (action->node_kind()) {
+    case ::googlesql::RESOLVED_ADD_COLUMN_ACTION: {
+      absl::StatusOr<std::optional<schema::ColumnSchema>> column =
+          ProcessAddColumnAction(action, *schema, target);
+      if (!column.ok()) return column.status();
+      if (column->has_value()) {
+        added_columns->push_back(*std::move(*column));
+        schema->columns.push_back(added_columns->back());
+        *schema_changed = true;
+      }
+      return absl::OkStatus();
+    }
+    case ::googlesql::RESOLVED_DROP_COLUMN_ACTION: {
+      absl::Status s = ApplyDropColumnAction(action, schema, target);
+      if (!s.ok()) return s;
+      *schema_changed = true;
+      return absl::OkStatus();
+    }
+    case ::googlesql::RESOLVED_RENAME_COLUMN_ACTION: {
+      absl::Status s = ApplyRenameColumnAction(action, schema, target);
+      if (!s.ok()) return s;
+      *schema_changed = true;
+      return absl::OkStatus();
+    }
+    case ::googlesql::RESOLVED_SET_OPTIONS_ACTION:
+      return ApplySetOptionsAction(action);
+    default:
+      return absl::UnimplementedError(
+          absl::StrCat("control op executor: ALTER TABLE action ",
+                       action->node_kind_string(),
+                       " is not implemented"));
+  }
+}
+
 }  // namespace
 
 absl::Status RunAlterTable(storage::Storage& storage,
@@ -263,41 +302,9 @@ absl::Status RunAlterTable(storage::Storage& storage,
   for (int i = 0; i < stmt->alter_action_list_size(); ++i) {
     const ::googlesql::ResolvedAlterAction* action = stmt->alter_action_list(i);
     if (action == nullptr) continue;
-    switch (action->node_kind()) {
-      case ::googlesql::RESOLVED_ADD_COLUMN_ACTION: {
-        absl::StatusOr<std::optional<schema::ColumnSchema>> column =
-            ProcessAddColumnAction(action, new_schema, *target);
-        if (!column.ok()) return column.status();
-        if (column->has_value()) {
-          added_columns.push_back(*std::move(*column));
-          new_schema.columns.push_back(added_columns.back());
-          schema_changed = true;
-        }
-        break;
-      }
-      case ::googlesql::RESOLVED_DROP_COLUMN_ACTION: {
-        absl::Status s = ApplyDropColumnAction(action, &new_schema, *target);
-        if (!s.ok()) return s;
-        schema_changed = true;
-        break;
-      }
-      case ::googlesql::RESOLVED_RENAME_COLUMN_ACTION: {
-        absl::Status s = ApplyRenameColumnAction(action, &new_schema, *target);
-        if (!s.ok()) return s;
-        schema_changed = true;
-        break;
-      }
-      case ::googlesql::RESOLVED_SET_OPTIONS_ACTION: {
-        absl::Status s = ApplySetOptionsAction(action);
-        if (!s.ok()) return s;
-        break;
-      }
-      default:
-        return absl::UnimplementedError(
-            absl::StrCat("control op executor: ALTER TABLE action ",
-                         action->node_kind_string(),
-                         " is not implemented"));
-    }
+    absl::Status s = ApplyAlterAction(
+        action, *target, &new_schema, &added_columns, &schema_changed);
+    if (!s.ok()) return s;
   }
 
   if (!schema_changed) return absl::OkStatus();

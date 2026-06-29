@@ -9,6 +9,61 @@ namespace coordinator {
 
 namespace {
 
+bool IsDateOrTimestampOrderType(const ::googlesql::ResolvedOrderByItem* item) {
+  if (item == nullptr || item->column_ref() == nullptr ||
+      item->column_ref()->type() == nullptr) {
+    return false;
+  }
+  const ::googlesql::TypeKind kind = item->column_ref()->type()->kind();
+  return kind == ::googlesql::TYPE_DATE || kind == ::googlesql::TYPE_TIMESTAMP;
+}
+
+const ::googlesql::ResolvedAnalyticFunctionCall* AsRangeAnalyticCall(
+    const ::googlesql::ResolvedComputedColumnBase* col) {
+  if (col == nullptr || col->expr() == nullptr ||
+      col->expr()->node_kind() !=
+          ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
+    return nullptr;
+  }
+  const auto* call =
+      col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
+  if (call == nullptr || call->window_frame() == nullptr ||
+      call->window_frame()->frame_unit() !=
+          ::googlesql::ResolvedWindowFrame::RANGE) {
+    return nullptr;
+  }
+  return call;
+}
+
+bool IsNumericOffsetBoundary(
+    const ::googlesql::ResolvedWindowFrameExpr* boundary) {
+  if (boundary == nullptr) return false;
+  const ::googlesql::ResolvedWindowFrameExpr::BoundaryType type =
+      boundary->boundary_type();
+  const bool is_offset =
+      type == ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING ||
+      type == ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING;
+  if (!is_offset || boundary->expression() == nullptr ||
+      boundary->expression()->type() == nullptr) {
+    return false;
+  }
+  return boundary->expression()->type()->kind() != ::googlesql::TYPE_INTERVAL;
+}
+
+bool GroupHasNumericRangeFrame(
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group) {
+  for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+    const auto* call = AsRangeAnalyticCall(group->analytic_function_list(f));
+    if (call == nullptr) continue;
+    const ::googlesql::ResolvedWindowFrame* frame = call->window_frame();
+    if (IsNumericOffsetBoundary(frame->start_expr()) ||
+        IsNumericOffsetBoundary(frame->end_expr())) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool AnalyticScanHasDateTimestampNumericRangeFrame(
     const ::googlesql::ResolvedAnalyticScan* node) {
   if (node == nullptr) return false;
@@ -18,56 +73,8 @@ bool AnalyticScanHasDateTimestampNumericRangeFrame(
     if (group == nullptr || group->order_by() == nullptr) continue;
     const ::googlesql::ResolvedWindowOrdering* order = group->order_by();
     if (order->order_by_item_list_size() == 0) continue;
-    const ::googlesql::ResolvedOrderByItem* item = order->order_by_item_list(0);
-    if (item == nullptr || item->column_ref() == nullptr ||
-        item->column_ref()->type() == nullptr) {
-      continue;
-    }
-    const ::googlesql::Type* order_type = item->column_ref()->type();
-    if (order_type->kind() != ::googlesql::TYPE_DATE &&
-        order_type->kind() != ::googlesql::TYPE_TIMESTAMP) {
-      continue;
-    }
-    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
-      const ::googlesql::ResolvedComputedColumnBase* col =
-          group->analytic_function_list(f);
-      if (col == nullptr || col->expr() == nullptr ||
-          col->expr()->node_kind() !=
-              ::googlesql::RESOLVED_ANALYTIC_FUNCTION_CALL) {
-        continue;
-      }
-      const auto* afn =
-          col->expr()->GetAs<::googlesql::ResolvedAnalyticFunctionCall>();
-      if (afn == nullptr || afn->window_frame() == nullptr ||
-          afn->window_frame()->frame_unit() !=
-              ::googlesql::ResolvedWindowFrame::RANGE) {
-        continue;
-      }
-      const ::googlesql::ResolvedWindowFrame* wf = afn->window_frame();
-      const auto* start = wf->start_expr();
-      const auto* end = wf->end_expr();
-      const bool numeric_start =
-          start != nullptr &&
-          (start->boundary_type() ==
-               ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING ||
-           start->boundary_type() ==
-               ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING) &&
-          start->expression() != nullptr &&
-          start->expression()->type() != nullptr &&
-          start->expression()->type()->kind() != ::googlesql::TYPE_INTERVAL;
-      const bool numeric_end =
-          end != nullptr &&
-          (end->boundary_type() ==
-               ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING ||
-           end->boundary_type() ==
-               ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING) &&
-          end->expression() != nullptr &&
-          end->expression()->type() != nullptr &&
-          end->expression()->type()->kind() != ::googlesql::TYPE_INTERVAL;
-      if (numeric_start || numeric_end) {
-        return true;
-      }
-    }
+    if (!IsDateOrTimestampOrderType(order->order_by_item_list(0))) continue;
+    if (GroupHasNumericRangeFrame(group)) return true;
   }
   return false;
 }

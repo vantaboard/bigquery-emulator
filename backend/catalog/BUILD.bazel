@@ -500,9 +500,13 @@ cc_library(
     name = "googlesql_catalog",
     srcs = [
         "googlesql_catalog.cc",
+        "googlesql_catalog_find_helpers.cc",
         "googlesql_catalog_wildcard.cc",
     ],
-    hdrs = ["googlesql_catalog.h"],
+    hdrs = [
+        "googlesql_catalog.h",
+        "googlesql_catalog_find_helpers.h",
+    ],
     deps = [
         ":emulator_builtin_extensions",
         ":emulator_ml_tvf_extensions",
