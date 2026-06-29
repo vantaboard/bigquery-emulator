@@ -82,6 +82,28 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAggregateScan(
     const ::googlesql::ResolvedAggregateScanBase& aggregate, EvalContext& ctx);
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
     const ::googlesql::ResolvedAnalyticScan& analytic, EvalContext& ctx);
+
+struct AnalyticGroupLayout {
+  std::vector<std::string> partition_fps{};
+  std::vector<int64_t> row_numbers{};
+};
+
+AnalyticGroupLayout BuildAnalyticGroupLayout(
+    const ::googlesql::ResolvedAnalyticFunctionGroup& group,
+    const ::googlesql::ResolvedWindowOrdering* order_spec,
+    const std::vector<ColumnBindings>& input_rows);
+Value LookupColumnValue(const ColumnBindings& row, int col_id);
+absl::StatusOr<Value> AddValues(const Value& a, const Value& b);
+absl::StatusOr<Value> FrameBoundValue(
+    const ::googlesql::ResolvedWindowFrameExpr* bound,
+    const Value& current_order,
+    EvalContext& ctx);
+bool ValueInClosedRange(const Value& value,
+                        const Value& low,
+                        bool has_low,
+                        const Value& high,
+                        bool has_high);
+
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeSampleScan(
     const ::googlesql::ResolvedSampleScan& scan, EvalContext& ctx);
 std::string GroupKeyFingerprint(const std::vector<Value>& keys);

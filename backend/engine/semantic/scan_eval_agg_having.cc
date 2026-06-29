@@ -40,7 +40,7 @@ absl::StatusOr<std::vector<size_t>> FilterRowsByHavingModifier(
 
   struct RowHaving {
     size_t index = 0;
-    Value having_val;
+    Value having_val{};
   };
   std::vector<RowHaving> rows;
   rows.reserve(row_indices.size());

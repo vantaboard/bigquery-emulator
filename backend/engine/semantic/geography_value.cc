@@ -36,11 +36,12 @@ int64_t MetadataWord(const Value& value) {
 // The prebuilt stub's EmptyGeography() aborts; flip the is_null bit on
 // NullGeography metadata using INT64 null/non-null as the mask reference.
 int64_t NonNullGeographyMetadata() {
-  const int64_t null_int64 = MetadataWord(Value::NullInt64());
-  const int64_t non_null_int64 = MetadataWord(Value::Int64(0));
-  const int64_t null_bit_mask = null_int64 ^ non_null_int64;
-  const int64_t null_geo = MetadataWord(Value::NullGeography());
-  return null_geo ^ null_bit_mask;
+  const Value null_int64{Value::NullInt64()};
+  const Value non_null_int64{Value::Int64(0)};
+  int64_t null_bit_mask = 0;
+  null_bit_mask = MetadataWord(null_int64) ^ MetadataWord(non_null_int64);
+  const Value null_geo{Value::NullGeography()};
+  return MetadataWord(null_geo) ^ null_bit_mask;
 }
 
 const GeographyRef* GeographyRefFromValue(const Value& value) {

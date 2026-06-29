@@ -67,8 +67,8 @@ SubstrTriState SearchComposite(const Value& v,
   bool saw_null_without_match = false;
   for (int i = 0; i < count; ++i) {
     const Value& child = is_array ? v.element(i) : v.field(i);
-    const SubstrTriState child_result =
-        ContainsSubstrRecursive(child, normalized_needle);
+    SubstrTriState child_result = SubstrTriState::kFalse;
+    child_result = ContainsSubstrRecursive(child, normalized_needle);
     if (child_result == SubstrTriState::kTrue) {
       return SubstrTriState::kTrue;
     }
@@ -122,8 +122,8 @@ absl::StatusOr<Value> ContainsSubstr(const std::vector<Value>& args) {
     return normalized_needle.status();
   }
 
-  const SubstrTriState result =
-      ContainsSubstrRecursive(args[0], *normalized_needle);
+  SubstrTriState result = SubstrTriState::kFalse;
+  result = ContainsSubstrRecursive(args[0], *normalized_needle);
   if (result == SubstrTriState::kTrue) {
     return Value::Bool(true);
   }

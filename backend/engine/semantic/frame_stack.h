@@ -108,7 +108,7 @@ class FrameStack {
   // the name (rather than allocating a fresh slot in the top
   // frame).
   using Frame = absl::flat_hash_map<std::string, Value>;
-  std::vector<Frame> frames_;
+  std::vector<Frame> frames_{};
 };
 
 }  // namespace semantic

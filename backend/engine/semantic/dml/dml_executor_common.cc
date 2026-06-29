@@ -89,7 +89,8 @@ absl::StatusOr<absl::flat_hash_map<int, int>> BuildColumnIndexByColumnId(
   by_id.reserve(scan.column_list_size());
   for (int i = 0; i < scan.column_list_size(); ++i) {
     const ::googlesql::ResolvedColumn& col = scan.column_list(i);
-    const int idx = IndexOfColumn(schema, col.name());
+    int idx = -1;
+    idx = IndexOfColumn(schema, col.name());
     if (idx < 0) {
       return absl::InternalError(
           absl::StrCat("semantic/dml: ResolvedTableScan column '",
@@ -231,7 +232,8 @@ absl::StatusOr<UpdateTarget> ParseUpdateTarget(
                      " is not yet supported; see docs/ENGINE_POLICY.md"));
   }
   const auto* col_ref = cur->GetAs<::googlesql::ResolvedColumnRef>();
-  const int idx = IndexOfColumn(schema, col_ref->column().name());
+  int idx = -1;
+  idx = IndexOfColumn(schema, col_ref->column().name());
   if (idx < 0) {
     return absl::InternalError(
         absl::StrCat("semantic/dml: UPDATE target column '",
@@ -316,7 +318,8 @@ absl::Status CheckAssertRowsModified(
         "semantic/dml: ASSERT_ROWS_MODIFIED rows must be a non-null INT64");
   }
   const int64_t expected_count = expected.int64_value();
-  const int64_t actual = AffectedRowCount(kind, stats);
+  int64_t actual = 0;
+  actual = AffectedRowCount(kind, stats);
   if (actual != expected_count) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              absl::StrCat("DML statement modified ",

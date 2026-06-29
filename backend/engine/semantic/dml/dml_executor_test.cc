@@ -129,7 +129,7 @@ class FakeStorage : public storage::Storage {
     }
 
    private:
-    std::vector<storage::Row> rows_;
+    std::vector<storage::Row> rows_{};
     size_t cursor_ = 0;
   };
 

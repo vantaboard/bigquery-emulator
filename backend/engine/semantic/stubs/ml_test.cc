@@ -95,8 +95,8 @@ class MlStubTest : public ::testing::Test {
     if (!s.ok() || last_output_ == nullptr) {
       return nullptr;
     }
-    const ::googlesql::ResolvedStatement* stmt =
-        last_output_->resolved_statement();
+    const ::googlesql::ResolvedStatement* stmt = nullptr;
+    stmt = last_output_->resolved_statement();
     if (stmt == nullptr ||
         stmt->node_kind() != ::googlesql::RESOLVED_QUERY_STMT) {
       return nullptr;

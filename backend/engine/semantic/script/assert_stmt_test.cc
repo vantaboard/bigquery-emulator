@@ -76,8 +76,8 @@ class AssertStmtTest : public ::testing::Test {
         sql, options, catalog_.get(), type_factory_.get(), &last_output_);
     EXPECT_TRUE(s.ok()) << s;
     if (!s.ok() || last_output_ == nullptr) return nullptr;
-    const ::googlesql::ResolvedStatement* stmt =
-        last_output_->resolved_statement();
+    const ::googlesql::ResolvedStatement* stmt = nullptr;
+    stmt = last_output_->resolved_statement();
     EXPECT_NE(stmt, nullptr);
     if (stmt == nullptr) return nullptr;
     EXPECT_EQ(stmt->node_kind(), ::googlesql::RESOLVED_ASSERT_STMT);
