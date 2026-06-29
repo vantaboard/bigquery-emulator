@@ -52,7 +52,7 @@ absl::StatusOr<DmlStats> RunInsertSelect(
 
   absl::Status attach =
       AttachInsertSelectSourceTables(connection->conn, storage, collector);
-  if (!attach.ok()) return attach.status();
+  if (!attach.ok()) return attach;
 
   absl::StatusOr<std::vector<storage::Row>> selected =
       ExecuteInsertSelectQuery(&*connection, *select_sql, insert);

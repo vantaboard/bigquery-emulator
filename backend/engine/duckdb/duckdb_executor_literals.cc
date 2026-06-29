@@ -329,6 +329,31 @@ absl::StatusOr<std::string> RenderSemanticParameterLiteral(
   return RenderScalarLiteral(*storage_or, col);
 }
 
+namespace {
+
+const QueryParameter* LookupParameterForRef(
+    const transpiler::Transpiler::ParameterRef& ref,
+    absl::Span<const QueryParameter> parameters) {
+  if (!ref.name.empty()) {
+    for (const QueryParameter& p : parameters) {
+      if (absl::EqualsIgnoreCase(p.name, ref.name)) {
+        return &p;
+      }
+    }
+    return nullptr;
+  }
+  int seen = 0;
+  for (const QueryParameter& p : parameters) {
+    if (!p.name.empty()) continue;
+    if (++seen == ref.position) {
+      return &p;
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
+
 absl::StatusOr<std::string> SubstituteDuckdbParameters(
     std::string sql,
     const std::vector<transpiler::Transpiler::ParameterRef>& order,
@@ -337,24 +362,7 @@ absl::StatusOr<std::string> SubstituteDuckdbParameters(
   std::vector<std::string> literals(order.size());
   for (size_t i = 0; i < order.size(); ++i) {
     const transpiler::Transpiler::ParameterRef& ref = order[i];
-    const QueryParameter* param = nullptr;
-    if (!ref.name.empty()) {
-      for (const QueryParameter& p : parameters) {
-        if (absl::EqualsIgnoreCase(p.name, ref.name)) {
-          param = &p;
-          break;
-        }
-      }
-    } else {
-      int seen = 0;
-      for (const QueryParameter& p : parameters) {
-        if (!p.name.empty()) continue;
-        if (++seen == ref.position) {
-          param = &p;
-          break;
-        }
-      }
-    }
+    const QueryParameter* param = LookupParameterForRef(ref, parameters);
     if (param == nullptr) {
       return absl::InvalidArgumentError(absl::StrCat(
           "DuckDbExecutor: missing query parameter for DuckDB placeholder $",

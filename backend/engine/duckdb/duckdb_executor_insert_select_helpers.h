@@ -7,6 +7,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/engine/engine.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -32,7 +33,7 @@ absl::StatusOr<InsertSelectTarget> ValidateInsertSelectTarget(
 absl::StatusOr<std::string> PrepareInsertSelectSql(
     const QueryRequest& request,
     const ::googlesql::ResolvedInsertStmt& insert,
-    internal::TableScanCollector* collector);
+    TableScanCollector* collector);
 
 struct InsertSelectConnection {
   ::duckdb_database db = nullptr;
@@ -46,7 +47,7 @@ absl::StatusOr<InsertSelectConnection> OpenInsertSelectConnection();
 absl::Status AttachInsertSelectSourceTables(
     ::duckdb_connection conn,
     storage::Storage* storage,
-    const internal::TableScanCollector& collector);
+    const TableScanCollector& collector);
 
 absl::StatusOr<std::vector<storage::Row>> ExecuteInsertSelectQuery(
     InsertSelectConnection* connection,

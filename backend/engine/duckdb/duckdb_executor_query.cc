@@ -16,6 +16,7 @@
 #include "backend/catalog/wildcard_table.h"
 #include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/duckdb_executor.h"
+#include "backend/engine/duckdb/duckdb_executor_attach_helpers.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/engine/duckdb/duckdb_executor_security.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
@@ -303,62 +304,12 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
   // The transpiler assumes `Table::Name()` resolves to a relation
   // already present in the connection's default schema.
   const absl::Time attach_start = absl::Now();
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    if (tbl == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::FailedPreconditionError(
-          "duckdb engine: null table reference in query scan");
-    }
-    if (const auto* wildcard_table =
-            dynamic_cast<const catalog::WildcardTable*>(tbl)) {
-      std::optional<std::vector<std::string>> suffix_allowlist =
-          collector.WildcardSuffixAllowList(tbl);
-      absl::Status status =
-          wildcard_table->MaterializeInDuckDBWithSuffixAllowList(
-              conn,
-              storage_,
-              internal::QuoteIdent(tbl->Name()),
-              suffix_allowlist);
-      if (!status.ok()) {
-        ::duckdb_disconnect(&conn);
-        ::duckdb_close(&db);
-        return status;
-      }
-      continue;
-    }
-    if (const auto* virtual_table =
-            dynamic_cast<const catalog::VirtualCatalogTable*>(tbl)) {
-      absl::Status status = virtual_table->MaterializeInDuckDB(
-          conn, storage_, internal::QuoteIdent(tbl->Name()));
-      if (!status.ok()) {
-        ::duckdb_disconnect(&conn);
-        ::duckdb_close(&db);
-        return status;
-      }
-      continue;
-    }
-    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (storage_table == nullptr) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return absl::UnimplementedError(absl::StrCat(
-          "duckdb engine: cannot attach non-StorageTable '",
-          tbl->Name(),
-          "'; rebuild against a GoogleSqlCatalog-backed analyzer"));
-    }
-    absl::Status status = internal::AttachStorageTable(
-        conn,
-        storage_,
-        *storage_table,
-        collector.SystemTimeAsOfMs(tbl),
-        collector.RowAccessFilterSql(tbl).value_or(""),
-        request.phase_recorder.get());
-    if (!status.ok()) {
-      ::duckdb_disconnect(&conn);
-      ::duckdb_close(&db);
-      return status;
-    }
+  if (absl::Status attach = internal::AttachCollectedQueryTables(
+          conn, storage_, collector, request.phase_recorder.get());
+      !attach.ok()) {
+    ::duckdb_disconnect(&conn);
+    ::duckdb_close(&db);
+    return attach;
   }
 
   if (request.phase_recorder != nullptr) {

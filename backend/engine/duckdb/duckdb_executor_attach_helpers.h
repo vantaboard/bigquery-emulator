@@ -9,6 +9,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/engine/phase_recorder.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -48,6 +49,11 @@ absl::Status ApplyRowAccessFilterDelete(
     ::duckdb_connection conn,
     absl::string_view quoted_table_name,
     absl::string_view row_access_filter_sql);
+
+absl::Status AttachCollectedQueryTables(::duckdb_connection conn,
+                                        storage::Storage* storage,
+                                        const TableScanCollector& collector,
+                                        PhaseRecorder* phase_recorder);
 
 }  // namespace internal
 }  // namespace duckdb

@@ -9,6 +9,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "backend/catalog/virtual_table.h"
+#include "backend/catalog/wildcard_table.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
 #include "backend/storage/duckdb/duckdb_storage_internal.h"
 
@@ -134,6 +136,51 @@ absl::Status ApplyRowAccessFilterDelete(
                                      " WHERE NOT (",
                                      row_access_filter_sql,
                                      ")"));
+}
+
+absl::Status AttachCollectedQueryTables(::duckdb_connection conn,
+                                        storage::Storage* storage,
+                                        const TableScanCollector& collector,
+                                        PhaseRecorder* phase_recorder) {
+  for (const ::googlesql::Table* tbl : collector.tables()) {
+    if (tbl == nullptr) {
+      return absl::FailedPreconditionError(
+          "duckdb engine: null table reference in query scan");
+    }
+    if (const auto* wildcard_table =
+            dynamic_cast<const catalog::WildcardTable*>(tbl)) {
+      std::optional<std::vector<std::string>> suffix_allowlist =
+          collector.WildcardSuffixAllowList(tbl);
+      absl::Status status =
+          wildcard_table->MaterializeInDuckDBWithSuffixAllowList(
+              conn, storage, QuoteIdent(tbl->Name()), suffix_allowlist);
+      if (!status.ok()) return status;
+      continue;
+    }
+    if (const auto* virtual_table =
+            dynamic_cast<const catalog::VirtualCatalogTable*>(tbl)) {
+      absl::Status status = virtual_table->MaterializeInDuckDB(
+          conn, storage, QuoteIdent(tbl->Name()));
+      if (!status.ok()) return status;
+      continue;
+    }
+    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (storage_table == nullptr) {
+      return absl::UnimplementedError(absl::StrCat(
+          "duckdb engine: cannot attach non-StorageTable '",
+          tbl->Name(),
+          "'; rebuild against a GoogleSqlCatalog-backed analyzer"));
+    }
+    absl::Status status =
+        AttachStorageTable(conn,
+                           storage,
+                           *storage_table,
+                           collector.SystemTimeAsOfMs(tbl),
+                           collector.RowAccessFilterSql(tbl).value_or(""),
+                           phase_recorder);
+    if (!status.ok()) return status;
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace internal
