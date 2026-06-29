@@ -44,14 +44,13 @@ tasks:
       - task: :emulator:build
 
   cpp-analysis:
-    desc: Slow C++ analysis lane (cppcheck mirror of CI's `cpp-analysis` job)
-    # Mirror of the `cpp-analysis` job in `.github/workflows/ci.yml`.
-    # clang-tidy is NOT included here because it requires a
-    # `compile_commands.json` (`task lint:cpp:compile-commands`); CI
-    # likewise gates that lane behind a successful Bazel build of the
-    # engine. Local maintainers can run `task lint:cpp:tidy`
-    # explicitly after generating the compile DB, or use
-    # `task lint:cpp:tidy-files FILES="path/a.cc path/b.cc"` for
-    # focused reruns on changed files.
+    desc: Slow C++ analysis lane (cppcheck + clang-tidy mirror of CI)
+    # Mirror of the `cpp-analysis` job in
+    # `.github/workflows/ci-cpp-analysis.yml`. Requires a warm Bazel
+    # GoogleSQL configuration for `lint:cpp:compile-commands`; run after
+    # `task emulator:build-engine:bazel` (or ensure
+    # `.cache/googlesql-prebuilt/` is populated via `task googlesql:fetch`).
     cmds:
       - task: :lint:cpp:cppcheck
+      - task: :lint:cpp:compile-commands
+      - task: :lint:cpp:tidy-parallel

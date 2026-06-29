@@ -125,12 +125,13 @@ explicit run id is passed.
 
 **Fast lanes (optional but recommended):**
 
-- `ci-cpp-analysis / cpp-analysis (cppcheck)`
+- `ci-cpp-analysis / cpp-analysis (cppcheck + clang-tidy)`
 - `conformance-routing-matrix / routing-matrix` (`continue-on-error: true` in workflow)
 - `thirdparty-golang-compile / golang-bigquery-tests (compile + skip)`
 
 If branch protection previously required `ci / cpp-analysis (cppcheck)`, update
-it to **`ci-cpp-analysis / cpp-analysis (cppcheck)`** (workflow was split out).
+it to **`ci-cpp-analysis / cpp-analysis (cppcheck + clang-tidy)`** (workflow was
+split out; job name changed when clang-tidy was added).
 
 ## Local development
 

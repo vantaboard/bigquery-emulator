@@ -209,12 +209,9 @@ tasks:
     #   3. `lint:cpp:source`  — Go-based source-only checker (file
     #                            length, banned logging, status
     #                            anti-patterns).
-    #   4. `lint:cpp:tidy`    — clang-tidy (compile-aware; requires
-    #                            `compile_commands.json` at the repo
-    #                            root — run
-    #                            `task lint:cpp:compile-commands`
-    #                            first if missing).
-    #   5. `lint:cpp:cppcheck`— secondary-analysis lane.
+    #   5. `lint:cpp:tidy-parallel` — clang-tidy batch (compile-aware;
+    #                            requires `compile_commands.json`;
+    #                            same lane as CI cpp-analysis).
     #   6. `lint:dispositions`— disposition parity gate.
     #
     # Every lane runs to completion even when an earlier lane fails; a
@@ -250,7 +247,7 @@ tasks:
         run_lane go task -s lint:go
         run_lane cpp:format task -s lint:cpp:format
         run_lane cpp:source task -s lint:cpp:source
-        run_lane cpp:tidy task -s lint:cpp:tidy
+        run_lane cpp:tidy task -s lint:cpp:tidy-parallel
         run_lane cpp:cppcheck task -s lint:cpp:cppcheck
         run_lane dispositions task -s lint:dispositions
 

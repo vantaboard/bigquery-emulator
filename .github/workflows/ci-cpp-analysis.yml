@@ -1,8 +1,8 @@
-# Slow C++ analysis lane (cppcheck). Runs on push/PR in parallel with
-# build-engine and does not wait for the engine artifact.
+# Slow C++ analysis lane (cppcheck + clang-tidy). Runs on push/PR in
+# parallel with build-engine and does not wait for the engine artifact.
 #
-# Mirror of `task lint:cpp:cppcheck` and the former `cpp-analysis` job
-# in ci.yml. The build/test gate lives in ci.yml (workflow_run only).
+# Mirror of `task ci:cpp-analysis` (cppcheck, compile_commands,
+# tidy-parallel). The build/test gate lives in ci.yml (workflow_run).
 
 name: ci-cpp-analysis
 
@@ -20,8 +20,9 @@ concurrency:
 
 jobs:
   cpp-analysis:
-    name: cpp-analysis (cppcheck)
+    name: cpp-analysis (cppcheck + clang-tidy)
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -38,10 +39,64 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install cppcheck
+      - name: Install C++ lint and Bazel query deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cppcheck
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            clang-format \
+            clang-tidy \
+            cppcheck \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Restore GoogleSQL prebuilt cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/googlesql-prebuilt
+          key: googlesql-prebuilt-${{ vars.GOOGLESQL_PREBUILT_SHA256 || 'source' }}
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: engine-v2
+          cache-version: 2
+          repository-cache: true
+
+      - name: Resolve GoogleSQL build mode
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
+        with:
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: cppcheck on first-party C++ tree
         run: task lint:cpp:cppcheck
+
+      - name: Generate compile_commands.json
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+        run: task lint:cpp:compile-commands
+
+      - name: clang-tidy (parallel first-party tree)
+        env:
+          JOBS: "4"
+          LOG: lint-cpp-tidy.log
+        run: task lint:cpp:tidy-parallel
+
+      - name: Upload clang-tidy log on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lint-cpp-tidy-log
+          path: lint-cpp-tidy.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Release Bazel daemon
+        if: always()
+        run: timeout 60 bazel shutdown || true

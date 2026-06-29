@@ -204,7 +204,7 @@ using either: a bare `NOLINT` is rarely the right answer.
 | Job | Workflow | Posture |
 |---|---|---|
 | `build-and-test` | [`ci.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++, cppcheck) and `task lint:cpp:test`. |
-| `cpp-analysis` | [`ci-cpp-analysis.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`; clang-tidy is wired (`task lint:cpp:tidy`) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI. |
+| `cpp-analysis` | [`ci-cpp-analysis.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`, generates `compile_commands.json`, then `task lint:cpp:tidy-parallel` (JOBS=4, 240 min timeout). |
 
 The local mirror is `task ci:run`; the analysis lane on its own is
 `task ci:cpp-analysis`.
