@@ -7,9 +7,12 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "proto/storage_write.grpc.pb.h"
@@ -171,6 +174,38 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   // must be in `[flushed_rows-1, buffered_rows.size()-1]`.
   ::grpc::Status CommitBufferedPrefix(StreamState* state, std::int64_t offset)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+
+  ::grpc::Status LoadStreamSessionForAppend(absl::string_view bound_stream_name,
+                                            StreamSessionSnapshot* session)
+      ABSL_LOCKS_EXCLUDED(mu_);
+
+  ::grpc::Status CommitBufferedAppendRows(
+      absl::string_view bound_stream_name,
+      std::vector<backend::storage::Row> rows,
+      std::int64_t* prior_offset) ABSL_LOCKS_EXCLUDED(mu_);
+
+  ::grpc::Status CommitImmediateAppendRows(
+      absl::string_view bound_stream_name,
+      const backend::storage::TableId& table,
+      absl::Span<const backend::storage::Row> rows,
+      std::int64_t* prior_offset,
+      v1::AppendRowsResponse* resp) ABSL_LOCKS_EXCLUDED(mu_);
+
+  ::grpc::Status BindWriteStreamFromRequest(
+      const v1::AppendRowsRequest& req,
+      std::string* bound_stream_name,
+      backend::storage::TableId* bound_table);
+
+  static ::grpc::Status WriteAppendResponse(
+      ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+          stream,
+      v1::AppendRowsResponse resp);
+
+  struct StreamSessionSnapshot {
+    backend::storage::TableId table;
+    backend::schema::TableSchema schema;
+    std::optional<v1::WriteStream::Type> type;
+  };
 
   backend::storage::Storage* storage_;  // not owned
   mutable absl::Mutex mu_;

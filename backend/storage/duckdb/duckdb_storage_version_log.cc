@@ -118,37 +118,51 @@ absl::StatusOr<std::string> ParseJsonStringField(absl::string_view json,
   return out;
 }
 
+bool ParseVersionEntryFile(absl::string_view json,
+                           size_t pos,
+                           VersionEntry* entry) {
+  const size_t file_key = json.find("\"file\":\"", pos);
+  if (file_key == absl::string_view::npos) {
+    return false;
+  }
+  absl::string_view file_rest = json.substr(file_key + 8);
+  for (size_t i = 0; i < file_rest.size(); ++i) {
+    if (file_rest[i] == '\\' && i + 1 < file_rest.size()) {
+      entry->file.push_back(file_rest[i + 1]);
+      ++i;
+      continue;
+    }
+    if (file_rest[i] == '"') break;
+    entry->file.push_back(file_rest[i]);
+  }
+  return !entry->file.empty();
+}
+
+bool ParseVersionEntryAt(absl::string_view json,
+                         size_t pos,
+                         VersionEntry* entry) {
+  const std::string key = "\"valid_from_ms\":";
+  absl::string_view rest = json.substr(pos + key.size());
+  size_t end = 0;
+  while (end < rest.size() &&
+         (rest[end] == '-' || (rest[end] >= '0' && rest[end] <= '9'))) {
+    ++end;
+  }
+  if (end > 0) {
+    if (!absl::SimpleAtoi(rest.substr(0, end), &entry->valid_from_ms)) {
+      entry->valid_from_ms = 0;
+    }
+  }
+  return ParseVersionEntryFile(json, pos, entry);
+}
+
 std::vector<VersionEntry> ParseVersionEntries(absl::string_view json) {
   std::vector<VersionEntry> out;
   const std::string key = "\"valid_from_ms\":";
   size_t pos = 0;
   while ((pos = json.find(key, pos)) != absl::string_view::npos) {
     VersionEntry entry;
-    absl::string_view rest = json.substr(pos + key.size());
-    size_t end = 0;
-    while (end < rest.size() &&
-           (rest[end] == '-' || (rest[end] >= '0' && rest[end] <= '9'))) {
-      ++end;
-    }
-    if (end > 0) {
-      if (!absl::SimpleAtoi(rest.substr(0, end), &entry.valid_from_ms)) {
-        entry.valid_from_ms = 0;
-      }
-    }
-    const size_t file_key = json.find("\"file\":\"", pos);
-    if (file_key != absl::string_view::npos) {
-      absl::string_view file_rest = json.substr(file_key + 8);
-      for (size_t i = 0; i < file_rest.size(); ++i) {
-        if (file_rest[i] == '\\' && i + 1 < file_rest.size()) {
-          entry.file.push_back(file_rest[i + 1]);
-          ++i;
-          continue;
-        }
-        if (file_rest[i] == '"') break;
-        entry.file.push_back(file_rest[i]);
-      }
-    }
-    if (!entry.file.empty()) {
+    if (ParseVersionEntryAt(json, pos, &entry)) {
       out.push_back(std::move(entry));
     }
     pos += key.size();

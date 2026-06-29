@@ -7,6 +7,7 @@ cc_library(
     srcs = [
         "sql_tools.cc",
         "sql_tools_complete.cc",
+        "sql_tools_complete_helpers.cc",
     ],
     hdrs = ["sql_tools.h"],
     deps = [

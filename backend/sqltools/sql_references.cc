@@ -47,7 +47,7 @@ class ReferencedTableCollector : public ::googlesql::ResolvedASTVisitor {
   }
 
  private:
-  std::vector<Entry> entries_;
+  std::vector<Entry> entries_{};
 };
 
 std::vector<CatalogColumnEntry> ColumnsForTable(
@@ -304,6 +304,44 @@ void PopulateInScopeTablesFromAnalyze(const AnalyzeResult& analyze,
   }
 }
 
+std::string ReadTableAliasFromTokens(
+    const std::vector<::googlesql::ParseToken>& tokens, size_t* j) {
+  if (*j < tokens.size() && tokens[*j].IsKeyword() &&
+      tokens[*j].GetKeyword() == "AS") {
+    ++(*j);
+    if (*j < tokens.size() && tokens[*j].IsIdentifier()) {
+      const std::string alias = tokens[*j].GetIdentifier();
+      ++(*j);
+      return alias;
+    }
+    return {};
+  }
+  if (*j < tokens.size() && tokens[*j].IsIdentifier()) {
+    const std::string alias = tokens[*j].GetIdentifier();
+    ++(*j);
+    return alias;
+  }
+  if (*j < tokens.size() && tokens[*j].IsKeyword() &&
+      !IsPostTableKeyword(tokens[*j].GetKeyword())) {
+    const std::string alias = tokens[*j].GetKeyword();
+    ++(*j);
+    return alias;
+  }
+  return {};
+}
+
+void AppendHeuristicTableRef(absl::string_view table_ref,
+                             std::string alias,
+                             absl::string_view default_dataset_id,
+                             CatalogNames* names) {
+  InScopeTableRef scope;
+  scope.table_key = std::string(table_ref);
+  scope.alias = std::move(alias);
+  scope.columns =
+      LookupColumnsForTableRef(table_ref, default_dataset_id, *names);
+  AppendInScopeTable(names, std::move(scope));
+}
+
 void PopulateInScopeTablesFromHeuristic(
     absl::string_view sql,
     const ::googlesql::LanguageOptions& language,
@@ -334,29 +372,8 @@ void PopulateInScopeTablesFromHeuristic(
     std::string table_ref;
     if (!ReadDottedName(tokens, &j, &table_ref)) continue;
 
-    std::string alias;
-    if (j < tokens.size() && tokens[j].IsKeyword() &&
-        tokens[j].GetKeyword() == "AS") {
-      ++j;
-      if (j < tokens.size() && tokens[j].IsIdentifier()) {
-        alias = tokens[j].GetIdentifier();
-        ++j;
-      }
-    } else if (j < tokens.size() && tokens[j].IsIdentifier()) {
-      alias = tokens[j].GetIdentifier();
-      ++j;
-    } else if (j < tokens.size() && tokens[j].IsKeyword() &&
-               !IsPostTableKeyword(tokens[j].GetKeyword())) {
-      alias = tokens[j].GetKeyword();
-      ++j;
-    }
-
-    InScopeTableRef scope;
-    scope.table_key = table_ref;
-    scope.alias = alias;
-    scope.columns =
-        LookupColumnsForTableRef(table_ref, default_dataset_id, *names);
-    AppendInScopeTable(names, std::move(scope));
+    const std::string alias = ReadTableAliasFromTokens(tokens, &j);
+    AppendHeuristicTableRef(table_ref, alias, default_dataset_id, names);
   }
 }
 

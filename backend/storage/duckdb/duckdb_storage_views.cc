@@ -180,6 +180,29 @@ void MergeViewSidecars(absl::string_view data_dir,
   }
 }
 
+void CollectOrphanViewsInDataset(absl::string_view data_dir,
+                                 absl::string_view project_id,
+                                 absl::string_view dataset_id,
+                                 absl::flat_hash_set<std::string>* seen,
+                                 std::vector<ViewRecord>* out) {
+  const fs::path dataset_dir = fs::path(data_dir) / project_id / dataset_id;
+  std::error_code ec;
+  for (const auto& table_entry : fs::directory_iterator(dataset_dir, ec)) {
+    if (ec) break;
+    const std::string name = table_entry.path().filename().string();
+    if (name.size() <= internal::kTableMetaSuffix.size()) continue;
+    if (!absl::EndsWith(name, internal::kTableMetaSuffix)) continue;
+    const std::string table_id =
+        name.substr(0, name.size() - internal::kTableMetaSuffix.size());
+    ViewId vid{std::string(project_id), std::string(dataset_id), table_id};
+    if (!seen->insert(ViewRecordKey(vid)).second) continue;
+    TableId tid{std::string(project_id), std::string(dataset_id), table_id};
+    auto rec_or = ViewRecordFromSidecar(data_dir, tid);
+    if (!rec_or.ok()) continue;
+    out->push_back(std::move(*rec_or));
+  }
+}
+
 void CollectOrphanViewsFromFilesystem(absl::string_view data_dir,
                                       absl::flat_hash_set<std::string>* seen,
                                       std::vector<ViewRecord>* out) {
@@ -195,21 +218,7 @@ void CollectOrphanViewsFromFilesystem(absl::string_view data_dir,
          fs::directory_iterator(project_entry.path(), ec)) {
       if (ec || !dataset_entry.is_directory(ec)) continue;
       const std::string dataset_id = dataset_entry.path().filename().string();
-      for (const auto& table_entry :
-           fs::directory_iterator(dataset_entry.path(), ec)) {
-        if (ec) break;
-        const std::string name = table_entry.path().filename().string();
-        if (name.size() <= internal::kTableMetaSuffix.size()) continue;
-        if (!absl::EndsWith(name, internal::kTableMetaSuffix)) continue;
-        const std::string table_id =
-            name.substr(0, name.size() - internal::kTableMetaSuffix.size());
-        ViewId vid{project_id, dataset_id, table_id};
-        if (!seen->insert(ViewRecordKey(vid)).second) continue;
-        TableId tid{project_id, dataset_id, table_id};
-        auto rec_or = ViewRecordFromSidecar(data_dir, tid);
-        if (!rec_or.ok()) continue;
-        out->push_back(std::move(*rec_or));
-      }
+      CollectOrphanViewsInDataset(data_dir, project_id, dataset_id, seen, out);
     }
   }
 }

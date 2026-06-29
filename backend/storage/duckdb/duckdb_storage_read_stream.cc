@@ -20,6 +20,82 @@ namespace duckdb {
 
 namespace fs = std::filesystem;
 
+namespace {
+
+struct ReadStreamPlan {
+  schema::TableSchema effective_schema;
+  std::string select_cols;
+};
+
+absl::StatusOr<ReadStreamPlan> PlanReadStreamProjection(
+    const schema::TableSchema& physical, const ReadFilter& filter) {
+  ReadStreamPlan plan;
+  plan.effective_schema = physical;
+  if (filter.selected_fields.empty()) {
+    plan.select_cols = internal::RenderColumnIdentList(physical);
+    return plan;
+  }
+  auto projected_or = internal::ProjectSchema(physical, filter.selected_fields);
+  if (!projected_or.ok()) return projected_or.status();
+  plan.effective_schema = std::move(*projected_or);
+  plan.select_cols =
+      internal::RenderSelectedColumnIdentList(physical, filter.selected_fields);
+  return plan;
+}
+
+void AppendReadStreamFilters(const ReadFilter& filter, std::string* sql) {
+  if (filter.where_sql.has_value() && !filter.where_sql->empty()) {
+    absl::StrAppend(sql, internal::RenderWhereSqlClause(*filter.where_sql));
+  } else if (filter.equality_predicate.has_value()) {
+    absl::StrAppend(
+        *sql, internal::RenderPredicateClause(*filter.equality_predicate));
+  }
+  if (filter.row_start > 0 || filter.row_end >= 0) {
+    const bool has_where = sql->find(" WHERE ") != std::string::npos;
+    if (has_where) {
+      if (filter.row_start > 0) {
+        absl::StrAppend(*sql, " AND file_row_number >= ", filter.row_start);
+      }
+      if (filter.row_end >= 0) {
+        absl::StrAppend(*sql, " AND file_row_number < ", filter.row_end);
+      }
+    } else {
+      absl::StrAppend(
+          *sql,
+          internal::RenderRowPartitionClause(filter.row_start, filter.row_end));
+    }
+  }
+}
+
+void AppendReadStreamPagination(const ReadFilter& filter, std::string* sql) {
+  absl::StrAppend(sql, " ORDER BY file_row_number");
+  if (filter.row_limit > 0) {
+    absl::StrAppend(sql, " LIMIT ", filter.row_limit);
+  }
+  if (filter.offset > 0) {
+    if (filter.row_limit <= 0) {
+      absl::StrAppend(sql, " LIMIT ALL");
+    }
+    absl::StrAppend(sql, " OFFSET ", filter.offset);
+  }
+}
+
+std::string BuildReadStreamSql(const std::string& parquet_path,
+                               absl::string_view select_cols,
+                               const ReadFilter& filter) {
+  std::string sql =
+      absl::StrCat("SELECT ",
+                   select_cols,
+                   " FROM read_parquet('",
+                   internal::EscapeStringLiteralInner(parquet_path),
+                   "', file_row_number = true)");
+  AppendReadStreamFilters(filter, &sql);
+  AppendReadStreamPagination(filter, &sql);
+  return sql;
+}
+
+}  // namespace
+
 absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
     const TableId& id, const ReadFilter& filter) const {
   absl::MutexLock lock(&mu_);
@@ -52,80 +128,14 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
         new internal::VectorRowIterator(std::move(rows)));
   }
 
-  // When the caller pins a
-  // `selected_fields` list we project rows down to that subset. The
-  // projected schema is what `ExecuteSelect` decodes against, so the
-  // `Row.cells` vector matches the projected column order exactly.
-  // An empty list means "all columns".
-  schema::TableSchema effective_schema = physical;
-  std::string select_cols;
-  if (!filter.selected_fields.empty()) {
-    auto projected_or =
-        internal::ProjectSchema(physical, filter.selected_fields);
-    if (!projected_or.ok()) return projected_or.status();
-    effective_schema = std::move(*projected_or);
-    select_cols = internal::RenderSelectedColumnIdentList(
-        physical, filter.selected_fields);
-  } else {
-    select_cols = internal::RenderColumnIdentList(physical);
-  }
+  auto plan_or = PlanReadStreamProjection(physical, filter);
+  if (!plan_or.ok()) return plan_or.status();
 
-  // ORDER BY a stable row identifier so OFFSET / LIMIT yield
-  // deterministic windows across calls. The Arrow query pipeline
-  // uses `read_parquet`'s `file_row_number` extra column for the
-  // same purpose; reuse that here so a caller resuming a stream
-  // at offset=N gets the same rows it would
-  // have received if it had stayed connected. The column is
-  // synthesized by DuckDB at scan time and never selected into the
-  // result.
-  std::string sql =
-      absl::StrCat("SELECT ",
-                   select_cols,
-                   " FROM read_parquet('",
-                   internal::EscapeStringLiteralInner(parquet_path),
-                   "', file_row_number = true)");
-  // Push the analyzer-transpiled restriction (or legacy equality
-  // predicate) down into a SQL WHERE clause before ORDER BY.
-  if (filter.where_sql.has_value() && !filter.where_sql->empty()) {
-    absl::StrAppend(&sql, internal::RenderWhereSqlClause(*filter.where_sql));
-  } else if (filter.equality_predicate.has_value()) {
-    absl::StrAppend(
-        &sql, internal::RenderPredicateClause(*filter.equality_predicate));
-  }
-  // Merge partition bounds on `file_row_number`. When a predicate WHERE
-  // already exists, append with AND; otherwise emit a fresh WHERE.
-  if (filter.row_start > 0 || filter.row_end >= 0) {
-    const bool has_where = sql.find(" WHERE ") != std::string::npos;
-    if (has_where) {
-      if (filter.row_start > 0) {
-        absl::StrAppend(&sql, " AND file_row_number >= ", filter.row_start);
-      }
-      if (filter.row_end >= 0) {
-        absl::StrAppend(&sql, " AND file_row_number < ", filter.row_end);
-      }
-    } else {
-      absl::StrAppend(
-          &sql,
-          internal::RenderRowPartitionClause(filter.row_start, filter.row_end));
-    }
-  }
-  absl::StrAppend(&sql, " ORDER BY file_row_number");
-  if (filter.row_limit > 0) {
-    absl::StrAppend(&sql, " LIMIT ", filter.row_limit);
-  }
-  if (filter.offset > 0) {
-    // DuckDB requires LIMIT to appear before OFFSET. When the caller
-    // did not pin a limit we still need to emit one for OFFSET to
-    // parse — use the DuckDB `LIMIT ALL` form so the optimizer keeps
-    // the cap unbounded.
-    if (filter.row_limit <= 0) {
-      absl::StrAppend(&sql, " LIMIT ALL");
-    }
-    absl::StrAppend(&sql, " OFFSET ", filter.offset);
-  }
+  const std::string sql =
+      BuildReadStreamSql(parquet_path, plan_or->select_cols, filter);
   auto status = internal::ExecuteSelect(impl_.get(),
                                         sql,
-                                        effective_schema,
+                                        plan_or->effective_schema,
                                         "CreateReadStream",
                                         id,
                                         parquet_path,

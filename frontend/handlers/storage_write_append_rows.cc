@@ -7,7 +7,6 @@
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
-#include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "frontend/handlers/storage_write.h"
 #include "frontend/handlers/storage_write_internal.h"
@@ -18,6 +17,165 @@ namespace frontend {
 
 using internal::AbslToGrpcStatus;
 using internal::CellToValue;
+
+namespace {
+
+struct DecodedAppendBatch {
+  bool shape_error = false;
+  std::string shape_error_detail;
+  std::vector<backend::storage::Row> rows;
+};
+
+DecodedAppendBatch DecodeAppendRowBatch(
+    const v1::AppendRowsRequest& req,
+    const backend::schema::TableSchema& schema) {
+  DecodedAppendBatch out;
+  const auto& rows_in = req.proto_rows().rows();
+  out.rows.reserve(rows_in.size());
+  for (int r = 0; r < rows_in.size(); ++r) {
+    const auto& src = rows_in[r];
+    if (src.cells_size() != static_cast<int>(schema.columns.size())) {
+      out.shape_error = true;
+      out.shape_error_detail =
+          absl::StrCat("AppendRows: row ",
+                       r,
+                       " has ",
+                       src.cells_size(),
+                       " cell(s) but the stream's table has ",
+                       schema.columns.size(),
+                       " top-level column(s)");
+      break;
+    }
+    backend::storage::Row row;
+    row.cells.reserve(src.cells_size());
+    for (const auto& cell : src.cells()) {
+      row.cells.push_back(CellToValue(cell));
+    }
+    out.rows.push_back(std::move(row));
+  }
+  return out;
+}
+
+}  // namespace
+
+::grpc::Status StorageWriteService::BindWriteStreamFromRequest(
+    const v1::AppendRowsRequest& req,
+    std::string* bound_stream_name,
+    backend::storage::TableId* bound_table) {
+  if (req.write_stream().empty()) {
+    if (bound_stream_name->empty()) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::INVALID_ARGUMENT,
+          "StorageWrite.AppendRows: first message must set write_stream");
+    }
+    return ::grpc::Status::OK;
+  }
+  backend::storage::TableId table;
+  std::string stream_id;
+  if (auto s = ParseStreamName(req.write_stream(), &table, &stream_id);
+      !s.ok()) {
+    return s;
+  }
+  if (!bound_stream_name->empty() && *bound_stream_name != req.write_stream()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::INVALID_ARGUMENT,
+        absl::StrCat("StorageWrite.AppendRows: cannot rebind stream "
+                     "mid-call (first message: ",
+                     *bound_stream_name,
+                     ", later message: ",
+                     req.write_stream(),
+                     ")"));
+  }
+  if (stream_id == "_default") {
+    if (auto s = EnsureDefaultStream(req.write_stream(), table); !s.ok()) {
+      return s;
+    }
+  }
+  *bound_stream_name = req.write_stream();
+  *bound_table = table;
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status StorageWriteService::WriteAppendResponse(
+    ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
+        stream,
+    v1::AppendRowsResponse resp) {
+  if (!stream->Write(resp)) {
+    return ::grpc::Status(::grpc::StatusCode::ABORTED,
+                          "StorageWrite.AppendRows: client cancelled "
+                          "mid-stream");
+  }
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status StorageWriteService::LoadStreamSessionForAppend(
+    absl::string_view bound_stream_name, StreamSessionSnapshot* session) {
+  absl::MutexLock lock(&mu_);
+  auto it = streams_.find(std::string(bound_stream_name));
+  if (it == streams_.end()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::NOT_FOUND,
+        absl::StrCat("StorageWrite.AppendRows: no such stream (call "
+                     "CreateWriteStream first or use the reserved "
+                     "_default suffix): ",
+                     bound_stream_name));
+  }
+  if (it->second.finalized) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::FAILED_PRECONDITION,
+        absl::StrCat("StorageWrite.AppendRows: stream is finalized: ",
+                     bound_stream_name));
+  }
+  session->table = it->second.table;
+  session->schema = it->second.schema;
+  session->type = it->second.type;
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status StorageWriteService::CommitBufferedAppendRows(
+    absl::string_view bound_stream_name,
+    std::vector<backend::storage::Row> rows,
+    std::int64_t* prior_offset) {
+  absl::MutexLock lock(&mu_);
+  auto it = streams_.find(std::string(bound_stream_name));
+  if (it == streams_.end()) {
+    return ::grpc::Status(
+        ::grpc::StatusCode::NOT_FOUND,
+        absl::StrCat("StorageWrite.AppendRows: no such stream: ",
+                     bound_stream_name));
+  }
+  *prior_offset = it->second.committed_rows;
+  it->second.committed_rows += static_cast<std::int64_t>(rows.size());
+  for (auto& row : rows) {
+    it->second.buffered_rows.push_back(std::move(row));
+  }
+  return ::grpc::Status::OK;
+}
+
+::grpc::Status StorageWriteService::CommitImmediateAppendRows(
+    absl::string_view bound_stream_name,
+    const backend::storage::TableId& table,
+    absl::Span<const backend::storage::Row> rows,
+    std::int64_t* prior_offset,
+    v1::AppendRowsResponse* resp) {
+  const absl::Status append_status =
+      rows.empty() ? absl::OkStatus() : storage_->AppendRows(table, rows);
+  if (!append_status.ok()) {
+    if (append_status.code() == absl::StatusCode::kInvalidArgument ||
+        append_status.code() == absl::StatusCode::kFailedPrecondition) {
+      resp->set_error_message(std::string(append_status.message()));
+      return ::grpc::Status::OK;
+    }
+    return AbslToGrpcStatus(append_status);
+  }
+  absl::MutexLock lock(&mu_);
+  auto it = streams_.find(std::string(bound_stream_name));
+  if (it != streams_.end()) {
+    *prior_offset = it->second.committed_rows;
+    it->second.committed_rows += static_cast<std::int64_t>(rows.size());
+  }
+  return ::grpc::Status::OK;
+}
 
 ::grpc::Status StorageWriteService::AppendRows(
     ::grpc::ServerContext* /*context*/,
@@ -33,11 +191,6 @@ using internal::CellToValue;
                           "StorageWrite.AppendRows: stream must be non-null");
   }
 
-  // The first message MUST set `write_stream`; subsequent messages
-  // may leave it empty (the binding sticks for the rest of the
-  // stream) or re-assert the same value. The handler keeps the
-  // bound name + table id around so the per-batch lookup does not
-  // re-parse the path on every read.
   std::string bound_stream_name;
   backend::storage::TableId bound_table;
 
@@ -48,178 +201,61 @@ using internal::CellToValue;
       resp.set_trace_id(req.trace_id());
     }
 
-    // Resolve / re-resolve the stream binding.
-    if (!req.write_stream().empty()) {
-      backend::storage::TableId table;
-      std::string stream_id;
-      if (auto s = ParseStreamName(req.write_stream(), &table, &stream_id);
-          !s.ok()) {
-        return s;
-      }
-      if (!bound_stream_name.empty() &&
-          bound_stream_name != req.write_stream()) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::INVALID_ARGUMENT,
-            absl::StrCat("StorageWrite.AppendRows: cannot rebind stream "
-                         "mid-call (first message: ",
-                         bound_stream_name,
-                         ", later message: ",
-                         req.write_stream(),
-                         ")"));
-      }
-      // For the reserved `_default` name we mint the StreamState
-      // lazily so callers do not need a CreateWriteStream round-trip
-      // before the very first AppendRows.
-      if (stream_id == "_default") {
-        if (auto s = EnsureDefaultStream(req.write_stream(), table); !s.ok()) {
-          return s;
-        }
-      }
-      bound_stream_name = req.write_stream();
-      bound_table = table;
-    } else if (bound_stream_name.empty()) {
-      return ::grpc::Status(
-          ::grpc::StatusCode::INVALID_ARGUMENT,
-          "StorageWrite.AppendRows: first message must set write_stream");
+    if (auto bind_status =
+            BindWriteStreamFromRequest(req, &bound_stream_name, &bound_table);
+        !bind_status.ok()) {
+      return bind_status;
     }
 
-    // Lookup the SessionState under the lock and snapshot the
-    // schema + stream type; release before calling AppendRows so the
-    // storage backend does not contend with subsequent
-    // CreateWriteStream requests while it writes the parquet file.
-    backend::storage::TableId table;
-    backend::schema::TableSchema schema;
-    std::optional<v1::WriteStream::Type> stream_type;
-    bool stream_finalized = false;
-    {
-      absl::MutexLock lock(&mu_);
-      auto it = streams_.find(bound_stream_name);
-      if (it == streams_.end()) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::NOT_FOUND,
-            absl::StrCat("StorageWrite.AppendRows: no such stream (call "
-                         "CreateWriteStream first or use the reserved "
-                         "_default suffix): ",
-                         bound_stream_name));
-      }
-      if (it->second.finalized) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::FAILED_PRECONDITION,
-            absl::StrCat("StorageWrite.AppendRows: stream is finalized: ",
-                         bound_stream_name));
-      }
-      table = it->second.table;
-      schema = it->second.schema;
-      stream_type = it->second.type;
-      stream_finalized = it->second.finalized;
-    }
-    (void)stream_finalized;
-
-    // Decode the rows. The wire shape is identical to
-    // `Catalog.InsertRows` so we lower one cell at a time through
-    // the shared `CellToValue` helper. A row whose cell count
-    // does not match the schema's top-level column count is a
-    // recoverable error — surface it on the response envelope so
-    // the producer can fix the shape and retry without tearing the
-    // stream down.
-    const auto& rows_in = req.proto_rows().rows();
-    bool shape_error = false;
-    std::string shape_error_detail;
-    std::vector<backend::storage::Row> rows;
-    rows.reserve(rows_in.size());
-    for (int r = 0; r < rows_in.size(); ++r) {
-      const auto& src = rows_in[r];
-      if (src.cells_size() != static_cast<int>(schema.columns.size())) {
-        shape_error = true;
-        shape_error_detail =
-            absl::StrCat("AppendRows: row ",
-                         r,
-                         " has ",
-                         src.cells_size(),
-                         " cell(s) but the stream's table has ",
-                         schema.columns.size(),
-                         " top-level column(s)");
-        break;
-      }
-      backend::storage::Row row;
-      row.cells.reserve(src.cells_size());
-      for (const auto& cell : src.cells()) {
-        row.cells.push_back(CellToValue(cell));
-      }
-      rows.push_back(std::move(row));
+    StreamSessionSnapshot session;
+    if (auto session_status =
+            LoadStreamSessionForAppend(bound_stream_name, &session);
+        !session_status.ok()) {
+      return session_status;
     }
 
-    if (shape_error) {
-      resp.set_error_message(shape_error_detail);
-      if (!stream->Write(resp)) {
-        return ::grpc::Status(::grpc::StatusCode::ABORTED,
-                              "StorageWrite.AppendRows: client cancelled "
-                              "mid-stream");
+    DecodedAppendBatch batch = DecodeAppendRowBatch(req, session.schema);
+    if (batch.shape_error) {
+      resp.set_error_message(batch.shape_error_detail);
+      if (auto write_status = WriteAppendResponse(stream, std::move(resp));
+          !write_status.ok()) {
+        return write_status;
       }
       continue;
     }
 
     std::int64_t prior_offset = 0;
-    if (stream_type == v1::WriteStream::BUFFERED ||
-        stream_type == v1::WriteStream::PENDING) {
-      // BUFFERED / PENDING streams hold rows server-side until
-      // FlushRows / BatchCommitWriteStreams makes them visible.
-      absl::MutexLock lock(&mu_);
-      auto it = streams_.find(bound_stream_name);
-      if (it == streams_.end()) {
-        return ::grpc::Status(::grpc::StatusCode::NOT_FOUND,
-                              absl::StrCat("StorageWrite.AppendRows: no such "
-                                           "stream: ",
-                                           bound_stream_name));
-      }
-      prior_offset = it->second.committed_rows;
-      it->second.committed_rows += static_cast<std::int64_t>(rows.size());
-      for (auto& row : rows) {
-        it->second.buffered_rows.push_back(std::move(row));
+    if (session.type == v1::WriteStream::BUFFERED ||
+        session.type == v1::WriteStream::PENDING) {
+      if (auto commit_status = CommitBufferedAppendRows(
+              bound_stream_name, std::move(batch.rows), &prior_offset);
+          !commit_status.ok()) {
+        return commit_status;
       }
     } else {
-      // Forward to the storage append primitive
-      // `DuckDBStorage::AppendRows`. The DuckDB backend writes a
-      // fresh parquet snapshot per call, committing the rows
-      // immediately — that is the documented `_default` /
-      // `COMMITTED` semantic.
-      const absl::Status append_status =
-          rows.empty() ? absl::OkStatus()
-                       : storage_->AppendRows(table, absl::MakeConstSpan(rows));
-      if (!append_status.ok()) {
-        // Recoverable storage errors land on the response envelope so
-        // the producer can retry without tearing the stream down.
-        // Hard `INTERNAL` failures (the storage layer's "anything
-        // else" bucket) close the stream so the producer's caller
-        // sees the matching gRPC status.
-        if (append_status.code() == absl::StatusCode::kInvalidArgument ||
-            append_status.code() == absl::StatusCode::kFailedPrecondition) {
-          resp.set_error_message(std::string(append_status.message()));
-          if (!stream->Write(resp)) {
-            return ::grpc::Status(::grpc::StatusCode::ABORTED,
-                                  "StorageWrite.AppendRows: client cancelled "
-                                  "mid-stream");
-          }
-          continue;
-        }
-        return AbslToGrpcStatus(append_status);
+      if (auto commit_status =
+              CommitImmediateAppendRows(bound_stream_name,
+                                        session.table,
+                                        absl::MakeConstSpan(batch.rows),
+                                        &prior_offset,
+                                        &resp);
+          !commit_status.ok()) {
+        return commit_status;
       }
-
-      // Successful append: bump the per-stream offset and reply.
-      absl::MutexLock lock(&mu_);
-      auto it = streams_.find(bound_stream_name);
-      if (it != streams_.end()) {
-        prior_offset = it->second.committed_rows;
-        it->second.committed_rows += static_cast<std::int64_t>(rows.size());
+      if (resp.has_error_message()) {
+        if (auto write_status = WriteAppendResponse(stream, std::move(resp));
+            !write_status.ok()) {
+          return write_status;
+        }
+        continue;
       }
     }
-    auto* result = resp.mutable_append_result();
-    result->set_offset(prior_offset);
-    resp.set_row_count(static_cast<std::int64_t>(rows.size()));
-    if (!stream->Write(resp)) {
-      return ::grpc::Status(
-          ::grpc::StatusCode::ABORTED,
-          "StorageWrite.AppendRows: client cancelled mid-stream");
+
+    resp.mutable_append_result()->set_offset(prior_offset);
+    resp.set_row_count(static_cast<std::int64_t>(batch.rows.size()));
+    if (auto write_status = WriteAppendResponse(stream, resp);
+        !write_status.ok()) {
+      return write_status;
     }
   }
   return ::grpc::Status::OK;

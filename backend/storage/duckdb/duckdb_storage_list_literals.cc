@@ -90,6 +90,69 @@ absl::StatusOr<Value> ParseListElementToken(
       absl::StrCat("ParseListElementToken: cannot parse `", token, "`"));
 }
 
+absl::Status AppendQuotedListElement(absl::string_view* body,
+                                     const schema::ColumnSchema& element,
+                                     std::vector<Value>* elements) {
+  auto parsed = ParseQuotedStringToken(body);
+  if (!parsed.ok()) return parsed.status();
+  elements->push_back(Value::String(*parsed));
+  return absl::OkStatus();
+}
+
+absl::Status AppendTokenListElement(absl::string_view* body,
+                                    const schema::ColumnSchema& element,
+                                    std::vector<Value>* elements) {
+  const size_t comma = body->find(',');
+  const absl::string_view token = TrimAsciiSpace(
+      comma == absl::string_view::npos ? *body : body->substr(0, comma));
+  *body = comma == absl::string_view::npos ? absl::string_view{}
+                                           : body->substr(comma + 1);
+  auto value_or = ParseListElementToken(token, element);
+  if (!value_or.ok()) return value_or.status();
+  elements->push_back(std::move(*value_or));
+  return absl::OkStatus();
+}
+
+struct StructFieldPair {
+  std::string key;
+  std::string raw_value;
+};
+
+absl::StatusOr<StructFieldPair> ParseNextStructField(absl::string_view* body) {
+  if (body->empty() || body->front() != '\'') {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "ParseDuckDBStructVarchar: expected quoted field name in `",
+        *body,
+        "`"));
+  }
+  auto key_or = ParseQuotedStringToken(body);
+  if (!key_or.ok()) {
+    return key_or.status();
+  }
+  *body = TrimAsciiSpace(*body);
+  if (body->empty() || body->front() != ':') {
+    return absl::InvalidArgumentError(
+        "ParseDuckDBStructVarchar: expected ':' after field name");
+  }
+  body->remove_prefix(1);
+  *body = TrimAsciiSpace(*body);
+  std::string raw_value;
+  if (!body->empty() && body->front() == '\'') {
+    auto parsed = ParseQuotedStringToken(body);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    raw_value = std::move(*parsed);
+  } else {
+    const size_t next = body->find(", '");
+    raw_value = std::string(TrimAsciiSpace(
+        next == absl::string_view::npos ? *body : body->substr(0, next)));
+    *body = next == absl::string_view::npos ? absl::string_view{}
+                                            : body->substr(next + 2);
+  }
+  return StructFieldPair{std::move(*key_or), std::move(raw_value)};
+}
+
 }  // namespace
 
 absl::StatusOr<Value> ParseDuckDBListVarchar(
@@ -110,20 +173,11 @@ absl::StatusOr<Value> ParseDuckDBListVarchar(
   while (!body.empty()) {
     body = TrimAsciiSpace(body);
     if (body.empty()) break;
-    if (body.front() == '\'') {
-      auto parsed = ParseQuotedStringToken(&body);
-      if (!parsed.ok()) return parsed.status();
-      elements.push_back(Value::String(*parsed));
-    } else {
-      const size_t comma = body.find(',');
-      const absl::string_view token = TrimAsciiSpace(
-          comma == absl::string_view::npos ? body : body.substr(0, comma));
-      body = comma == absl::string_view::npos ? absl::string_view{}
-                                              : body.substr(comma + 1);
-      auto value_or = ParseListElementToken(token, element);
-      if (!value_or.ok()) return value_or.status();
-      elements.push_back(std::move(*value_or));
-    }
+    absl::Status appended =
+        body.front() == '\''
+            ? AppendQuotedListElement(&body, element, &elements)
+            : AppendTokenListElement(&body, element, &elements);
+    if (!appended.ok()) return appended;
     body = TrimAsciiSpace(body);
     if (!body.empty() && body.front() == ',') {
       body.remove_prefix(1);
@@ -167,6 +221,20 @@ absl::StatusOr<Value> ParseStructFieldLiteral(
   }
 }
 
+absl::Status AssignStructFieldValue(absl::string_view key,
+                                    absl::string_view raw_value,
+                                    const schema::ColumnSchema& column,
+                                    std::vector<Value>* fields) {
+  for (size_t i = 0; i < column.fields.size(); ++i) {
+    if (column.fields[i].name != key) continue;
+    auto parsed = ParseStructFieldLiteral(raw_value, column.fields[i]);
+    if (!parsed.ok()) return parsed.status();
+    (*fields)[i] = *std::move(parsed);
+    return absl::OkStatus();
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<Value> ParseDuckDBStructVarchar(
     absl::string_view text, const schema::ColumnSchema& column) {
   absl::string_view body = TrimAsciiSpace(text);
@@ -184,45 +252,13 @@ absl::StatusOr<Value> ParseDuckDBStructVarchar(
     if (body.empty()) {
       break;
     }
-    if (body.front() != '\'') {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "ParseDuckDBStructVarchar: expected quoted field name in `",
-          body,
-          "`"));
+    auto field_or = ParseNextStructField(&body);
+    if (!field_or.ok()) {
+      return field_or.status();
     }
-    auto key_or = ParseQuotedStringToken(&body);
-    if (!key_or.ok()) {
-      return key_or.status();
-    }
-    body = TrimAsciiSpace(body);
-    if (body.empty() || body.front() != ':') {
-      return absl::InvalidArgumentError(
-          "ParseDuckDBStructVarchar: expected ':' after field name");
-    }
-    body.remove_prefix(1);
-    body = TrimAsciiSpace(body);
-    std::string raw_value;
-    if (!body.empty() && body.front() == '\'') {
-      auto parsed = ParseQuotedStringToken(&body);
-      if (!parsed.ok()) {
-        return parsed.status();
-      }
-      raw_value = std::move(*parsed);
-    } else {
-      const size_t next = body.find(", '");
-      raw_value = std::string(TrimAsciiSpace(
-          next == absl::string_view::npos ? body : body.substr(0, next)));
-      body = next == absl::string_view::npos ? absl::string_view{}
-                                             : body.substr(next + 2);
-    }
-    for (size_t i = 0; i < column.fields.size(); ++i) {
-      if (column.fields[i].name == *key_or) {
-        auto parsed = ParseStructFieldLiteral(raw_value, column.fields[i]);
-        if (!parsed.ok()) return parsed.status();
-        fields[i] = *std::move(parsed);
-        break;
-      }
-    }
+    absl::Status assigned = AssignStructFieldValue(
+        field_or->key, field_or->raw_value, column, &fields);
+    if (!assigned.ok()) return assigned;
     body = TrimAsciiSpace(body);
     if (!body.empty() && body.front() == ',') {
       body.remove_prefix(1);

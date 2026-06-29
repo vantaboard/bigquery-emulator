@@ -30,59 +30,62 @@ namespace fs = std::filesystem;
 
 namespace internal {
 
-// Reads a single DuckDB cell into a storage::Value, using the
-// column type from `column` to pick the right C-API accessor. NULL
-// cells become Value::Null() regardless of column type.
-absl::StatusOr<Value> ReadCell(::duckdb_result* result,
-                               idx_t col,
-                               idx_t row,
-                               const schema::ColumnSchema& column) {
-  // REPEATED LIST columns: decode before the generic NULL probe.
-  // DuckDB's legacy `duckdb_value_is_null` helper can report LIST
-  // cells as NULL even when `duckdb_value_varchar` still renders the
-  // `[elem, ...]` text we wrote via `LIST_VALUE(...)`.
-  if (column.mode == schema::ColumnMode::kRepeated) {
-    auto* str = ::duckdb_value_varchar(result, col, row);
-    const std::string text = str == nullptr ? std::string("") : str;
-    if (str != nullptr) ::duckdb_free(str);
-    schema::ColumnSchema element = column;
-    element.mode = schema::ColumnMode::kNullable;
-    auto parsed = internal::ParseDuckDBListVarchar(text, element);
-    if (!parsed.ok()) {
-      return absl::InternalError(
-          absl::StrCat("ReadCell: failed to decode REPEATED column `",
-                       column.name,
-                       "`: ",
-                       parsed.status().message()));
-    }
-    return *parsed;
+absl::StatusOr<Value> ReadRepeatedCell(::duckdb_result* result,
+                                       idx_t col,
+                                       idx_t row,
+                                       const schema::ColumnSchema& column) {
+  auto* str = ::duckdb_value_varchar(result, col, row);
+  const std::string text = str == nullptr ? std::string("") : str;
+  if (str != nullptr) ::duckdb_free(str);
+  schema::ColumnSchema element = column;
+  element.mode = schema::ColumnMode::kNullable;
+  auto parsed = internal::ParseDuckDBListVarchar(text, element);
+  if (!parsed.ok()) {
+    return absl::InternalError(
+        absl::StrCat("ReadCell: failed to decode REPEATED column `",
+                     column.name,
+                     "`: ",
+                     parsed.status().message()));
   }
-  if (::duckdb_value_is_null(result, col, row)) return Value::Null();
-  if (column.type == schema::ColumnType::kStruct) {
-    auto* str = ::duckdb_value_varchar(result, col, row);
-    const std::string text = str == nullptr ? std::string("") : str;
-    if (str != nullptr) {
-      ::duckdb_free(str);
-    }
-    if (text.empty()) {
-      return Value::Null();
-    }
-    auto parsed = internal::ParseDuckDBStructVarchar(text, column);
-    if (!parsed.ok()) {
-      return absl::InternalError(
-          absl::StrCat("ReadCell: failed to decode STRUCT column `",
-                       column.name,
-                       "`: ",
-                       parsed.status().message()));
-    }
-    return *parsed;
+  return *parsed;
+}
+
+absl::StatusOr<Value> ReadStructCell(::duckdb_result* result,
+                                     idx_t col,
+                                     idx_t row,
+                                     const schema::ColumnSchema& column) {
+  auto* str = ::duckdb_value_varchar(result, col, row);
+  const std::string text = str == nullptr ? std::string("") : str;
+  if (str != nullptr) {
+    ::duckdb_free(str);
   }
-  if (column.type == schema::ColumnType::kArray) {
-    auto* str = ::duckdb_value_varchar(result, col, row);
-    Value out = Value::String(str == nullptr ? std::string("") : str);
-    if (str != nullptr) ::duckdb_free(str);
-    return out;
+  if (text.empty()) {
+    return Value::Null();
   }
+  auto parsed = internal::ParseDuckDBStructVarchar(text, column);
+  if (!parsed.ok()) {
+    return absl::InternalError(
+        absl::StrCat("ReadCell: failed to decode STRUCT column `",
+                     column.name,
+                     "`: ",
+                     parsed.status().message()));
+  }
+  return *parsed;
+}
+
+absl::StatusOr<Value> ReadVarcharCell(::duckdb_result* result,
+                                      idx_t col,
+                                      idx_t row) {
+  auto* str = ::duckdb_value_varchar(result, col, row);
+  Value out = Value::String(str == nullptr ? std::string("") : str);
+  if (str != nullptr) ::duckdb_free(str);
+  return out;
+}
+
+absl::StatusOr<Value> ReadScalarCell(::duckdb_result* result,
+                                     idx_t col,
+                                     idx_t row,
+                                     const schema::ColumnSchema& column) {
   switch (column.type) {
     case schema::ColumnType::kBool:
       return Value::Bool(::duckdb_value_boolean(result, col, row));
@@ -99,11 +102,6 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
       }
       return Value::Bytes(std::move(bytes));
     }
-    // Every remaining type round-trips through the canonical DuckDB
-    // CAST-to-VARCHAR rendering (RFC 3339 for dates/timestamps, plain
-    // decimal for NUMERIC, etc.). The storage layer is engine-
-    // agnostic, so we keep these as kString cells and let the
-    // downstream encoder pick the BigQuery wire shape.
     case schema::ColumnType::kString:
     case schema::ColumnType::kDate:
     case schema::ColumnType::kTime:
@@ -115,14 +113,30 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
     case schema::ColumnType::kGeography:
     case schema::ColumnType::kArray:
     case schema::ColumnType::kStruct:
-    case schema::ColumnType::kUnknown: {
-      auto* str = ::duckdb_value_varchar(result, col, row);
-      Value out = Value::String(str == nullptr ? std::string("") : str);
-      if (str != nullptr) ::duckdb_free(str);
-      return out;
-    }
+    case schema::ColumnType::kUnknown:
+      return ReadVarcharCell(result, col, row);
   }
   return absl::InternalError("ReadCell: unreachable column type");
+}
+
+// Reads a single DuckDB cell into a storage::Value, using the
+// column type from `column` to pick the right C-API accessor. NULL
+// cells become Value::Null() regardless of column type.
+absl::StatusOr<Value> ReadCell(::duckdb_result* result,
+                               idx_t col,
+                               idx_t row,
+                               const schema::ColumnSchema& column) {
+  if (column.mode == schema::ColumnMode::kRepeated) {
+    return ReadRepeatedCell(result, col, row, column);
+  }
+  if (::duckdb_value_is_null(result, col, row)) return Value::Null();
+  if (column.type == schema::ColumnType::kStruct) {
+    return ReadStructCell(result, col, row, column);
+  }
+  if (column.type == schema::ColumnType::kArray) {
+    return ReadVarcharCell(result, col, row);
+  }
+  return ReadScalarCell(result, col, row, column);
 }
 
 }  // namespace internal
