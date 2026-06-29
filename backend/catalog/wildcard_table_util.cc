@@ -47,6 +47,13 @@ bool IsDataColumn(absl::string_view name) {
   return name != kTableSuffixColumnName;
 }
 
+bool SchemaHasColumn(absl::string_view name,
+                     const std::vector<ColumnSchema>& columns) {
+  return std::any_of(columns.begin(),
+                     columns.end(),
+                     [name](const ColumnSchema& c) { return c.name == name; });
+}
+
 }  // namespace
 
 bool IsWildcardTableId(absl::string_view table_id) {
@@ -124,12 +131,10 @@ absl::StatusOr<TableSchema> UnifyWildcardTableSchemas(
     }
     unified.columns.push_back(it->second);
   }
-  for (const auto& [name, col] : by_name) {
-    const bool already =
-        std::any_of(newest_or->columns.begin(),
-                    newest_or->columns.end(),
-                    [&](const ColumnSchema& c) { return c.name == name; });
-    if (!already) unified.columns.push_back(col);
+  for (const auto& entry : by_name) {
+    if (!SchemaHasColumn(entry.first, newest_or->columns)) {
+      unified.columns.push_back(entry.second);
+    }
   }
   unified.columns.push_back(TableSuffixColumn());
   return unified;

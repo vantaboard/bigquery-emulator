@@ -106,7 +106,7 @@ absl::StatusOr<::googlesql::Value> ConvertStringTypedScalar(
     }
     return *parsed;
   }
-  return ::googlesql::Value::StringValue(string_value);
+  return ::googlesql::Value::StringValue(std::string(string_value));
 }
 
 absl::StatusOr<::googlesql::Value> ConvertStructScalar(
