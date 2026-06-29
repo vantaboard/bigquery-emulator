@@ -111,6 +111,138 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeLimitOffsetScan(
   return window;
 }
 
+namespace {
+
+bool CompareOrderByItemValues(const ::googlesql::ResolvedOrderByItem* item,
+                              const Value& va,
+                              const Value& vb) {
+  if (item == nullptr || item->column_ref() == nullptr) return false;
+  if (ValueEqual(va, vb)) return false;
+  if (va.is_null() || vb.is_null()) {
+    bool nulls_first = false;
+    switch (item->null_order()) {
+      case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+        nulls_first = true;
+        break;
+      case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+        nulls_first = false;
+        break;
+      default:
+        nulls_first = !item->is_descending();
+        break;
+    }
+    if (va.is_null() && vb.is_null()) return false;
+    if (va.is_null()) return nulls_first;
+    return !nulls_first;
+  }
+  if (item->collation_name() != nullptr &&
+      item->collation_name()->node_kind() == ::googlesql::RESOLVED_LITERAL &&
+      item->collation_name()->type()->kind() == ::googlesql::TYPE_STRING &&
+      va.type_kind() == ::googlesql::TYPE_STRING &&
+      vb.type_kind() == ::googlesql::TYPE_STRING) {
+    const std::string collation = item->collation_name()
+                                      ->GetAs<::googlesql::ResolvedLiteral>()
+                                      ->value()
+                                      .string_value();
+    if (collation == "und:ci") {
+      return item->is_descending()
+                 ? !(absl::AsciiStrToLower(va.string_value()) <
+                     absl::AsciiStrToLower(vb.string_value()))
+                 : absl::AsciiStrToLower(va.string_value()) <
+                       absl::AsciiStrToLower(vb.string_value());
+    }
+  }
+  return item->is_descending() ? !ValueLess(va, vb) : ValueLess(va, vb);
+}
+
+bool OrderByScanRowLess(const ::googlesql::ResolvedOrderByScan& order,
+                        const ColumnBindings& a,
+                        const ColumnBindings& b) {
+  for (int i = 0; i < order.order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item = order.order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) continue;
+    const int col_id = item->column_ref()->column().column_id();
+    auto av = a.find(col_id);
+    auto bv = b.find(col_id);
+    const Value va = av == a.end() ? Value() : av->second;
+    const Value vb = bv == b.end() ? Value() : bv->second;
+    if (ValueEqual(va, vb)) continue;
+    return CompareOrderByItemValues(item, va, vb);
+  }
+  return false;
+}
+
+}  // namespace
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeFilterScan(
+    const ::googlesql::ResolvedFilterScan& filter, EvalContext& ctx) {
+  auto input = MaterializeScanImpl(filter.input_scan(), ctx);
+  if (!input.ok()) return input.status();
+  std::vector<ColumnBindings> out;
+  absl::flat_hash_map<std::string, ::googlesql::Value> by_name;
+  for (const ColumnBindings& row : *input) {
+    ColumnBindings merged;
+    if (ctx.columns != nullptr) {
+      merged = *ctx.columns;
+    }
+    for (const auto& [col_id, val] : row) {
+      merged[col_id] = val;
+    }
+    EvalContext row_ctx = ctx;
+    row_ctx.columns = &merged;
+    PopulateColumnNameBindings(filter.input_scan(), merged, by_name);
+    if (ctx.columns_by_name != nullptr) {
+      for (const auto& [name, val] : *ctx.columns_by_name) {
+        by_name[name] = val;
+      }
+    }
+    row_ctx.columns_by_name = &by_name;
+    auto ok = EvalBoolExpr(filter.filter_expr(), row_ctx);
+    if (!ok.ok()) return ok.status();
+    if (*ok) out.push_back(row);
+  }
+  return out;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeOrderByScanRows(
+    const ::googlesql::ResolvedOrderByScan& order, EvalContext& ctx) {
+  auto input = MaterializeScanImpl(order.input_scan(), ctx);
+  if (!input.ok()) return input.status();
+  std::vector<ColumnBindings> rows = *std::move(input);
+  std::stable_sort(rows.begin(),
+                   rows.end(),
+                   [&](const ColumnBindings& a, const ColumnBindings& b) {
+                     return OrderByScanRowLess(order, a, b);
+                   });
+  return rows;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeWithScanBody(
+    const ::googlesql::ResolvedWithScan& with_scan, EvalContext& ctx) {
+  absl::flat_hash_map<std::string, CteTable> tables;
+  for (int i = 0; i < with_scan.with_entry_list_size(); ++i) {
+    const ::googlesql::ResolvedWithEntry* entry = with_scan.with_entry_list(i);
+    if (entry == nullptr || entry->with_subquery() == nullptr) {
+      return absl::InternalError("semantic: malformed WithEntry");
+    }
+    const ::googlesql::ResolvedScan* sub = entry->with_subquery();
+    EvalContext entry_ctx = ctx;
+    entry_ctx.with_tables = &tables;
+    auto rows = MaterializeScanImpl(sub, entry_ctx);
+    if (!rows.ok()) return rows.status();
+    CteTable table;
+    table.rows = *std::move(rows);
+    table.column_ids.reserve(sub->column_list_size());
+    for (int j = 0; j < sub->column_list_size(); ++j) {
+      table.column_ids.push_back(sub->column_list(j).column_id());
+    }
+    tables[std::string(entry->with_query_name())] = std::move(table);
+  }
+  EvalContext body_ctx = ctx;
+  body_ctx.with_tables = &tables;
+  return MaterializeScanImpl(with_scan.query(), body_ctx);
+}
+
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
     const ::googlesql::ResolvedScan* scan, EvalContext& ctx) {
   scan = StripBarrierScans(scan);
@@ -133,124 +265,15 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeScanImpl(
       if (!input.ok()) return input.status();
       return ProjectRows(*project, *input, ctx);
     }
-    case ::googlesql::RESOLVED_FILTER_SCAN: {
-      const auto* filter = scan->GetAs<::googlesql::ResolvedFilterScan>();
-      auto input = MaterializeScanImpl(filter->input_scan(), ctx);
-      if (!input.ok()) return input.status();
-      std::vector<ColumnBindings> out;
-      absl::flat_hash_map<std::string, ::googlesql::Value> by_name;
-      for (const ColumnBindings& row : *input) {
-        ColumnBindings merged;
-        if (ctx.columns != nullptr) {
-          merged = *ctx.columns;
-        }
-        for (const auto& [col_id, val] : row) {
-          merged[col_id] = val;
-        }
-        EvalContext row_ctx = ctx;
-        row_ctx.columns = &merged;
-        PopulateColumnNameBindings(filter->input_scan(), merged, by_name);
-        if (ctx.columns_by_name != nullptr) {
-          for (const auto& [name, val] : *ctx.columns_by_name) {
-            by_name[name] = val;
-          }
-        }
-        row_ctx.columns_by_name = &by_name;
-        auto ok = EvalBoolExpr(filter->filter_expr(), row_ctx);
-        if (!ok.ok()) return ok.status();
-        if (*ok) out.push_back(row);
-      }
-      return out;
-    }
-    case ::googlesql::RESOLVED_ORDER_BY_SCAN: {
-      const auto* order = scan->GetAs<::googlesql::ResolvedOrderByScan>();
-      auto input = MaterializeScanImpl(order->input_scan(), ctx);
-      if (!input.ok()) return input.status();
-      std::vector<ColumnBindings> rows = *std::move(input);
-      std::stable_sort(
-          rows.begin(),
-          rows.end(),
-          [&](const ColumnBindings& a, const ColumnBindings& b) {
-            for (int i = 0; i < order->order_by_item_list_size(); ++i) {
-              const ::googlesql::ResolvedOrderByItem* item =
-                  order->order_by_item_list(i);
-              if (item == nullptr || item->column_ref() == nullptr) {
-                continue;
-              }
-              const int col_id = item->column_ref()->column().column_id();
-              auto av = a.find(col_id);
-              auto bv = b.find(col_id);
-              Value va = av == a.end() ? Value() : av->second;
-              Value vb = bv == b.end() ? Value() : bv->second;
-              if (ValueEqual(va, vb)) continue;
-              if (va.is_null() || vb.is_null()) {
-                bool nulls_first = false;
-                switch (item->null_order()) {
-                  case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-                    nulls_first = true;
-                    break;
-                  case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-                    nulls_first = false;
-                    break;
-                  default:
-                    nulls_first = !item->is_descending();
-                    break;
-                }
-                if (va.is_null() && vb.is_null()) continue;
-                if (va.is_null()) return nulls_first;
-                return !nulls_first;
-              }
-              bool less = ValueLess(va, vb);
-              if (item->collation_name() != nullptr &&
-                  item->collation_name()->node_kind() ==
-                      ::googlesql::RESOLVED_LITERAL &&
-                  item->collation_name()->type()->kind() ==
-                      ::googlesql::TYPE_STRING &&
-                  va.type_kind() == ::googlesql::TYPE_STRING &&
-                  vb.type_kind() == ::googlesql::TYPE_STRING) {
-                const std::string collation =
-                    item->collation_name()
-                        ->GetAs<::googlesql::ResolvedLiteral>()
-                        ->value()
-                        .string_value();
-                if (collation == "und:ci") {
-                  less = absl::AsciiStrToLower(va.string_value()) <
-                         absl::AsciiStrToLower(vb.string_value());
-                }
-              }
-              if (item->is_descending()) less = !less;
-              return less;
-            }
-            return false;
-          });
-      return rows;
-    }
-    case ::googlesql::RESOLVED_WITH_SCAN: {
-      const auto* with_scan = scan->GetAs<::googlesql::ResolvedWithScan>();
-      absl::flat_hash_map<std::string, CteTable> tables;
-      for (int i = 0; i < with_scan->with_entry_list_size(); ++i) {
-        const ::googlesql::ResolvedWithEntry* entry =
-            with_scan->with_entry_list(i);
-        if (entry == nullptr || entry->with_subquery() == nullptr) {
-          return absl::InternalError("semantic: malformed WithEntry");
-        }
-        const ::googlesql::ResolvedScan* sub = entry->with_subquery();
-        EvalContext entry_ctx = ctx;
-        entry_ctx.with_tables = &tables;
-        auto rows = MaterializeScanImpl(sub, entry_ctx);
-        if (!rows.ok()) return rows.status();
-        CteTable table;
-        table.rows = *std::move(rows);
-        table.column_ids.reserve(sub->column_list_size());
-        for (int j = 0; j < sub->column_list_size(); ++j) {
-          table.column_ids.push_back(sub->column_list(j).column_id());
-        }
-        tables[std::string(entry->with_query_name())] = std::move(table);
-      }
-      EvalContext body_ctx = ctx;
-      body_ctx.with_tables = &tables;
-      return MaterializeScanImpl(with_scan->query(), body_ctx);
-    }
+    case ::googlesql::RESOLVED_FILTER_SCAN:
+      return MaterializeFilterScan(
+          *scan->GetAs<::googlesql::ResolvedFilterScan>(), ctx);
+    case ::googlesql::RESOLVED_ORDER_BY_SCAN:
+      return MaterializeOrderByScanRows(
+          *scan->GetAs<::googlesql::ResolvedOrderByScan>(), ctx);
+    case ::googlesql::RESOLVED_WITH_SCAN:
+      return MaterializeWithScanBody(
+          *scan->GetAs<::googlesql::ResolvedWithScan>(), ctx);
     case ::googlesql::RESOLVED_WITH_REF_SCAN:
       return MaterializeWithRefScan(
           *scan->GetAs<::googlesql::ResolvedWithRefScan>(), ctx);

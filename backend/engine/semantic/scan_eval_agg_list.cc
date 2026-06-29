@@ -70,10 +70,115 @@ int CompareArrayAggOrderKey(const ::googlesql::ResolvedOrderByItem& item,
     if (va.is_null()) return nulls_first ? -1 : 1;
     return nulls_first ? 1 : -1;
   }
-  bool less = ValueLess(va, vb);
-  if (item.is_descending()) less = !less;
-  return less ? -1 : 1;
+  return (item.is_descending() ? !ValueLess(va, vb) : ValueLess(va, vb)) ? -1
+                                                                         : 1;
 }
+
+namespace {
+
+struct AggListRow {
+  Value val{};
+  std::vector<Value> sort_keys{};
+};
+
+absl::StatusOr<std::vector<AggListRow>> CollectOrderedAggRows(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    const std::vector<std::vector<Value>>& input_column_values,
+    const std::vector<ColumnBindings>& input_rows,
+    bool ignore_nulls,
+    EvalContext& ctx) {
+  std::vector<AggListRow> rows;
+  rows.reserve(input_rows.size());
+  for (size_t r = 0; r < input_rows.size(); ++r) {
+    const Value& v = input_column_values[0][r];
+    if (ignore_nulls && v.is_null()) continue;
+    AggListRow row;
+    row.val = v;
+    EvalContext row_ctx = ctx;
+    row_ctx.columns = &input_rows[r];
+    row.sort_keys.reserve(call.order_by_item_list_size());
+    for (int i = 0; i < call.order_by_item_list_size(); ++i) {
+      const ::googlesql::ResolvedOrderByItem* item = call.order_by_item_list(i);
+      if (item == nullptr || item->column_ref() == nullptr) {
+        return MakeSemanticError(
+            SemanticErrorReason::kInvalidArgument,
+            "semantic: aggregate ORDER BY requires column references");
+      }
+      auto key_or = EvalExpr(*item->column_ref(), row_ctx);
+      if (!key_or.ok()) return key_or.status();
+      row.sort_keys.push_back(*std::move(key_or));
+    }
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
+std::vector<AggListRow> DedupAggRows(std::vector<AggListRow> rows) {
+  std::vector<AggListRow> deduped;
+  for (AggListRow& row : rows) {
+    bool seen = false;
+    for (const AggListRow& prior : deduped) {
+      if (ValueEqual(prior.val, row.val)) {
+        seen = true;
+        break;
+      }
+    }
+    if (!seen) deduped.push_back(std::move(row));
+  }
+  return deduped;
+}
+
+absl::StatusOr<std::vector<AggListRow>> SortAggRows(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    std::vector<AggListRow> rows) {
+  if (call.order_by_item_list_size() == 0) return rows;
+  std::stable_sort(
+      rows.begin(), rows.end(), [&](const AggListRow& a, const AggListRow& b) {
+        for (int i = 0; i < call.order_by_item_list_size(); ++i) {
+          const ::googlesql::ResolvedOrderByItem* item =
+              call.order_by_item_list(i);
+          switch (
+              CompareArrayAggOrderKey(*item, a.sort_keys[i], b.sort_keys[i])) {
+            case -1:
+              return true;
+            case 1:
+              return false;
+            default:
+              break;
+          }
+        }
+        return false;
+      });
+  return rows;
+}
+
+absl::StatusOr<std::vector<AggListRow>> ApplyAggRowLimit(
+    const ::googlesql::ResolvedAggregateFunctionCall& call,
+    EvalContext& ctx,
+    std::vector<AggListRow> rows) {
+  if (call.limit() == nullptr) return rows;
+  auto limit_or = EvalExpr(*call.limit(), ctx);
+  if (!limit_or.ok()) return limit_or.status();
+  if (limit_or->is_null()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: aggregate LIMIT must not be NULL");
+  }
+  if (limit_or->type_kind() != ::googlesql::TYPE_INT64) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: aggregate LIMIT must be INT64");
+  }
+  const int64_t limit = limit_or->int64_value();
+  if (limit < 0) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "semantic: aggregate LIMIT must be non-negative");
+  }
+  if (rows.size() > static_cast<size_t>(limit)) {
+    rows.resize(static_cast<size_t>(limit));
+  }
+  return rows;
+}
+
+}  // namespace
 
 absl::StatusOr<Value> EvalArrayAgg(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
@@ -95,87 +200,27 @@ absl::StatusOr<Value> EvalArrayAgg(
       ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
   const bool distinct = call.distinct();
 
-  struct Row {
-    Value val;
-    std::vector<Value> sort_keys;
-  };
-  std::vector<Row> rows;
-  rows.reserve(input_rows.size());
-  for (size_t r = 0; r < input_rows.size(); ++r) {
-    const Value& v = input_column_values[0][r];
-    if (ignore_nulls && v.is_null()) continue;
-    Row row;
-    row.val = v;
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &input_rows[r];
-    row.sort_keys.reserve(call.order_by_item_list_size());
-    for (int i = 0; i < call.order_by_item_list_size(); ++i) {
-      const ::googlesql::ResolvedOrderByItem* item = call.order_by_item_list(i);
-      if (item == nullptr || item->column_ref() == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: ARRAY_AGG ORDER BY requires column references");
-      }
-      auto key_or = EvalExpr(*item->column_ref(), row_ctx);
-      if (!key_or.ok()) return key_or.status();
-      row.sort_keys.push_back(*std::move(key_or));
-    }
-    rows.push_back(std::move(row));
-  }
-
+  auto rows_or = CollectOrderedAggRows(
+      call, input_column_values, input_rows, ignore_nulls, ctx);
+  if (!rows_or.ok()) return rows_or.status();
+  std::vector<AggListRow> rows = *std::move(rows_or);
   if (distinct) {
-    std::vector<Row> deduped;
-    for (Row& row : rows) {
-      bool seen = false;
-      for (const Row& prior : deduped) {
-        if (ValueEqual(prior.val, row.val)) {
-          seen = true;
-          break;
-        }
-      }
-      if (!seen) deduped.push_back(std::move(row));
-    }
-    rows = std::move(deduped);
+    rows = DedupAggRows(std::move(rows));
   }
-
-  if (call.order_by_item_list_size() > 0) {
-    std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) {
-      for (int i = 0; i < call.order_by_item_list_size(); ++i) {
-        const ::googlesql::ResolvedOrderByItem* item =
-            call.order_by_item_list(i);
-        int cmp =
-            CompareArrayAggOrderKey(*item, a.sort_keys[i], b.sort_keys[i]);
-        if (cmp != 0) return cmp < 0;
-      }
-      return false;
-    });
+  if (auto sorted = SortAggRows(call, std::move(rows)); !sorted.ok()) {
+    return sorted.status();
+  } else {
+    rows = *std::move(sorted);
   }
-
-  if (call.limit() != nullptr) {
-    auto limit_or = EvalExpr(*call.limit(), ctx);
-    if (!limit_or.ok()) return limit_or.status();
-    if (limit_or->is_null()) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: ARRAY_AGG LIMIT must not be NULL");
-    }
-    if (limit_or->type_kind() != ::googlesql::TYPE_INT64) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: ARRAY_AGG LIMIT must be INT64");
-    }
-    const int64_t limit = limit_or->int64_value();
-    if (limit < 0) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: ARRAY_AGG LIMIT must be non-negative");
-    }
-    if (rows.size() > static_cast<size_t>(limit)) {
-      rows.resize(static_cast<size_t>(limit));
-    }
+  if (auto limited = ApplyAggRowLimit(call, ctx, std::move(rows));
+      !limited.ok()) {
+    return limited.status();
+  } else {
+    rows = *std::move(limited);
   }
-
   std::vector<Value> elements;
   elements.reserve(rows.size());
-  for (const Row& row : rows) {
+  for (const AggListRow& row : rows) {
     elements.push_back(row.val);
   }
   return Value::Array(arr_type, std::move(elements));
@@ -220,82 +265,23 @@ absl::StatusOr<Value> EvalStringAgg(
       ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS;
   const bool distinct = call.distinct();
 
-  struct Row {
-    Value val;
-    std::vector<Value> sort_keys;
-  };
-  std::vector<Row> rows;
-  rows.reserve(input_rows.size());
-  for (size_t r = 0; r < input_rows.size(); ++r) {
-    const Value& v = input_column_values[0][r];
-    if (ignore_nulls && v.is_null()) continue;
-    Row row;
-    row.val = v;
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &input_rows[r];
-    row.sort_keys.reserve(call.order_by_item_list_size());
-    for (int i = 0; i < call.order_by_item_list_size(); ++i) {
-      const ::googlesql::ResolvedOrderByItem* item = call.order_by_item_list(i);
-      if (item == nullptr || item->column_ref() == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kInvalidArgument,
-            "semantic: STRING_AGG ORDER BY requires column references");
-      }
-      auto key_or = EvalExpr(*item->column_ref(), row_ctx);
-      if (!key_or.ok()) return key_or.status();
-      row.sort_keys.push_back(*std::move(key_or));
-    }
-    rows.push_back(std::move(row));
-  }
-
+  auto rows_or = CollectOrderedAggRows(
+      call, input_column_values, input_rows, ignore_nulls, ctx);
+  if (!rows_or.ok()) return rows_or.status();
+  std::vector<AggListRow> rows = *std::move(rows_or);
   if (distinct) {
-    std::vector<Row> deduped;
-    for (Row& row : rows) {
-      bool seen = false;
-      for (const Row& prior : deduped) {
-        if (ValueEqual(prior.val, row.val)) {
-          seen = true;
-          break;
-        }
-      }
-      if (!seen) deduped.push_back(std::move(row));
-    }
-    rows = std::move(deduped);
+    rows = DedupAggRows(std::move(rows));
   }
-
-  if (call.order_by_item_list_size() > 0) {
-    std::stable_sort(rows.begin(), rows.end(), [&](const Row& a, const Row& b) {
-      for (int i = 0; i < call.order_by_item_list_size(); ++i) {
-        const ::googlesql::ResolvedOrderByItem* item =
-            call.order_by_item_list(i);
-        int cmp =
-            CompareArrayAggOrderKey(*item, a.sort_keys[i], b.sort_keys[i]);
-        if (cmp != 0) return cmp < 0;
-      }
-      return false;
-    });
+  if (auto sorted = SortAggRows(call, std::move(rows)); !sorted.ok()) {
+    return sorted.status();
+  } else {
+    rows = *std::move(sorted);
   }
-
-  if (call.limit() != nullptr) {
-    auto limit_or = EvalExpr(*call.limit(), ctx);
-    if (!limit_or.ok()) return limit_or.status();
-    if (limit_or->is_null()) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: STRING_AGG LIMIT must not be NULL");
-    }
-    if (limit_or->type_kind() != ::googlesql::TYPE_INT64) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "semantic: STRING_AGG LIMIT must be INT64");
-    }
-    const int64_t limit = limit_or->int64_value();
-    if (limit < 0) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          "semantic: STRING_AGG LIMIT must be non-negative");
-    }
-    if (rows.size() > static_cast<size_t>(limit)) {
-      rows.resize(static_cast<size_t>(limit));
-    }
+  if (auto limited = ApplyAggRowLimit(call, ctx, std::move(rows));
+      !limited.ok()) {
+    return limited.status();
+  } else {
+    rows = *std::move(limited);
   }
 
   if (rows.empty()) {
@@ -306,7 +292,7 @@ absl::StatusOr<Value> EvalStringAgg(
   }
   std::string out;
   bool appended = false;
-  for (const Row& row : rows) {
+  for (const AggListRow& row : rows) {
     if (row.val.is_null()) continue;
     if (appended) out.append(delimiter);
     out.append(StringifyAggValue(row.val));

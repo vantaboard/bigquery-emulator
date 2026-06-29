@@ -112,48 +112,50 @@ absl::StatusOr<std::vector<Value>> EvalPartitionKeys(
   return keys;
 }
 
+bool MatchRecognizeOrderRowLess(
+    const ::googlesql::ResolvedWindowOrdering& order_by,
+    const ColumnBindings& a,
+    const ColumnBindings& b) {
+  for (int i = 0; i < order_by.order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item =
+        order_by.order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) continue;
+    const int col_id = item->column_ref()->column().column_id();
+    auto av = a.find(col_id);
+    auto bv = b.find(col_id);
+    const Value va = av == a.end() ? Value() : av->second;
+    const Value vb = bv == b.end() ? Value() : bv->second;
+    if (ValueEqual(va, vb)) continue;
+    if (va.is_null() || vb.is_null()) {
+      bool nulls_first = false;
+      switch (item->null_order()) {
+        case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
+          nulls_first = true;
+          break;
+        case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
+          nulls_first = false;
+          break;
+        default:
+          nulls_first = !item->is_descending();
+          break;
+      }
+      if (va.is_null() && vb.is_null()) continue;
+      if (va.is_null()) return nulls_first;
+      return !nulls_first;
+    }
+    return item->is_descending() ? !ValueLess(va, vb) : ValueLess(va, vb);
+  }
+  return false;
+}
+
 void SortRowsByOrderBy(const ::googlesql::ResolvedWindowOrdering* order_by,
                        std::vector<ColumnBindings>* rows) {
   if (order_by == nullptr || rows == nullptr) return;
-  std::stable_sort(
-      rows->begin(),
-      rows->end(),
-      [&](const ColumnBindings& a, const ColumnBindings& b) {
-        for (int i = 0; i < order_by->order_by_item_list_size(); ++i) {
-          const ::googlesql::ResolvedOrderByItem* item =
-              order_by->order_by_item_list(i);
-          if (item == nullptr || item->column_ref() == nullptr) {
-            continue;
-          }
-          const int col_id = item->column_ref()->column().column_id();
-          auto av = a.find(col_id);
-          auto bv = b.find(col_id);
-          Value va = av == a.end() ? Value() : av->second;
-          Value vb = bv == b.end() ? Value() : bv->second;
-          if (ValueEqual(va, vb)) continue;
-          if (va.is_null() || vb.is_null()) {
-            bool nulls_first = false;
-            switch (item->null_order()) {
-              case ::googlesql::ResolvedOrderByItem::NULLS_FIRST:
-                nulls_first = true;
-                break;
-              case ::googlesql::ResolvedOrderByItem::NULLS_LAST:
-                nulls_first = false;
-                break;
-              default:
-                nulls_first = !item->is_descending();
-                break;
-            }
-            if (va.is_null() && vb.is_null()) continue;
-            if (va.is_null()) return nulls_first;
-            return !nulls_first;
-          }
-          bool less = ValueLess(va, vb);
-          if (item->is_descending()) less = !less;
-          return less;
-        }
-        return false;
-      });
+  std::stable_sort(rows->begin(),
+                   rows->end(),
+                   [&](const ColumnBindings& a, const ColumnBindings& b) {
+                     return MatchRecognizeOrderRowLess(*order_by, a, b);
+                   });
 }
 
 absl::StatusOr<std::vector<bool>> EvalPatternVariableRow(
@@ -187,7 +189,7 @@ absl::StatusOr<std::vector<bool>> EvalPatternVariableRow(
 }
 
 struct MatchRowContext {
-  ColumnBindings row;
+  ColumnBindings row{};
   int match_id = 0;
   int match_row_number = 0;
   std::string classifier;
@@ -240,6 +242,49 @@ absl::StatusOr<std::vector<size_t>> FilterRowsForMeasureGroup(
   return indices;
 }
 
+absl::StatusOr<ColumnBindings> EvalMatchMeasureGroup(
+    const ::googlesql::ResolvedMeasureGroup& group,
+    const ::googlesql::ResolvedMatchRecognizeScan& scan,
+    const std::vector<MatchRowContext>& contexts,
+    const std::vector<ColumnBindings>& augmented_rows,
+    const EvalContext& ctx) {
+  ColumnBindings out_row;
+  auto indices_or = FilterRowsForMeasureGroup(group, contexts);
+  if (!indices_or.ok()) return indices_or.status();
+  const std::vector<size_t>& indices = *indices_or;
+
+  for (int a = 0; a < group.aggregate_list_size(); ++a) {
+    const ::googlesql::ResolvedComputedColumnBase* cc = group.aggregate_list(a);
+    if (cc == nullptr || cc->expr() == nullptr) {
+      return absl::InternalError(
+          "semantic: MATCH_RECOGNIZE measure aggregate has null expr");
+    }
+    const auto* agg =
+        cc->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
+    if (agg == nullptr) {
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          "semantic: MATCH_RECOGNIZE measure is not an aggregate call");
+    }
+    std::vector<ColumnBindings> agg_input_rows;
+    agg_input_rows.reserve(indices.size());
+    for (size_t idx : indices) {
+      agg_input_rows.push_back(augmented_rows[idx]);
+    }
+    std::vector<size_t> all_indices;
+    all_indices.reserve(agg_input_rows.size());
+    for (size_t i = 0; i < agg_input_rows.size(); ++i) {
+      all_indices.push_back(i);
+    }
+    EvalContext agg_ctx = ctx;
+    auto agg_value = EvalAggregateForRows(
+        *agg, scan.input_scan(), agg_input_rows, all_indices, agg_ctx);
+    if (!agg_value.ok()) return agg_value.status();
+    out_row[cc->column().column_id()] = *std::move(agg_value);
+  }
+  return out_row;
+}
+
 absl::StatusOr<ColumnBindings> EvalMatchMeasures(
     const ::googlesql::ResolvedMatchRecognizeScan& scan,
     const std::vector<ColumnBindings>& partition_rows,
@@ -266,39 +311,11 @@ absl::StatusOr<ColumnBindings> EvalMatchMeasures(
       return absl::InternalError(
           "semantic: MATCH_RECOGNIZE measure_group_list has null entry");
     }
-    auto indices_or = FilterRowsForMeasureGroup(*group, contexts);
-    if (!indices_or.ok()) return indices_or.status();
-    const std::vector<size_t>& indices = *indices_or;
-
-    for (int a = 0; a < group->aggregate_list_size(); ++a) {
-      const ::googlesql::ResolvedComputedColumnBase* cc =
-          group->aggregate_list(a);
-      if (cc == nullptr || cc->expr() == nullptr) {
-        return absl::InternalError(
-            "semantic: MATCH_RECOGNIZE measure aggregate has null expr");
-      }
-      const auto* agg =
-          cc->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
-      if (agg == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            "semantic: MATCH_RECOGNIZE measure is not an aggregate call");
-      }
-      std::vector<ColumnBindings> agg_input_rows;
-      agg_input_rows.reserve(indices.size());
-      for (size_t idx : indices) {
-        agg_input_rows.push_back(augmented_rows[idx]);
-      }
-      std::vector<size_t> all_indices;
-      all_indices.reserve(agg_input_rows.size());
-      for (size_t i = 0; i < agg_input_rows.size(); ++i) {
-        all_indices.push_back(i);
-      }
-      EvalContext agg_ctx = ctx;
-      auto agg_value = EvalAggregateForRows(
-          *agg, scan.input_scan(), agg_input_rows, all_indices, agg_ctx);
-      if (!agg_value.ok()) return agg_value.status();
-      out_row.emplace(cc->column().column_id(), *std::move(agg_value));
+    auto group_row_or =
+        EvalMatchMeasureGroup(*group, scan, contexts, augmented_rows, ctx);
+    if (!group_row_or.ok()) return group_row_or.status();
+    for (const auto& [col_id, val] : *group_row_or) {
+      out_row.emplace(col_id, val);
     }
   }
 

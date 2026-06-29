@@ -23,7 +23,7 @@ namespace {
 struct DecodedAppendBatch {
   bool shape_error = false;
   std::string shape_error_detail;
-  std::vector<backend::storage::Row> rows;
+  std::vector<backend::storage::Row> rows{};
 };
 
 DecodedAppendBatch DecodeAppendRowBatch(

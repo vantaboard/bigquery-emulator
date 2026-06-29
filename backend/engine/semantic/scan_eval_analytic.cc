@@ -53,9 +53,8 @@ int CompareOrderByItem(const ::googlesql::ResolvedOrderByItem* item,
     if (va.is_null()) return nulls_first ? -1 : 1;
     return nulls_first ? 1 : -1;
   }
-  bool less = ValueLess(va, vb);
-  if (item->is_descending()) less = !less;
-  return less ? -1 : 1;
+  return (item->is_descending() ? !ValueLess(va, vb) : ValueLess(va, vb)) ? -1
+                                                                          : 1;
 }
 
 Value LookupColumnValue(const ColumnBindings& row, int col_id) {
@@ -268,11 +267,17 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
               continue;
             }
             const int col_id = item->column_ref()->column().column_id();
-            const int cmp = CompareOrderByItem(
+            switch (CompareOrderByItem(
                 item,
                 LookupColumnValue(input_rows[a_idx], col_id),
-                LookupColumnValue(input_rows[b_idx], col_id));
-            if (cmp != 0) return cmp < 0;
+                LookupColumnValue(input_rows[b_idx], col_id))) {
+              case -1:
+                return true;
+              case 1:
+                return false;
+              default:
+                break;
+            }
           }
           return false;
         });

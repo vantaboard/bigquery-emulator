@@ -63,7 +63,7 @@ struct ParsedGeography {
   enum class Kind { kPoint, kPolygon } kind = Kind::kPoint;
   double point_lng = 0.0;
   double point_lat = 0.0;
-  std::vector<std::pair<double, double>> ring;
+  std::vector<std::pair<double, double>> ring{};
 };
 
 absl::StatusOr<std::vector<double>> ParseNumberList(absl::string_view body) {

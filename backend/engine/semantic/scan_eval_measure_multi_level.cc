@@ -119,8 +119,8 @@ absl::StatusOr<Value> EvalGrainLockInnerWithOuterAggregate(
 }
 
 struct MultiLevelInnerRow {
-  ColumnBindings bindings;
-  absl::flat_hash_map<std::string, Value> by_name;
+  ColumnBindings bindings{};
+  absl::flat_hash_map<std::string, Value> by_name{};
 };
 
 absl::StatusOr<Value> FinishAggregateFromArgColumns(
