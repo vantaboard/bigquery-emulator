@@ -29,8 +29,8 @@ class StoredSQLProcedure : public ::googlesql::Procedure {
   }
 
  private:
-  std::vector<std::string> argument_name_list_;
-  std::string procedure_body_;
+  std::vector<std::string> argument_name_list_{};
+  std::string procedure_body_{};
 };
 
 }  // namespace catalog

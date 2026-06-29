@@ -227,7 +227,8 @@ TEST_F(CatalogCrashSafetyTest,
                     "CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM "
                     "ds_base.source")
                     .ok());
-    GoogleSqlCatalog* reg_catalog = GetOrCreateRegistrationCatalog(
+    GoogleSqlCatalog* reg_catalog = nullptr;
+    reg_catalog = GetOrCreateRegistrationCatalog(
         kProject, storage_.get(), &reg_tf, language, "ds_tenant");
     ASSERT_NE(reg_catalog, nullptr);
 

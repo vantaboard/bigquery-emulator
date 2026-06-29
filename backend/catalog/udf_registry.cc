@@ -33,10 +33,10 @@ struct RegisteredFunctionEntry {
 };
 
 struct ProjectFunctions {
-  std::unique_ptr<::googlesql::TypeFactory> type_factory;
+  std::unique_ptr<::googlesql::TypeFactory> type_factory{};
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-      analyzer_outputs;
-  std::vector<RegisteredFunctionEntry> functions;
+      analyzer_outputs{};
+  std::vector<RegisteredFunctionEntry> functions{};
   // Replaced/dropped functions are retired here instead of destroyed:
   // long-lived catalogs (the per-project registration catalog in
   // udf_registration_catalog.cc and any in-flight query catalogs) hold
@@ -45,7 +45,7 @@ struct ProjectFunctions {
   // remove. Destroying the object on re-registration left those
   // pointers dangling, which crashed the engine on the next replay
   // (use-after-free -> InsertOrDie duplicate key / SIGSEGV).
-  std::vector<std::unique_ptr<const ::googlesql::Function>> retired_functions;
+  std::vector<std::unique_ptr<const ::googlesql::Function>> retired_functions{};
 };
 
 absl::Mutex mu;

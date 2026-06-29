@@ -114,7 +114,8 @@ TEST_F(UdfRegistrationCatalogTest,
   ::googlesql::TypeFactory reg_tf;
   const ::googlesql::LanguageOptions language = MakeLanguageOptions();
 
-  GoogleSqlCatalog* first = GetOrCreateRegistrationCatalog(
+  GoogleSqlCatalog* first = nullptr;
+  first = GetOrCreateRegistrationCatalog(
       kProject, storage_.get(), &reg_tf, language, "ds");
   ASSERT_NE(first, nullptr);
 
@@ -131,7 +132,8 @@ TEST_F(UdfRegistrationCatalogTest,
   ASSERT_NE(in_registry, nullptr)
       << "procedure must be in project registry after RegisterProjectProcedure";
 
-  GoogleSqlCatalog* second = GetOrCreateRegistrationCatalog(
+  GoogleSqlCatalog* second = nullptr;
+  second = GetOrCreateRegistrationCatalog(
       kProject, storage_.get(), &reg_tf, language, "ds");
   ASSERT_NE(second, nullptr);
   EXPECT_EQ(second, first);

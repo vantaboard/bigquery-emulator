@@ -16,7 +16,7 @@ namespace {
 
 struct RegistrationCatalogEntry {
   storage::Storage* storage = nullptr;
-  std::unique_ptr<GoogleSqlCatalog> catalog;
+  std::unique_ptr<GoogleSqlCatalog> catalog{};
 };
 
 absl::Mutex mu;

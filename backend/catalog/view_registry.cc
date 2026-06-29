@@ -33,13 +33,13 @@ struct RegisteredViewEntry {
 
 struct ProjectViews {
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-      analyzer_outputs;
-  std::vector<RegisteredViewEntry> views;
+      analyzer_outputs{};
+  std::vector<RegisteredViewEntry> views{};
   // Replaced/dropped views are retired instead of destroyed: catalogs
   // hold raw pointers handed out via AddTable, and destroying the
   // object on re-registration leaves them dangling (same
   // use-after-free class as udf_registry.cc).
-  std::vector<RegisteredViewEntry> retired_views;
+  std::vector<RegisteredViewEntry> retired_views{};
 };
 
 absl::Mutex mu;

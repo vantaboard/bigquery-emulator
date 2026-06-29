@@ -29,7 +29,7 @@ namespace catalog {
 namespace {
 
 struct ProjectPythonUdfs {
-  absl::flat_hash_map<std::string, PythonUdfDefinition> by_name;
+  absl::flat_hash_map<std::string, PythonUdfDefinition> by_name{};
 };
 
 absl::Mutex mu;

@@ -24,13 +24,13 @@ namespace {
 
 struct ProjectProcedures {
   std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>>
-      analyzer_outputs;
-  std::vector<std::unique_ptr<const StoredSQLProcedure>> procedures;
+      analyzer_outputs{};
+  std::vector<std::unique_ptr<const StoredSQLProcedure>> procedures{};
   // Replaced/dropped procedures are retired instead of destroyed:
   // catalogs hold raw pointers handed out via AddProcedure, and
   // destroying the object on re-registration leaves them dangling
   // (same use-after-free class as udf_registry.cc).
-  std::vector<std::unique_ptr<const StoredSQLProcedure>> retired_procedures;
+  std::vector<std::unique_ptr<const StoredSQLProcedure>> retired_procedures{};
 };
 
 absl::Mutex mu;

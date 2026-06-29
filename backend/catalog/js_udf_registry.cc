@@ -25,7 +25,7 @@ namespace catalog {
 namespace {
 
 struct ProjectJsUdfs {
-  absl::flat_hash_map<std::string, JsUdfDefinition> by_name;
+  absl::flat_hash_map<std::string, JsUdfDefinition> by_name{};
 };
 
 absl::Mutex mu;
