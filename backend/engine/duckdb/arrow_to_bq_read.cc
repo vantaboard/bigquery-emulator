@@ -302,9 +302,9 @@ absl::StatusOr<storage::Value> ReadScalarCell(
     }
     case schema::ColumnType::kDatetime:
     case schema::ColumnType::kTimestamp: {
-      const auto* data =
-          static_cast<const int64_t*>(::duckdb_vector_get_data(vector));
-      return storage::Value::String(FormatTimestampMicros(data[row]));
+      const auto* data = static_cast<const ::duckdb_timestamp*>(
+          ::duckdb_vector_get_data(vector));
+      return storage::Value::String(FormatTimestampMicros(data[row].micros));
     }
     case schema::ColumnType::kNumeric:
     case schema::ColumnType::kBignumeric:

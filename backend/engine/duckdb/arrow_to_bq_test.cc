@@ -172,6 +172,21 @@ TEST_F(ArrowToBqTest, RendersScalarTypeFamily) {
   EXPECT_EQ(rows[0].cells[3].string_value(), "2024-03-09 12:34:56.000000");
 }
 
+TEST_F(ArrowToBqTest, RendersTimestampTzShortOffsetAsUtcTimestamp) {
+  schema::TableSchema s;
+  schema::ColumnSchema ts;
+  ts.name = "ts";
+  ts.type = schema::ColumnType::kTimestamp;
+  s.columns.push_back(ts);
+
+  std::vector<storage::Row> rows =
+      RunAndFetch("SELECT TIMESTAMPTZ '2025-12-01 10:49:40+00' AS ts", s);
+  ASSERT_EQ(rows.size(), 1u);
+  ASSERT_EQ(rows[0].cells.size(), 1u);
+  EXPECT_EQ(rows[0].cells[0].kind(), storage::Value::Kind::kString);
+  EXPECT_EQ(rows[0].cells[0].string_value(), "2025-12-01 10:49:40.000000");
+}
+
 // LIST vectors lower into `Value::Array`, with each element rendered
 // against the inner column schema. The fixture mixes a non-null and
 // an empty array so the offset / length math gets exercised twice.
