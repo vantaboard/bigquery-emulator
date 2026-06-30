@@ -9,7 +9,10 @@ cc_library(
         "sql_tools_complete.cc",
         "sql_tools_complete_helpers.cc",
     ],
-    hdrs = ["sql_tools.h"],
+    hdrs = [
+        "sql_tools.h",
+        "sql_tools_complete_helpers.h",
+    ],
     deps = [
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
