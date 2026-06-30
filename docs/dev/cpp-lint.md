@@ -47,7 +47,8 @@ ownership boundary is pinned by
 | Format C++ only | `task lint:cpp:format` / `task lint:cpp:format-fix` | Reads from `tools/lint/cpp list`. |
 | Source-only C++ checks | `task lint:cpp:source` | File length, banned logging, status anti-patterns. |
 | clang-tidy (slow, sequential) | `task lint:cpp:tidy` | Requires `compile_commands.json`. |
-| clang-tidy (parallel batch) | `task lint:cpp:tidy-parallel` | Per-file parallel run; set `JOBS` (default 5) and `LOG` (default `lint-cpp-tidy.log`). |
+| clang-tidy (parallel batch) | `task lint:cpp:tidy-parallel` | Full-tree per-file parallel run; set `JOBS` (default 5) and `LOG` (default `lint-cpp-tidy.log`). Slow (multi-hour); use for manual full sweeps. |
+| clang-tidy (changed only) | `task lint:cpp:tidy-changed` | Diff-based gate CI uses: lints only first-party TUs changed vs `BASE` (default `origin/main`); changed headers re-tidy their sibling TU. Set `JOBS` (default 4). |
 | Parse tidy batch log | `task lint:cpp:tidy-report` | Reads `LOG`, writes `lint-cpp-tidy.csv` + `docs/dev/cpp-lint-tidy-triage.md`. |
 | Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
 | Editor clangd compile DB | `task lint:cpp:compile-commands-editor` | Smaller CDB at `.cache/clangd-editor/` for IDE only (engine binary, no `cc_test` union). |
@@ -217,7 +218,7 @@ using either: a bare `NOLINT` is rarely the right answer.
 | Job | Workflow | Posture |
 |---|---|---|
 | `build-and-test` | [`ci.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml) | Required. Includes `task lint:run` (gofmt, vet, clang-format, source-only C++, cppcheck) and `task lint:cpp:test`. |
-| `cpp-analysis` | [`ci-cpp-analysis.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`, generates `compile_commands.json`, then `task lint:cpp:tidy-parallel` (JOBS=4, 240 min timeout). |
+| `cpp-analysis` | [`ci-cpp-analysis.yml`](https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml) | Required. Runs `task lint:cpp:cppcheck`, generates `compile_commands.json`, then `task lint:cpp:tidy-changed` (diff-based: only first-party TUs changed in the PR; JOBS=4, 90 min timeout). The full-tree `task lint:cpp:tidy-parallel` is a manual sweep, not a CI gate. |
 
 The local mirror is `task ci:run`; the analysis lane on its own is
 `task ci:cpp-analysis`.

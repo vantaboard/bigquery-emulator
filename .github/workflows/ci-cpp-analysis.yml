@@ -1,8 +1,13 @@
-# Slow C++ analysis lane (cppcheck + clang-tidy). Runs on push/PR in
-# parallel with build-engine and does not wait for the engine artifact.
+# C++ analysis lane (cppcheck + diff-based clang-tidy). Runs on push/PR
+# in parallel with build-engine and does not wait for the engine artifact.
+#
+# clang-tidy is DIFF-BASED: it lints only the first-party C++ TUs
+# changed in the PR (task lint:cpp:tidy-changed), so a typical PR runs in
+# seconds/minutes instead of the multi-hour full-tree sweep. The full
+# sweep (task lint:cpp:tidy-parallel) stays available for manual runs.
 #
 # Mirror of `task ci:cpp-analysis` (cppcheck, compile_commands,
-# tidy-parallel). The build/test gate lives in ci.yml (workflow_run).
+# tidy-changed). The build/test gate lives in ci.yml (workflow_run).
 
 name: ci-cpp-analysis
 
@@ -22,10 +27,14 @@ jobs:
   cpp-analysis:
     name: cpp-analysis (cppcheck + clang-tidy)
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # Full history so the diff-based clang-tidy step can resolve
+          # the PR/push merge-base (BASE...HEAD).
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -82,11 +91,13 @@ jobs:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
         run: task lint:cpp:compile-commands
 
-      - name: clang-tidy (parallel first-party tree)
+      - name: clang-tidy (changed first-party files)
         env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           JOBS: "4"
           LOG: lint-cpp-tidy.log
-        run: task lint:cpp:tidy-parallel
+        run: task lint:cpp:tidy-changed
 
       - name: Upload clang-tidy log on failure
         if: failure()

@@ -515,6 +515,105 @@ tasks:
         exit $rc
         '
 
+  cpp:tidy-changed:
+    desc: |
+      clang-tidy ONLY the first-party C++ translation units changed
+      relative to BASE (default origin/main). A changed first-party
+      header is mapped to its sibling .cc/.cpp/.cxx TU so header edits
+      re-tidy the implementation. This is the diff-based gate the
+      ci-cpp-analysis workflow runs so PRs never pay for a full-tree
+      (multi-hour) scan; use cpp:tidy-parallel for the full sweep.
+      Requires compile_commands.json (task lint:cpp:compile-commands).
+      Vars: BASE (diff base ref), HEAD (default HEAD), JOBS (default 4),
+      LOG (default lint-cpp-tidy.log).
+    vars:
+      BASE: '{{.BASE | default "origin/main"}}'
+      HEAD: '{{.HEAD | default "HEAD"}}'
+      JOBS: '{{.JOBS | default "4"}}'
+      LOG: '{{.LOG | default "lint-cpp-tidy.log"}}'
+    cmds:
+      - |
+        export BASE="{{.BASE}}"
+        export HEAD="{{.HEAD}}"
+        export JOBS="{{.JOBS}}"
+        export LOG="{{.LOG}}"
+        bash -c '
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        base="${BASE:-origin/main}"
+        head="${HEAD:-HEAD}"
+        jobs="${JOBS:-4}"
+        log="${LOG:-lint-cpp-tidy.log}"
+        if ! command -v clang-tidy >/dev/null 2>&1; then
+          echo "lint:cpp:tidy-changed: clang-tidy not found on PATH" >&2
+          exit 1
+        fi
+        if [ ! -f compile_commands.json ]; then
+          echo "lint:cpp:tidy-changed: compile_commands.json missing; run task lint:cpp:compile-commands" >&2
+          exit 1
+        fi
+        # Resolve a usable diff base. Fall back to HEAD~1 when BASE is
+        # missing/unfetched (new branch, force-push, shallow clone).
+        if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+          base="$(git rev-parse --verify --quiet "HEAD~1" || git rev-parse HEAD)"
+        fi
+        # Three-dot diff: files touched on the HEAD side since the merge-base.
+        mapfile -t changed < <(git diff --name-only --diff-filter=ACMR "${base}...${head}" 2>/dev/null || git diff --name-only --diff-filter=ACMR "${base}" "${head}")
+        # Canonical first-party TU set (.cc/.cpp/.cxx only).
+        mapfile -t tu_all < <(go run ./tools/lint/cpp list --tidy)
+        declare -A is_tu=()
+        for t in "${tu_all[@]}"; do [ -n "$t" ] && is_tu["$t"]=1; done
+        declare -A want=()
+        for f in "${changed[@]}"; do
+          [ -z "$f" ] && continue
+          if [ -n "${is_tu[$f]:-}" ]; then
+            want["$f"]=1
+            continue
+          fi
+          case "$f" in
+            *.h|*.hpp|*.hh)
+              stem="${f%.*}"
+              for ext in cc cpp cxx; do
+                cand="${stem}.${ext}"
+                [ -n "${is_tu[$cand]:-}" ] && want["$cand"]=1
+              done
+              ;;
+          esac
+        done
+        files=()
+        for f in "${!want[@]}"; do files+=("$f"); done
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "lint:cpp:tidy-changed: no first-party C++ TUs changed vs ${base}; skipping"
+          exit 0
+        fi
+        printf "lint:cpp:tidy-changed: %d changed TU(s) vs %s\n" "${#files[@]}" "${base}"
+        printf "  %s\n" "${files[@]}" | sort
+        echo "=== lint:cpp:tidy-changed started $(date -Is) jobs=$jobs base=$base ===" > "$log"
+        failures=0
+        for f in "${files[@]}"; do
+          (
+            echo ""
+            echo "========== $f =========="
+            if ! clang-tidy -p . -warnings-as-errors='"'"'*'"'"' "$f"; then
+              echo "FAILED: $f"
+              exit 1
+            fi
+          ) >> "$log" 2>&1 &
+          while [ "$(jobs -rp | wc -l)" -ge "$jobs" ]; do
+            if ! wait -n; then failures=$((failures + 1)); fi
+          done
+        done
+        while [ "$(jobs -rp | wc -l)" -gt 0 ]; do
+          if ! wait -n; then failures=$((failures + 1)); fi
+        done
+        rc=0
+        [ "$failures" -gt 0 ] && rc=1
+        echo "=== lint:cpp:tidy-changed finished $(date -Is) exit=$rc failures=$failures ===" >> "$log"
+        echo "lint:cpp:tidy-changed: wrote $log (failures=$failures)"
+        exit $rc
+        '
+
   cpp:tidy-report:
     desc: |
       Parse lint-cpp-tidy.log into lint-cpp-tidy.csv and docs/dev/cpp-lint-tidy-triage.md.
