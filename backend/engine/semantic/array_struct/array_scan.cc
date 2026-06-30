@@ -26,12 +26,6 @@ namespace array_struct {
 
 namespace {
 
-void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
-                                int n_arrays,
-                                ColumnBindings& bindings);
-void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
-                                    ColumnBindings& bindings);
-
 enum class ZipMode {
   kPad,
   kTruncate,
@@ -154,6 +148,66 @@ absl::StatusOr<int> ValidateStrictZipSizes(const std::vector<int>& sizes) {
   return row_count;
 }
 
+void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
+                                int n_arrays,
+                                ColumnBindings& bindings) {
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    const int public_id = scan.column_list(i).column_id();
+    if (bindings.count(public_id) != 0) continue;
+    if (i < n_arrays) {
+      const int element_id = scan.element_column_list(i).column_id();
+      auto it = bindings.find(element_id);
+      if (it != bindings.end()) {
+        bindings.emplace(public_id, it->second);
+        continue;
+      }
+    }
+    const std::string& pub_name = scan.column_list(i).name();
+    for (int j = 0; j < n_arrays; ++j) {
+      if (scan.element_column_list(j).name() != pub_name) continue;
+      auto it = bindings.find(scan.element_column_list(j).column_id());
+      if (it != bindings.end()) {
+        bindings.emplace(public_id, it->second);
+      }
+      break;
+    }
+  }
+}
+
+void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
+                                    ColumnBindings& bindings) {
+  absl::flat_hash_set<int> known_ids;
+  known_ids.reserve(scan.element_column_list_size() + 2);
+  for (int i = 0; i < scan.element_column_list_size(); ++i) {
+    known_ids.insert(scan.element_column_list(i).column_id());
+  }
+  if (scan.array_offset_column() != nullptr) {
+    known_ids.insert(scan.array_offset_column()->column().column_id());
+  }
+  for (int i = 0; i < scan.column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = scan.column_list(i);
+    if (known_ids.contains(col.column_id())) continue;
+    if (bindings.count(col.column_id()) != 0) continue;
+    const absl::string_view name = col.name();
+    if (name.empty() || name[0] != '$') continue;
+    if (name == "$side_effects") {
+      const ::googlesql::Type* type = col.type();
+      if (type != nullptr && type->kind() == ::googlesql::TYPE_BYTES) {
+        bindings.emplace(col.column_id(), Value::NullBytes());
+      } else {
+        bindings.emplace(col.column_id(), Value::Null(type));
+      }
+      continue;
+    }
+    const ::googlesql::Type* type = col.type();
+    if (type != nullptr && type->kind() == ::googlesql::TYPE_BOOL) {
+      bindings.emplace(col.column_id(), Value::Bool(false));
+    } else {
+      bindings.emplace(col.column_id(), Value::Null(type));
+    }
+  }
+}
+
 ColumnBindings BuildOuterUnnestNullRow(
     const ::googlesql::ResolvedArrayScan& scan, int n_arrays) {
   ColumnBindings bindings;
@@ -219,66 +273,6 @@ absl::StatusOr<std::vector<ColumnBindings>> BuildUnnestRows(
 }
 
 }  // namespace
-
-void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
-                                int n_arrays,
-                                ColumnBindings& bindings) {
-  for (int i = 0; i < scan.column_list_size(); ++i) {
-    const int public_id = scan.column_list(i).column_id();
-    if (bindings.count(public_id) != 0) continue;
-    if (i < n_arrays) {
-      const int element_id = scan.element_column_list(i).column_id();
-      auto it = bindings.find(element_id);
-      if (it != bindings.end()) {
-        bindings.emplace(public_id, it->second);
-        continue;
-      }
-    }
-    const std::string& pub_name = scan.column_list(i).name();
-    for (int j = 0; j < n_arrays; ++j) {
-      if (scan.element_column_list(j).name() != pub_name) continue;
-      auto it = bindings.find(scan.element_column_list(j).column_id());
-      if (it != bindings.end()) {
-        bindings.emplace(public_id, it->second);
-      }
-      break;
-    }
-  }
-}
-
-void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
-                                    ColumnBindings& bindings) {
-  absl::flat_hash_set<int> known_ids;
-  known_ids.reserve(scan.element_column_list_size() + 2);
-  for (int i = 0; i < scan.element_column_list_size(); ++i) {
-    known_ids.insert(scan.element_column_list(i).column_id());
-  }
-  if (scan.array_offset_column() != nullptr) {
-    known_ids.insert(scan.array_offset_column()->column().column_id());
-  }
-  for (int i = 0; i < scan.column_list_size(); ++i) {
-    const ::googlesql::ResolvedColumn& col = scan.column_list(i);
-    if (known_ids.contains(col.column_id())) continue;
-    if (bindings.count(col.column_id()) != 0) continue;
-    const absl::string_view name = col.name();
-    if (name.empty() || name[0] != '$') continue;
-    if (name == "$side_effects") {
-      const ::googlesql::Type* type = col.type();
-      if (type != nullptr && type->kind() == ::googlesql::TYPE_BYTES) {
-        bindings.emplace(col.column_id(), Value::NullBytes());
-      } else {
-        bindings.emplace(col.column_id(), Value::Null(type));
-      }
-      continue;
-    }
-    const ::googlesql::Type* type = col.type();
-    if (type != nullptr && type->kind() == ::googlesql::TYPE_BOOL) {
-      bindings.emplace(col.column_id(), Value::Bool(false));
-    } else {
-      bindings.emplace(col.column_id(), Value::Null(type));
-    }
-  }
-}
 
 absl::StatusOr<std::vector<ColumnBindings>> EvaluateArrayScan(
     const ::googlesql::ResolvedArrayScan& scan, const EvalContext& parent_ctx) {

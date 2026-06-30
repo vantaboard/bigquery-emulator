@@ -8,7 +8,6 @@
 #include "backend/engine/duckdb/duckdb_executor.h"
 #include "backend/engine/duckdb/duckdb_executor_insert_select_helpers.h"
 #include "backend/engine/duckdb/duckdb_executor_internal.h"
-#include "backend/schema/googlesql_to_bq.h"
 #include "backend/storage/storage.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "proto/emulator.pb.h"
@@ -18,20 +17,6 @@ namespace backend {
 namespace engine {
 namespace duckdb {
 namespace internal {
-
-absl::StatusOr<schema::TableSchema> InsertSelectDrainSchema(
-    const ::googlesql::ResolvedInsertStmt& insert) {
-  v1::TableSchema proto;
-  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>> outputs;
-  outputs.reserve(insert.query_output_column_list_size());
-  for (int i = 0; i < insert.query_output_column_list_size(); ++i) {
-    const ::googlesql::ResolvedColumn& col = insert.query_output_column_list(i);
-    outputs.push_back(::googlesql::MakeResolvedOutputColumn(col.name(), col));
-  }
-  absl::Status mapped = schema::OutputColumnListToTableSchema(outputs, &proto);
-  if (!mapped.ok()) return mapped;
-  return schema::TableSchemaFromProto(proto);
-}
 
 absl::StatusOr<DmlStats> RunInsertSelect(
     const QueryRequest& request,

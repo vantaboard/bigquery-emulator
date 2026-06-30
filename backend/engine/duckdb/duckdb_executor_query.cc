@@ -22,6 +22,7 @@
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/phase_recorder.h"
 #include "backend/schema/googlesql_to_bq.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -41,6 +42,86 @@ namespace {
 
 const char* DuckDBLibraryVersion() {
   return ::duckdb_library_version();
+}
+
+absl::Status ApplyGovernanceToCollector(
+    storage::Storage* storage,
+    absl::string_view principal,
+    internal::TableScanCollector* collector,
+    catalog::TableGovernance* merged_governance) {
+  for (const ::googlesql::Table* tbl : collector->tables()) {
+    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
+    if (storage_table == nullptr) continue;
+    absl::StatusOr<storage::TableGovernance> gov_or =
+        storage->GetTableGovernance(storage_table->storage_table_id());
+    if (!gov_or.ok()) return gov_or.status();
+    catalog::TableGovernance catalog_gov =
+        internal::StorageGovernanceToCatalog(*gov_or);
+    merged_governance->row_access_policies.insert(
+        merged_governance->row_access_policies.end(),
+        catalog_gov.row_access_policies.begin(),
+        catalog_gov.row_access_policies.end());
+    merged_governance->columns.insert(merged_governance->columns.end(),
+                                      catalog_gov.columns.begin(),
+                                      catalog_gov.columns.end());
+    absl::StatusOr<std::string> filter_or = catalog::ComposeRowAccessFilterSql(
+        catalog_gov.row_access_policies, principal);
+    if (!filter_or.ok()) return filter_or.status();
+    if (!filter_or->empty()) {
+      collector->SetRowAccessFilter(tbl, *filter_or);
+    }
+  }
+  return absl::OkStatus();
+}
+
+struct InMemoryDuckdb {
+  ::duckdb_database db = nullptr;
+  ::duckdb_connection conn = nullptr;
+
+  void Close() {
+    if (conn != nullptr) ::duckdb_disconnect(&conn);
+    if (db != nullptr) ::duckdb_close(&db);
+    conn = nullptr;
+    db = nullptr;
+  }
+
+  std::pair<::duckdb_database, ::duckdb_connection> Release() {
+    return {std::exchange(db, nullptr), std::exchange(conn, nullptr)};
+  }
+
+  ~InMemoryDuckdb() {
+    Close();
+  }
+};
+
+absl::StatusOr<InMemoryDuckdb> OpenInMemoryDuckdb(
+    PhaseRecorder* phase_recorder) {
+  InMemoryDuckdb out;
+  if (::duckdb_open(nullptr, &out.db) != ::DuckDBSuccess) {
+    return absl::InternalError(
+        "DuckDbExecutor::ExecuteQuery: duckdb_open(in-memory) failed");
+  }
+  if (::duckdb_connect(out.db, &out.conn) != ::DuckDBSuccess) {
+    out.Close();
+    return absl::InternalError(
+        "DuckDbExecutor::ExecuteQuery: duckdb_connect failed");
+  }
+  if (absl::Status threads =
+          internal::RunSqlNoResult(out.conn, "PRAGMA threads=1");
+      !threads.ok()) {
+    out.Close();
+    return threads;
+  }
+  const absl::Time udf_start = absl::Now();
+  if (auto reg = udf::RegisterAll(out.conn); !reg.ok()) {
+    out.Close();
+    return reg;
+  }
+  if (phase_recorder != nullptr) {
+    phase_recorder->Record("udf_register",
+                           absl::ToInt64Microseconds(absl::Now() - udf_start));
+  }
+  return out;
 }
 
 }  // namespace
@@ -230,79 +311,22 @@ absl::StatusOr<std::unique_ptr<RowSource>> DuckDbExecutor::ExecuteQuery(
           ? std::string(catalog::kEmulatorPrincipalEmail)
           : request.principal_email;
   catalog::TableGovernance merged_governance;
-  for (const ::googlesql::Table* tbl : collector.tables()) {
-    const auto* storage_table = dynamic_cast<const catalog::StorageTable*>(tbl);
-    if (storage_table == nullptr) continue;
-    absl::StatusOr<storage::TableGovernance> gov_or =
-        storage_->GetTableGovernance(storage_table->storage_table_id());
-    if (!gov_or.ok()) return gov_or.status();
-    catalog::TableGovernance catalog_gov =
-        internal::StorageGovernanceToCatalog(*gov_or);
-    merged_governance.row_access_policies.insert(
-        merged_governance.row_access_policies.end(),
-        catalog_gov.row_access_policies.begin(),
-        catalog_gov.row_access_policies.end());
-    merged_governance.columns.insert(merged_governance.columns.end(),
-                                     catalog_gov.columns.begin(),
-                                     catalog_gov.columns.end());
-    absl::StatusOr<std::string> filter_or = catalog::ComposeRowAccessFilterSql(
-        catalog_gov.row_access_policies, principal);
-    if (!filter_or.ok()) return filter_or.status();
-    if (!filter_or->empty()) {
-      collector.SetRowAccessFilter(tbl, *filter_or);
-    }
+  if (absl::Status gov = ApplyGovernanceToCollector(
+          storage_, principal, &collector, &merged_governance);
+      !gov.ok()) {
+    return gov;
   }
   std::vector<internal::OutputColumnMask> column_masks =
       internal::BuildOutputColumnMasks(
           *output_schema, merged_governance, principal);
 
   const absl::Time setup_start = absl::Now();
-  // 4. Open a fresh in-memory DuckDB. The connection / database are
-  // per-query: tables we materialize live only for this RPC and
-  // are torn down when the returned RowSource is destroyed.
-  ::duckdb_database db = nullptr;
-  if (::duckdb_open(nullptr, &db) != ::DuckDBSuccess) {
-    return absl::InternalError(
-        "DuckDbExecutor::ExecuteQuery: duckdb_open(in-memory) failed");
-  }
-  ::duckdb_connection conn = nullptr;
-  if (::duckdb_connect(db, &conn) != ::DuckDBSuccess) {
-    ::duckdb_close(&db);
-    return absl::InternalError(
-        "DuckDbExecutor::ExecuteQuery: duckdb_connect failed");
-  }
-  // Parallel float aggregates (e.g. SUM over 1M DOUBLE rows) can
-  // produce run-to-run bit differences when DuckDB fans out partial
-  // sums across threads. Single-thread execution keeps IEEE
-  // accumulation order stable for bench hash gates.
-  if (absl::Status threads = internal::RunSqlNoResult(conn, "PRAGMA threads=1");
-      !threads.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return threads;
-  }
+  absl::StatusOr<InMemoryDuckdb> duckdb_or =
+      OpenInMemoryDuckdb(request.phase_recorder.get());
+  if (!duckdb_or.ok()) return duckdb_or.status();
+  InMemoryDuckdb duckdb = std::move(*duckdb_or);
+  auto [db, conn] = duckdb.Release();
 
-  // 4b. Register the BigQuery polyfill UDF library on the fresh
-  // connection. Every BigQuery function whose disposition is
-  // `duckdb_udf` lowers to a UDF / macro the registrar installs
-  // here; the transpiler then emits a plain `<udf_name>(<args>)`
-  // call below. Registration failure is fail-fast: there is no
-  // runtime "missing UDF -> fall back to another route" path
-  // (per `docs/ENGINE_POLICY.md`'s Done Criterion 2).
-  const absl::Time udf_start = absl::Now();
-  if (auto reg = udf::RegisterAll(conn); !reg.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return reg;
-  }
-  if (request.phase_recorder != nullptr) {
-    request.phase_recorder->Record(
-        "udf_register", absl::ToInt64Microseconds(absl::Now() - udf_start));
-  }
-
-  // 5. Materialize each storage table inside the DuckDB connection.
-  // The transpiler assumes `Table::Name()` resolves to a relation
-  // already present in the connection's default schema.
   const absl::Time attach_start = absl::Now();
   if (absl::Status attach = internal::AttachCollectedQueryTables(
           conn, storage_, collector, request.phase_recorder.get());

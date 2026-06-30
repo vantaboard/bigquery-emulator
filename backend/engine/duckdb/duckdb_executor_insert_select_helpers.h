@@ -30,6 +30,9 @@ struct InsertSelectTarget {
 absl::StatusOr<InsertSelectTarget> ValidateInsertSelectTarget(
     const ::googlesql::ResolvedInsertStmt& insert);
 
+absl::StatusOr<schema::TableSchema> InsertSelectDrainSchema(
+    const ::googlesql::ResolvedInsertStmt& insert);
+
 absl::StatusOr<std::string> PrepareInsertSelectSql(
     const QueryRequest& request,
     const ::googlesql::ResolvedInsertStmt& insert,

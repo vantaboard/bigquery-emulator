@@ -25,6 +25,20 @@ InsertSelectConnection::~InsertSelectConnection() {
   if (db != nullptr) ::duckdb_close(&db);
 }
 
+absl::StatusOr<schema::TableSchema> InsertSelectDrainSchema(
+    const ::googlesql::ResolvedInsertStmt& insert) {
+  v1::TableSchema proto;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>> outputs;
+  outputs.reserve(insert.query_output_column_list_size());
+  for (int i = 0; i < insert.query_output_column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = insert.query_output_column_list(i);
+    outputs.push_back(::googlesql::MakeResolvedOutputColumn(col.name(), col));
+  }
+  absl::Status mapped = schema::OutputColumnListToTableSchema(outputs, &proto);
+  if (!mapped.ok()) return mapped;
+  return schema::TableSchemaFromProto(proto);
+}
+
 absl::StatusOr<InsertSelectTarget> ValidateInsertSelectTarget(
     const ::googlesql::ResolvedInsertStmt& insert) {
   if (insert.table_scan() == nullptr ||
