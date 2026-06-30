@@ -123,6 +123,7 @@ cc_library(
     hdrs = [
         "sql_preprocess.h",
         "sql_preprocess_internal.h",
+        "sql_preprocess_rewrites_helpers.h",
     ],
     deps = [
         "@com_google_absl//absl/status",
