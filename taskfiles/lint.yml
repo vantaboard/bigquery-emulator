@@ -704,8 +704,10 @@ tasks:
 
   cpp:compile-commands-editor:
     desc: |
-      Generate a lightweight compile_commands.json for editor clangd only
-      (engine binary deps, no cc_test union). Writes to
+      Generate a lightweight compile_commands.json for editor clangd
+      (engine binary deps + first-party cc_test union, so *_test.cc
+      files resolve gtest/gmock headers instead of falling back to
+      clang's default include chain). Writes to
       .cache/clangd-editor/compile_commands.json — pair with
       --compile-commands-dir in .vscode/settings.json. Full-tree lint
       still uses `task lint:cpp:compile-commands` at the repo root.
@@ -724,9 +726,11 @@ tasks:
         set -eo pipefail
         case "${GOOGLESQL_SOURCE:-prebuilt}" in
           prebuilt)
+            query_cfg=(--config=googlesql-prebuilt)
             aquery_cfg=googlesql-prebuilt
             ;;
           local|source)
+            query_cfg=()
             aquery_cfg=
             ;;
           *)
@@ -734,7 +738,15 @@ tasks:
             exit 2
             ;;
         esac
+        mapfile -t test_targets < <(
+          bazel query --noshow_progress --noshow_loading_progress \
+            "${query_cfg[@]}" \
+            '"'"'{{.CC_TEST_BAZEL_QUERY}}'"'"'
+        )
         target_args=( --target //binaries/emulator_main:emulator_main )
+        for t in "${test_targets[@]}"; do
+          target_args+=( --target "$t" )
+        done
         if [ -n "$aquery_cfg" ]; then
           python3 tools/lint/cpp/compile_db.py \
             "${target_args[@]}" \
