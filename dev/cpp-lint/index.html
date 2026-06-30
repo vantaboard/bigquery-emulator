@@ -786,6 +786,21 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ide-clangd" class="md-nav__link">
+    <span class="md-ellipsis">
+      IDE (clangd)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -941,6 +956,21 @@
       Commands
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ide-clangd" class="md-nav__link">
+    <span class="md-ellipsis">
+      IDE (clangd)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1131,7 +1161,12 @@ ownership boundary is pinned by
 <tr>
 <td>clang-tidy (parallel batch)</td>
 <td><code>task lint:cpp:tidy-parallel</code></td>
-<td>Per-file parallel run; set <code>JOBS</code> (default 5) and <code>LOG</code> (default <code>lint-cpp-tidy.log</code>).</td>
+<td>Full-tree per-file parallel run; set <code>JOBS</code> (default 5) and <code>LOG</code> (default <code>lint-cpp-tidy.log</code>). Slow (multi-hour); use for manual full sweeps.</td>
+</tr>
+<tr>
+<td>clang-tidy (changed only)</td>
+<td><code>task lint:cpp:tidy-changed</code></td>
+<td>Diff-based gate CI uses: lints only first-party TUs changed vs <code>BASE</code> (default <code>origin/main</code>); changed headers re-tidy their sibling TU. Set <code>JOBS</code> (default 4).</td>
 </tr>
 <tr>
 <td>Parse tidy batch log</td>
@@ -1142,6 +1177,11 @@ ownership boundary is pinned by
 <td>Generate compile DB</td>
 <td><code>task lint:cpp:compile-commands</code></td>
 <td>Uses <code>bazel query</code> + <code>bazel aquery</code>; honors <code>GOOGLESQL_SOURCE</code> for <code>--config</code>.</td>
+</tr>
+<tr>
+<td>Editor clangd compile DB</td>
+<td><code>task lint:cpp:compile-commands-editor</code></td>
+<td>Smaller CDB at <code>.cache/clangd-editor/</code> for IDE only (engine binary, no <code>cc_test</code> union).</td>
 </tr>
 <tr>
 <td>cppcheck</td>
@@ -1160,6 +1200,12 @@ ownership boundary is pinned by
 </tr>
 </tbody>
 </table>
+<h3 id="ide-clangd">IDE (clangd)<a class="headerlink" href="#ide-clangd" title="Permanent link">&para;</a></h3>
+<p>Cursor / VS Code uses the <a href="https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd">clangd extension</a> with repo-local <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.clangd"><code>.clangd</code></a> and <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.vscode/settings.json"><code>.vscode/settings.json</code></a>. Editor clangd is intentionally lightweight: no background indexing, no editor-time clang-tidy (those run via <code>task lint:cpp:tidy-*</code> instead).</p>
+<p>After a Bazel graph change, regenerate the editor compile database:</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="nv">GOOGLESQL_SOURCE</span><span class="o">=</span><span class="nb">local</span><span class="w"> </span>task<span class="w"> </span>lint:cpp:compile-commands-editor
+</code></pre></div>
+<p>Then run <strong>Clangd: Restart language server</strong> from the command palette so the new flags and CDB path take effect.</p>
 <h2 id="what-each-tool-covers">What each tool covers<a class="headerlink" href="#what-each-tool-covers" title="Permanent link">&para;</a></h2>
 <h3 id="clang-format-task-lintcppformat"><code>clang-format</code> (<code>task lint:cpp:format</code>)<a class="headerlink" href="#clang-format-task-lintcppformat" title="Permanent link">&para;</a></h3>
 <p>Profile: <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.clang-format"><code>.clang-format</code></a> — Google style,
@@ -1194,6 +1240,10 @@ four buckets:</p>
 <td>Style maintainability</td>
 <td><code>readability-*</code> (with the noisy ones turned off)</td>
 </tr>
+<tr>
+<td>Include hygiene</td>
+<td><code>misc-include-cleaner</code> (unused / indirect <code>#include</code>s; same class of hint as clangd Include Cleaner)</td>
+</tr>
 </tbody>
 </table>
 <p>Header filter: <code>^(backend|binaries|frontend|tools/googlesql-prebuilt/smoke)/.*\.(h|hpp|hh)$</code>.
@@ -1203,7 +1253,15 @@ include would emit findings the rule set was never tuned for.</p>
 (<code>WarningsAsErrors: '*'</code> in <code>.clang-tidy</code>, <code>-warnings-as-errors='*'</code>
 on the CLI in <code>task lint:cpp:tidy</code>). A finding fails CI; clear it
 in-tree or scope a <code>// NOLINT(check-name)</code> suppression with a
-reason. The CI job
+reason.</p>
+<p><strong>Include Cleaner:</strong> <code>misc-include-cleaner</code> flags headers that are
+not used directly in the translation unit (for example a leftover
+<code>#include</code> after a refactor). The same diagnostics appear in the
+editor via clangd when <code>--clang-tidy</code> is enabled. Many findings
+autofix with <code>clang-tidy --fix</code> on the affected file; the slow lane
+(<code>task lint:cpp:tidy</code>, <code>task lint:cpp:tidy-files</code>) is where they
+are enforced.</p>
+<p>The CI job
 (<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a>)
 gates on this lane (no <code>continue-on-error</code>).</p>
 <h3 id="cppcheck-task-lintcppcppcheck"><code>cppcheck</code> (<code>task lint:cpp:cppcheck</code>)<a class="headerlink" href="#cppcheck-task-lintcppcppcheck" title="Permanent link">&para;</a></h3>
@@ -1352,7 +1410,7 @@ using either: a bare <code>NOLINT</code> is rarely the right answer.</p>
 <tr>
 <td><code>cpp-analysis</code></td>
 <td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/ci-cpp-analysis.yml"><code>ci-cpp-analysis.yml</code></a></td>
-<td>Required. Runs <code>task lint:cpp:cppcheck</code>; clang-tidy is wired (<code>task lint:cpp:tidy</code>) and gating but currently invoked from local maintainer flow until the compile-database step is folded into CI.</td>
+<td>Required. Runs <code>task lint:cpp:cppcheck</code>, generates <code>compile_commands.json</code>, then <code>task lint:cpp:tidy-changed</code> (diff-based: only first-party TUs changed in the PR; JOBS=4, 90 min timeout). The full-tree <code>task lint:cpp:tidy-parallel</code> is a manual sweep, not a CI gate.</td>
 </tr>
 </tbody>
 </table>
