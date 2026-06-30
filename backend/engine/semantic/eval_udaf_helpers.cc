@@ -8,8 +8,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_udaf_internal.h"
 #include "backend/engine/semantic/eval_udaf.h"
+#include "backend/engine/semantic/eval_udaf_internal.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/function.h"
@@ -49,12 +49,12 @@ absl::Status DeclareOuterNonAggregateArgs(
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::pair<ColumnBindings, absl::flat_hash_map<std::string, Value>>>
-EvalListedUdafAggregates(
-    const ::googlesql::SQLFunction& sql_fn,
-    const UdafEvalScope& udaf,
-    FrameStack& outer_args,
-    const EvalContext& ctx) {
+absl::StatusOr<
+    std::pair<ColumnBindings, absl::flat_hash_map<std::string, Value>>>
+EvalListedUdafAggregates(const ::googlesql::SQLFunction& sql_fn,
+                         const UdafEvalScope& udaf,
+                         FrameStack& outer_args,
+                         const EvalContext& ctx) {
   ColumnBindings agg_results;
   absl::flat_hash_map<std::string, Value> agg_results_by_name;
   if (const auto* agg_list = sql_fn.aggregate_expression_list();

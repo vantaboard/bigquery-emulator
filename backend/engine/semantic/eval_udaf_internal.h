@@ -27,12 +27,12 @@ absl::Status DeclareOuterNonAggregateArgs(
     const std::vector<std::vector<Value>>& arg_columns,
     const std::vector<size_t>& row_indices);
 
-absl::StatusOr<std::pair<ColumnBindings, absl::flat_hash_map<std::string, Value>>>
-EvalListedUdafAggregates(
-    const ::googlesql::SQLFunction& sql_fn,
-    const UdafEvalScope& udaf,
-    FrameStack& outer_args,
-    const EvalContext& ctx);
+absl::StatusOr<
+    std::pair<ColumnBindings, absl::flat_hash_map<std::string, Value>>>
+EvalListedUdafAggregates(const ::googlesql::SQLFunction& sql_fn,
+                         const UdafEvalScope& udaf,
+                         FrameStack& outer_args,
+                         const EvalContext& ctx);
 
 }  // namespace udaf_internal
 }  // namespace semantic

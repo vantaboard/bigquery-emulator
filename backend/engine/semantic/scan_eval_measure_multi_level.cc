@@ -81,7 +81,7 @@ absl::StatusOr<Value> FinishAggregateFromArgColumns(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const std::vector<std::vector<Value>>& arg_columns,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx);
+    const EvalContext& ctx);
 
 // Measure rewrite grain-locks with inner `any_value` nodes. At evaluation
 // time the inner group should apply the outer constituent aggregate (e.g.
@@ -92,7 +92,7 @@ absl::StatusOr<Value> EvalGrainLockInnerWithOuterAggregate(
     const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(inner_any_value.argument_list_size()));
   absl::flat_hash_map<std::string, Value> row_columns_by_name;
@@ -122,7 +122,7 @@ absl::StatusOr<Value> FinishAggregateFromArgColumns(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const std::vector<std::vector<Value>>& arg_columns,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::string agg_name;
   if (agg.function() != nullptr) {
     agg_name = absl::AsciiStrToLower(
@@ -169,7 +169,7 @@ absl::StatusOr<Value> EvalMultiLevelAggregateForRows(
     const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<size_t> effective_rows = row_indices;
   if (agg.having_modifier() != nullptr) {
     auto filtered_or =

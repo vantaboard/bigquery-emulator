@@ -43,9 +43,8 @@ std::vector<TopCountEntry> SortTopSumEntries(
 absl::StatusOr<Value> BuildTopCountArray(
     const std::vector<TopCountEntry>& sorted,
     const ::googlesql::Type* return_type);
-absl::StatusOr<Value> BuildTopSumArray(
-    const std::vector<TopCountEntry>& sorted,
-    const ::googlesql::Type* return_type);
+absl::StatusOr<Value> BuildTopSumArray(const std::vector<TopCountEntry>& sorted,
+                                       const ::googlesql::Type* return_type);
 
 }  // namespace aggregate_top_internal
 }  // namespace functions

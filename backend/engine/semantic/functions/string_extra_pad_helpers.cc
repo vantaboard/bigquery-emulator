@@ -72,9 +72,10 @@ absl::StatusOr<std::string> BuildPadding(const Value& template_value,
                                          int64_t pad_needed) {
   std::string padding;
   while (true) {
-    auto plen = LengthOfValue(template_value.type_kind() == ::googlesql::TYPE_BYTES
-                                  ? Value::Bytes(padding)
-                                  : Value::String(padding));
+    auto plen =
+        LengthOfValue(template_value.type_kind() == ::googlesql::TYPE_BYTES
+                          ? Value::Bytes(padding)
+                          : Value::String(padding));
     if (!plen.ok()) return plen.status();
     if (*plen >= pad_needed) break;
     padding.append(pad);
@@ -107,8 +108,7 @@ absl::StatusOr<Value> PadValue(const std::vector<Value>& args, bool pad_left) {
     if (!truncated.ok()) return truncated.status();
     return StringOrBytesFromView(args[0], *truncated);
   }
-  auto trunc_pad_or =
-      BuildPadding(args[0], *pad_or, target - *current_len);
+  auto trunc_pad_or = BuildPadding(args[0], *pad_or, target - *current_len);
   if (!trunc_pad_or.ok()) return trunc_pad_or.status();
   if (pad_left) {
     return StringOrBytesFromView(

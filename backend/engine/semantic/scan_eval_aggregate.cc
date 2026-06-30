@@ -36,7 +36,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
     const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx);
+    const EvalContext& ctx);
 
 namespace {
 
@@ -100,7 +100,7 @@ absl::StatusOr<Value> EvalAggregateForRows(
     const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<size_t> effective_rows = row_indices;
   if (agg.having_modifier() != nullptr) {
     auto filtered_or =

@@ -21,11 +21,11 @@ namespace json_extract_internal {
 using ::googlesql::functions::JsonPathEvaluator;
 
 absl::StatusOr<JsonArrayExtractResult> ExtractUnquotedStringArray(
-    JsonPathEvaluator& evaluator,
-    absl::string_view json_text) {
+    JsonPathEvaluator& evaluator, absl::string_view json_text) {
   JsonArrayExtractResult out;
   std::vector<std::optional<std::string>> elems;
-  absl::Status st = evaluator.ExtractStringArray(json_text, &elems, &out.is_null);
+  absl::Status st =
+      evaluator.ExtractStringArray(json_text, &elems, &out.is_null);
   if (!st.ok()) return st;
   if (out.is_null) return out;
   out.values.reserve(elems.size());

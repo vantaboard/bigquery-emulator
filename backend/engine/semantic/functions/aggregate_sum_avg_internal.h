@@ -16,8 +16,7 @@ namespace aggregate_sum_avg_internal {
 
 absl::StatusOr<Value> NullOfAggregateType(const ::googlesql::Type* type);
 absl::StatusOr<Value> SumNumericAggregateCells(
-    const ::googlesql::Type* return_type,
-    const std::vector<Value>& cells);
+    const ::googlesql::Type* return_type, const std::vector<Value>& cells);
 absl::StatusOr<Value> SumInt64Cells(const ::googlesql::Type* return_type,
                                     const std::vector<Value>& cells);
 absl::StatusOr<Value> SumDoubleCells(const ::googlesql::Type* return_type,

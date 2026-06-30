@@ -307,13 +307,12 @@ absl::StatusOr<MergeParticipants> LoadMergeParticipants(
   return out;
 }
 
-absl::Status ApplyMergeWhenClauses(
-    const ::googlesql::ResolvedMergeStmt& merge,
-    const schema::TableSchema& schema,
-    MergeParticipants& participants,
-    DmlStats& stats,
-    std::vector<storage::Row>& inserts,
-    EvalContext& ctx) {
+absl::Status ApplyMergeWhenClauses(const ::googlesql::ResolvedMergeStmt& merge,
+                                   const schema::TableSchema& schema,
+                                   MergeParticipants& participants,
+                                   DmlStats& stats,
+                                   std::vector<storage::Row>& inserts,
+                                   EvalContext& ctx) {
   for (int i = 0; i < merge.when_clause_list_size(); ++i) {
     const ::googlesql::ResolvedMergeWhen* when = merge.when_clause_list(i);
     if (when == nullptr) {
@@ -322,8 +321,12 @@ absl::Status ApplyMergeWhenClauses(
     }
     switch (when->match_type()) {
       case ::googlesql::ResolvedMergeWhen::MATCHED: {
-        absl::Status applied = ApplyMatchedMergeWhen(
-            *when, schema, *merge.table_scan(), participants.targets, stats, ctx);
+        absl::Status applied = ApplyMatchedMergeWhen(*when,
+                                                     schema,
+                                                     *merge.table_scan(),
+                                                     participants.targets,
+                                                     stats,
+                                                     ctx);
         if (!applied.ok()) return applied;
         break;
       }
@@ -334,8 +337,13 @@ absl::Status ApplyMergeWhenClauses(
         break;
       }
       case ::googlesql::ResolvedMergeWhen::NOT_MATCHED_BY_SOURCE: {
-        absl::Status applied = ApplyNotMatchedBySourceMergeWhen(
-            *when, schema, *merge.table_scan(), participants.targets, stats, ctx);
+        absl::Status applied =
+            ApplyNotMatchedBySourceMergeWhen(*when,
+                                             schema,
+                                             *merge.table_scan(),
+                                             participants.targets,
+                                             stats,
+                                             ctx);
         if (!applied.ok()) return applied;
         break;
       }

@@ -79,7 +79,8 @@ std::vector<TopCountEntry> SortTopCountEntries(
     std::map<std::string, TopCountEntry> counts, int64_t k) {
   std::vector<TopCountEntry> sorted;
   sorted.reserve(counts.size());
-  for (auto& kv : counts) sorted.push_back(std::move(kv.second));
+  for (auto& kv : counts)
+    sorted.push_back(std::move(kv.second));
   std::sort(sorted.begin(),
             sorted.end(),
             [](const TopCountEntry& a, const TopCountEntry& b) {
@@ -95,7 +96,8 @@ std::vector<TopCountEntry> SortTopCountEntries(
 std::vector<TopCountEntry> SortTopSumEntries(
     std::map<std::string, TopCountEntry> sums, int64_t k) {
   std::vector<TopCountEntry> sorted;
-  for (auto& kv : sums) sorted.push_back(std::move(kv.second));
+  for (auto& kv : sums)
+    sorted.push_back(std::move(kv.second));
   std::sort(sorted.begin(),
             sorted.end(),
             [](const TopCountEntry& a, const TopCountEntry& b) {
@@ -133,9 +135,8 @@ absl::StatusOr<Value> BuildTopCountArray(
   return Value::Array(arr_type, std::move(out_elems));
 }
 
-absl::StatusOr<Value> BuildTopSumArray(
-    const std::vector<TopCountEntry>& sorted,
-    const ::googlesql::Type* return_type) {
+absl::StatusOr<Value> BuildTopSumArray(const std::vector<TopCountEntry>& sorted,
+                                       const ::googlesql::Type* return_type) {
   const ::googlesql::ArrayType* arr_type =
       return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
                                                        : nullptr;

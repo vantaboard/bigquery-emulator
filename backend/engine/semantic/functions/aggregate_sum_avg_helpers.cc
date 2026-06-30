@@ -79,8 +79,7 @@ absl::StatusOr<Value> CoerceToNumeric(const Value& v) {
 }
 
 absl::StatusOr<Value> SumNumericAggregateCells(
-    const ::googlesql::Type* return_type,
-    const std::vector<Value>& cells) {
+    const ::googlesql::Type* return_type, const std::vector<Value>& cells) {
   std::optional<::googlesql::NumericValue> total;
   bool any_non_null = false;
   for (const Value& v : cells) {

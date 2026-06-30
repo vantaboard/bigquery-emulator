@@ -153,6 +153,95 @@ def _promote_external_includes_to_system(args: list[str]) -> list[str]:
     return [compiler, *system_prefix, *rest]
 
 
+_PATH_FLAG_OPTS = frozenset(
+    {
+        "-I",
+        "-iquote",
+        "-isystem",
+        "-idirafter",
+        "-include",
+        "-include-pch",
+    }
+)
+
+
+def _bazel_output_base(repo_root: Path) -> Path:
+    """Return Bazel's `output_base` (where `external/` repos are stored)."""
+
+    proc = subprocess.run(
+        ["bazel", "info", "output_base"],
+        cwd=repo_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0:
+        _eprint("compile_db: `bazel info output_base` failed:")
+        _eprint(proc.stderr.decode("utf-8", errors="replace"))
+        sys.exit(proc.returncode or 1)
+    return Path(proc.stdout.strip())
+
+
+def _resolve_bazel_relative_path(
+    path: str, exec_root: Path, output_base: Path
+) -> str:
+    """Map execroot-relative `external/` / `bazel-out/` paths to absolutes.
+
+    Bazel's execroot only symlinks a subset of `external/` repos at any
+    given time (whatever the last configure/build touched). The canonical
+    checkout lives under `<output_base>/external/`, which persists across
+    builds. clang-tidy runs can happen hours after `aquery`, so we
+    absolutize include paths against both locations.
+    """
+
+    if not path or path.startswith("/"):
+        return path
+    if path.startswith("external/"):
+        for base in (exec_root, output_base):
+            candidate = base / path
+            if candidate.exists():
+                return str(candidate.resolve())
+        return str((output_base / path).resolve())
+    if path.startswith("bazel-out/"):
+        candidate = exec_root / path
+        if candidate.exists():
+            return str(candidate.resolve())
+    return path
+
+
+def _canonicalize_compile_args(
+    args: list[str], exec_root: Path, output_base: Path
+) -> list[str]:
+    """Rewrite `-I`/`-isystem`/`-iquote` operands as absolute paths."""
+
+    out: list[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in _PATH_FLAG_OPTS and i + 1 < len(args):
+            out.append(arg)
+            out.append(
+                _resolve_bazel_relative_path(args[i + 1], exec_root, output_base)
+            )
+            i += 2
+            continue
+        if (
+            arg.startswith("-I")
+            and len(arg) > 2
+            and not arg.startswith("-isystem")
+        ):
+            out.append(
+                "-I"
+                + _resolve_bazel_relative_path(arg[2:], exec_root, output_base)
+            )
+            i += 1
+            continue
+        out.append(arg)
+        i += 1
+    return out
+
+
 def _bazel_exec_root(repo_root: Path) -> Path:
     """Resolve the path that every `external/...` / `bazel-out/...`
     argument in a `bazel aquery` response is relative to.
@@ -199,7 +288,9 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
     references that need a separate walk).
     """
 
-    directory = str(_bazel_exec_root(repo_root))
+    exec_root = _bazel_exec_root(repo_root)
+    output_base = _bazel_output_base(repo_root)
+    directory = str(exec_root)
     out: list[dict] = []
     for action in aquery.get("actions", []):
         if action.get("mnemonic") != "CppCompile":
@@ -213,6 +304,7 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
         if not any(source.startswith(p) for p in FIRST_PARTY_PREFIXES):
             continue
         args = _promote_external_includes_to_system(args)
+        args = _canonicalize_compile_args(args, exec_root, output_base)
         # `compile_commands.json` requires either a `command` string
         # or an `arguments` list. We use the latter so quoting stays
         # unambiguous on long invocations with embedded spaces.

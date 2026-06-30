@@ -20,13 +20,14 @@ namespace scan_eval_internal {
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
 
-absl::StatusOr<std::map<std::string, std::pair<std::vector<Value>, std::vector<size_t>>>>
+absl::StatusOr<
+    std::map<std::string, std::pair<std::vector<Value>, std::vector<size_t>>>>
 BuildMultiLevelInnerGroups(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const ::googlesql::ResolvedScan* input_scan,
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<size_t>& effective_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::map<std::string, std::pair<std::vector<Value>, std::vector<size_t>>>
       inner_groups;
   absl::flat_hash_map<std::string, Value> row_columns_by_name;
@@ -73,7 +74,7 @@ absl::StatusOr<MultiLevelInnerRow> EvalMultiLevelInnerGroup(
     const std::vector<ColumnBindings>& input_rows,
     const std::vector<Value>& group_keys,
     const std::vector<size_t>& row_indices,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   MultiLevelInnerRow inner;
   for (int g = 0; g < agg.group_by_list_size(); ++g) {
     const ::googlesql::ResolvedComputedColumn* gc = agg.group_by_list(g);
@@ -113,7 +114,7 @@ absl::StatusOr<MultiLevelInnerRow> EvalMultiLevelInnerGroup(
 absl::StatusOr<bool> EvalMultiLevelHaving(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const MultiLevelInnerRow& inner,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   if (agg.having_expr() == nullptr) return true;
   EvalContext having_ctx = ctx;
   having_ctx.columns = &inner.bindings;
@@ -127,7 +128,7 @@ absl::StatusOr<std::vector<std::vector<Value>>> BuildMultiLevelOuterArgColumns(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     std::vector<MultiLevelInnerRow>& inner_results,
     std::vector<ColumnBindings>& outer_input_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   std::vector<std::vector<Value>> arg_columns(
       static_cast<size_t>(agg.argument_list_size()));
   outer_input_rows.reserve(inner_results.size());

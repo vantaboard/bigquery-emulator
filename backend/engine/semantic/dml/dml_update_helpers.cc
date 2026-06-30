@@ -17,16 +17,15 @@ namespace dml {
 
 namespace {
 
-absl::Status RecordUpdatedRow(
-    const ::googlesql::ResolvedUpdateStmt& upd,
-    storage::Row mutated,
-    const absl::flat_hash_map<int, int>& by_id,
-    const schema::TableSchema& schema,
-    std::vector<storage::Row>* rewritten,
-    std::vector<ColumnBindings>* returning_contexts,
-    std::vector<std::string>* returning_actions,
-    std::unique_ptr<RowSource>* returning_out,
-    int64_t* updated) {
+absl::Status RecordUpdatedRow(const ::googlesql::ResolvedUpdateStmt& upd,
+                              storage::Row mutated,
+                              const absl::flat_hash_map<int, int>& by_id,
+                              const schema::TableSchema& schema,
+                              std::vector<storage::Row>* rewritten,
+                              std::vector<ColumnBindings>* returning_contexts,
+                              std::vector<std::string>* returning_actions,
+                              const std::unique_ptr<RowSource>* returning_out,
+                              int64_t* updated) {
   ++(*updated);
   if (upd.returning() != nullptr && returning_out != nullptr) {
     auto post_bind = BindRow(mutated, *upd.table_scan(), by_id, schema);
@@ -50,11 +49,11 @@ absl::Status ApplyUpdateToMatchedRow(
     std::vector<storage::Row>* rewritten,
     std::vector<ColumnBindings>* returning_contexts,
     std::vector<std::string>* returning_actions,
-    std::unique_ptr<RowSource>* returning_out,
+    const std::unique_ptr<RowSource>* returning_out,
     int64_t* updated) {
   storage::Row mutated = row;
-  absl::Status applied = ApplyUpdateSets(
-      mutated, sets, nested_deletes, eval_ctx, schema, ctx);
+  absl::Status applied =
+      ApplyUpdateSets(mutated, sets, nested_deletes, eval_ctx, schema, ctx);
   if (!applied.ok()) return applied;
   return RecordUpdatedRow(upd,
                           std::move(mutated),
@@ -82,7 +81,7 @@ absl::Status ProcessOneUpdateRow(
     std::vector<storage::Row>* rewritten,
     std::vector<ColumnBindings>* returning_contexts,
     std::vector<std::string>* returning_actions,
-    std::unique_ptr<RowSource>* returning_out,
+    const std::unique_ptr<RowSource>* returning_out,
     int64_t* updated) {
   if (upd.from_scan() == nullptr) {
     ctx.columns = &target_bind;

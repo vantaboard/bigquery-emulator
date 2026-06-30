@@ -64,9 +64,10 @@ absl::StatusOr<absl::string_view> CastTimeZoneLiteral(
       .string_value();
 }
 
-absl::StatusOr<Value> FormatDatetimeToString(const ::googlesql::ResolvedCast& cast,
-                                             Value inner,
-                                             absl::string_view format_str) {
+absl::StatusOr<Value> FormatDatetimeToString(
+    const ::googlesql::ResolvedCast& cast,
+    Value inner,
+    absl::string_view format_str) {
   std::string out;
   if (absl::Status s = ::googlesql::functions::CastFormatDatetimeToString(
           format_str, inner.datetime_value(), &out);
@@ -90,9 +91,10 @@ absl::StatusOr<Value> FormatDateToString(const ::googlesql::ResolvedCast& cast,
   return Value::String(std::move(out));
 }
 
-absl::StatusOr<Value> FormatTimestampToString(const ::googlesql::ResolvedCast& cast,
-                                              Value inner,
-                                              absl::string_view format_str) {
+absl::StatusOr<Value> FormatTimestampToString(
+    const ::googlesql::ResolvedCast& cast,
+    Value inner,
+    absl::string_view format_str) {
   std::string out;
   absl::Status s;
   if (cast.time_zone() != nullptr) {
@@ -111,9 +113,10 @@ absl::StatusOr<Value> FormatTimestampToString(const ::googlesql::ResolvedCast& c
   return Value::String(std::move(out));
 }
 
-absl::StatusOr<Value> ParseStringToDateValue(const ::googlesql::ResolvedCast& cast,
-                                             absl::string_view format_str,
-                                             absl::string_view text) {
+absl::StatusOr<Value> ParseStringToDateValue(
+    const ::googlesql::ResolvedCast& cast,
+    absl::string_view format_str,
+    absl::string_view text) {
   auto current_date_or = CurrentDateValue();
   if (!current_date_or.ok()) return current_date_or.status();
   int32_t date = 0;
@@ -164,8 +167,8 @@ absl::StatusOr<Value> ParseStringToTimestampValue(
   return Value::TimestampFromUnixMicros(micros);
 }
 
-absl::StatusOr<Value> TimestampToStringInZone(const ::googlesql::ResolvedCast& cast,
-                                                Value inner) {
+absl::StatusOr<Value> TimestampToStringInZone(
+    const ::googlesql::ResolvedCast& cast, Value inner) {
   auto tz_or = CastTimeZoneLiteral(cast);
   if (!tz_or.ok()) return tz_or.status();
   absl::TimeZone tz;
@@ -187,8 +190,8 @@ absl::StatusOr<Value> TimestampToStringInZone(const ::googlesql::ResolvedCast& c
   return Value::String(std::move(out));
 }
 
-absl::StatusOr<Value> TimestampToDatetimeInZone(const ::googlesql::ResolvedCast& cast,
-                                                Value inner) {
+absl::StatusOr<Value> TimestampToDatetimeInZone(
+    const ::googlesql::ResolvedCast& cast, Value inner) {
   auto tz_or = CastTimeZoneLiteral(cast);
   if (!tz_or.ok()) return tz_or.status();
   absl::TimeZone tz;

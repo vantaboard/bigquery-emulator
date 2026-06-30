@@ -48,20 +48,20 @@ void AppendReadStreamFilters(const ReadFilter& filter, std::string* sql) {
     absl::StrAppend(sql, internal::RenderWhereSqlClause(*filter.where_sql));
   } else if (filter.equality_predicate.has_value()) {
     absl::StrAppend(
-        *sql, internal::RenderPredicateClause(*filter.equality_predicate));
+        sql, internal::RenderPredicateClause(*filter.equality_predicate));
   }
   if (filter.row_start > 0 || filter.row_end >= 0) {
     const bool has_where = sql->find(" WHERE ") != std::string::npos;
     if (has_where) {
       if (filter.row_start > 0) {
-        absl::StrAppend(*sql, " AND file_row_number >= ", filter.row_start);
+        absl::StrAppend(sql, " AND file_row_number >= ", filter.row_start);
       }
       if (filter.row_end >= 0) {
-        absl::StrAppend(*sql, " AND file_row_number < ", filter.row_end);
+        absl::StrAppend(sql, " AND file_row_number < ", filter.row_end);
       }
     } else {
       absl::StrAppend(
-          *sql,
+          sql,
           internal::RenderRowPartitionClause(filter.row_start, filter.row_end));
     }
   }

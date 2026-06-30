@@ -15,18 +15,21 @@ namespace cast_format_internal {
 
 absl::StatusOr<absl::string_view> CastFormatLiteral(
     const ::googlesql::ResolvedCast& cast);
-absl::StatusOr<Value> FormatDatetimeToString(const ::googlesql::ResolvedCast& cast,
-                                             Value inner,
-                                             absl::string_view format_str);
+absl::StatusOr<Value> FormatDatetimeToString(
+    const ::googlesql::ResolvedCast& cast,
+    Value inner,
+    absl::string_view format_str);
 absl::StatusOr<Value> FormatDateToString(const ::googlesql::ResolvedCast& cast,
                                          Value inner,
                                          absl::string_view format_str);
-absl::StatusOr<Value> FormatTimestampToString(const ::googlesql::ResolvedCast& cast,
-                                              Value inner,
-                                              absl::string_view format_str);
-absl::StatusOr<Value> ParseStringToDateValue(const ::googlesql::ResolvedCast& cast,
-                                             absl::string_view format_str,
-                                             absl::string_view text);
+absl::StatusOr<Value> FormatTimestampToString(
+    const ::googlesql::ResolvedCast& cast,
+    Value inner,
+    absl::string_view format_str);
+absl::StatusOr<Value> ParseStringToDateValue(
+    const ::googlesql::ResolvedCast& cast,
+    absl::string_view format_str,
+    absl::string_view text);
 absl::StatusOr<Value> ParseStringToDatetimeValue(
     const ::googlesql::ResolvedCast& cast,
     absl::string_view format_str,
@@ -35,10 +38,10 @@ absl::StatusOr<Value> ParseStringToTimestampValue(
     const ::googlesql::ResolvedCast& cast,
     absl::string_view format_str,
     absl::string_view text);
-absl::StatusOr<Value> TimestampToStringInZone(const ::googlesql::ResolvedCast& cast,
-                                              Value inner);
-absl::StatusOr<Value> TimestampToDatetimeInZone(const ::googlesql::ResolvedCast& cast,
-                                                Value inner);
+absl::StatusOr<Value> TimestampToStringInZone(
+    const ::googlesql::ResolvedCast& cast, Value inner);
+absl::StatusOr<Value> TimestampToDatetimeInZone(
+    const ::googlesql::ResolvedCast& cast, Value inner);
 
 }  // namespace cast_format_internal
 }  // namespace eval_expr_internal

@@ -31,7 +31,7 @@ namespace scan_eval_internal {
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 
 absl::StatusOr<bool> EvalBoolExpr(const ::googlesql::ResolvedExpr* expr,
-                                  EvalContext& ctx) {
+                                  const EvalContext& ctx) {
   if (expr == nullptr) {
     return absl::InvalidArgumentError("semantic: null filter expression");
   }

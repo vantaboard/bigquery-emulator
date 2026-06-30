@@ -85,7 +85,7 @@ absl::StatusOr<bool> ShouldIncludeJoinRow(
     const ::googlesql::ResolvedJoinScan& join,
     bool is_cross,
     const ColumnBindings& merged,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   if (is_cross || join.join_expr() == nullptr) return true;
   EvalContext merged_ctx = ctx;
   merged_ctx.columns = &merged;
@@ -96,7 +96,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeNestedLoopJoinRows(
     const ::googlesql::ResolvedJoinScan& join,
     const std::vector<ColumnBindings>& left_rows,
     const std::vector<ColumnBindings>& right_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   const bool is_left_outer =
       join.join_type() == ::googlesql::ResolvedJoinScan::LEFT;
   const bool is_cross =
@@ -165,8 +165,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeLateralJoinRows(
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScanWithJoinExpr(
-    const ::googlesql::ResolvedArrayScan& scan,
-    EvalContext& ctx) {
+    const ::googlesql::ResolvedArrayScan& scan, EvalContext& ctx) {
   auto left_or = MaterializeScanImpl(scan.input_scan(), ctx);
   if (!left_or.ok()) return left_or.status();
   std::vector<ColumnBindings> out;
@@ -204,8 +203,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScanWithJoinExpr(
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScanFromLeftInput(
-    const ::googlesql::ResolvedArrayScan& scan,
-    EvalContext& ctx) {
+    const ::googlesql::ResolvedArrayScan& scan, EvalContext& ctx) {
   auto left_or = MaterializeScanImpl(scan.input_scan(), ctx);
   if (!left_or.ok()) return left_or.status();
   std::vector<ColumnBindings> out;

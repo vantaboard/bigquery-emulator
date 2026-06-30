@@ -35,12 +35,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeLateralJoinRows(
     EvalContext& ctx);
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScanWithJoinExpr(
-    const ::googlesql::ResolvedArrayScan& scan,
-    EvalContext& ctx);
+    const ::googlesql::ResolvedArrayScan& scan, EvalContext& ctx);
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeArrayScanFromLeftInput(
-    const ::googlesql::ResolvedArrayScan& scan,
-    EvalContext& ctx);
+    const ::googlesql::ResolvedArrayScan& scan, EvalContext& ctx);
 
 }  // namespace materialize_internal
 }  // namespace scan_eval_internal
