@@ -54,13 +54,16 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             clang \
             clang-format \
-            clang-tidy \
+            clang-tidy-18 \
             cppcheck \
             libprotobuf-dev \
             protobuf-compiler \
             libgrpc++-dev \
             libgrpc-dev \
             protobuf-compiler-grpc
+          # Bazel aquery emits clang-18 flags (e.g. -fno-canonical-system-headers)
+          # that the distro's default clang-tidy package does not understand.
+          sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
 
       - name: Restore GoogleSQL prebuilt cache
         uses: actions/cache@v5

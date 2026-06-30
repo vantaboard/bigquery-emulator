@@ -164,6 +164,20 @@ _PATH_FLAG_OPTS = frozenset(
     }
 )
 
+# Flags newer Bazel/clang toolchains emit that older clang-tidy builds
+# reject outright (before include paths are parsed).
+_CLANG_TIDY_UNSUPPORTED_OPTS = frozenset(
+    {
+        "-fno-canonical-system-headers",
+    }
+)
+
+
+def _sanitize_args_for_clang_tidy(args: list[str]) -> list[str]:
+    """Drop compile-only flags clang-tidy cannot parse."""
+
+    return [a for a in args if a not in _CLANG_TIDY_UNSUPPORTED_OPTS]
+
 
 def _bazel_output_base(repo_root: Path) -> Path:
     """Return Bazel's `output_base` (where `external/` repos are stored)."""
@@ -305,6 +319,7 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
             continue
         args = _promote_external_includes_to_system(args)
         args = _canonicalize_compile_args(args, exec_root, output_base)
+        args = _sanitize_args_for_clang_tidy(args)
         # `compile_commands.json` requires either a `command` string
         # or an `arguments` list. We use the latter so quoting stays
         # unambiguous on long invocations with embedded spaces.
