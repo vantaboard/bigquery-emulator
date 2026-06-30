@@ -148,6 +148,8 @@ absl::StatusOr<int> ValidateStrictZipSizes(const std::vector<int>& sizes) {
   return row_count;
 }
 
+}  // namespace
+
 void AliasUnnestPublicColumnIds(const ::googlesql::ResolvedArrayScan& scan,
                                 int n_arrays,
                                 ColumnBindings& bindings) {
@@ -207,6 +209,8 @@ void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
     }
   }
 }
+
+namespace {
 
 ColumnBindings BuildOuterUnnestNullRow(
     const ::googlesql::ResolvedArrayScan& scan, int n_arrays) {

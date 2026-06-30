@@ -252,7 +252,7 @@ absl::Status ProcessOneUpdateRow(
     std::vector<storage::Row>* rewritten,
     std::vector<ColumnBindings>* returning_contexts,
     std::vector<std::string>* returning_actions,
-    std::unique_ptr<RowSource>* returning_out,
+    const std::unique_ptr<RowSource>* returning_out,
     int64_t* updated);
 
 absl::StatusOr<DmlStats> ExecuteUpdate(

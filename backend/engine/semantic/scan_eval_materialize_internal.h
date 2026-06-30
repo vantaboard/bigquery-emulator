@@ -27,7 +27,7 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeNestedLoopJoinRows(
     const ::googlesql::ResolvedJoinScan& join,
     const std::vector<ColumnBindings>& left_rows,
     const std::vector<ColumnBindings>& right_rows,
-    EvalContext& ctx);
+    const EvalContext& ctx);
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeLateralJoinRows(
     const ::googlesql::ResolvedJoinScan& join,
