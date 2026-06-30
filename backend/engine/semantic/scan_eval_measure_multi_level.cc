@@ -118,11 +118,6 @@ absl::StatusOr<Value> EvalGrainLockInnerWithOuterAggregate(
   return FinishAggregateFromArgColumns(outer_agg, arg_columns, dummy_rows, ctx);
 }
 
-struct MultiLevelInnerRow {
-  ColumnBindings bindings{};
-  absl::flat_hash_map<std::string, Value> by_name{};
-};
-
 absl::StatusOr<Value> FinishAggregateFromArgColumns(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const std::vector<std::vector<Value>>& arg_columns,
@@ -183,112 +178,32 @@ absl::StatusOr<Value> EvalMultiLevelAggregateForRows(
     effective_rows = std::move(*filtered_or);
   }
 
-  std::map<std::string, std::pair<std::vector<Value>, std::vector<size_t>>>
-      inner_groups;
-  absl::flat_hash_map<std::string, Value> row_columns_by_name;
-  for (size_t r : effective_rows) {
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &input_rows[r];
-    row_columns_by_name.clear();
-    PopulateColumnNameBindingsDeep(
-        input_scan, input_rows[r], row_columns_by_name);
-    if (ctx.columns_by_name != nullptr) {
-      for (const auto& [name, val] : *ctx.columns_by_name) {
-        row_columns_by_name[name] = val;
-      }
-    }
-    row_ctx.columns_by_name = &row_columns_by_name;
-
-    std::vector<Value> keys;
-    keys.reserve(agg.group_by_list_size());
-    for (int g = 0; g < agg.group_by_list_size(); ++g) {
-      const ::googlesql::ResolvedComputedColumn* gc = agg.group_by_list(g);
-      if (gc == nullptr || gc->expr() == nullptr) {
-        return absl::InternalError(
-            "semantic: multi-level aggregate group_by column has null expr");
-      }
-      auto key = EvalExpr(*gc->expr(), row_ctx);
-      if (!key.ok()) return key.status();
-      keys.push_back(*std::move(key));
-    }
-    const std::string fp = GroupKeyFingerprint(keys);
-    auto it = inner_groups.find(fp);
-    if (it == inner_groups.end()) {
-      inner_groups.emplace(
-          fp, std::make_pair(std::move(keys), std::vector<size_t>{r}));
-    } else {
-      it->second.second.push_back(r);
-    }
-  }
+  auto inner_groups_or = BuildMultiLevelInnerGroups(
+      agg, input_scan, input_rows, effective_rows, ctx);
+  if (!inner_groups_or.ok()) return inner_groups_or.status();
 
   std::vector<MultiLevelInnerRow> inner_results;
-  inner_results.reserve(inner_groups.size());
-  for (auto& [fp, group] : inner_groups) {
-    MultiLevelInnerRow inner;
-    for (int g = 0; g < agg.group_by_list_size(); ++g) {
-      const ::googlesql::ResolvedComputedColumn* gc = agg.group_by_list(g);
-      inner.bindings.emplace(gc->column().column_id(),
-                             group.first[static_cast<size_t>(g)]);
-      inner.by_name[std::string(gc->column().name())] =
-          group.first[static_cast<size_t>(g)];
+  inner_results.reserve(inner_groups_or->size());
+  for (auto& [fp, group] : *inner_groups_or) {
+    (void)fp;
+    auto inner_or = EvalMultiLevelInnerGroup(
+        agg, input_scan, input_rows, group.first, group.second, ctx);
+    if (!inner_or.ok()) return inner_or.status();
+    auto having_or = EvalMultiLevelHaving(agg, *inner_or, ctx);
+    if (!having_or.ok()) return having_or.status();
+    if (!*having_or) {
+      continue;
     }
-    for (int i = 0; i < agg.group_by_aggregate_list_size(); ++i) {
-      const ::googlesql::ResolvedComputedColumnBase* cc =
-          agg.group_by_aggregate_list(i);
-      if (cc == nullptr || cc->expr() == nullptr) {
-        return absl::InternalError(
-            "semantic: multi-level aggregate inner column has null expr");
-      }
-      const auto* inner_agg =
-          cc->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
-      if (inner_agg == nullptr) {
-        return MakeSemanticError(
-            SemanticErrorReason::kNotImplemented,
-            "semantic: multi-level aggregate inner expression is not an "
-            "aggregate call");
-      }
-      absl::StatusOr<Value> val =
-          IsGrainLockAnyValue(*inner_agg, *cc)
-              ? EvalGrainLockInnerWithOuterAggregate(
-                    agg, *inner_agg, input_scan, input_rows, group.second, ctx)
-              : EvalAggregateForRows(
-                    *inner_agg, input_scan, input_rows, group.second, ctx);
-      if (!val.ok()) return val.status();
-      inner.bindings.emplace(cc->column().column_id(), *val);
-      inner.by_name[std::string(cc->column().name())] = *val;
-    }
-
-    if (agg.having_expr() != nullptr) {
-      EvalContext having_ctx = ctx;
-      having_ctx.columns = &inner.bindings;
-      having_ctx.columns_by_name = &inner.by_name;
-      auto having_or = EvalExpr(*agg.having_expr(), having_ctx);
-      if (!having_or.ok()) return having_or.status();
-      if (having_or->is_null() || !having_or->bool_value()) {
-        continue;
-      }
-    }
-    inner_results.push_back(std::move(inner));
+    inner_results.push_back(std::move(*inner_or));
   }
 
-  std::vector<std::vector<Value>> arg_columns(
-      static_cast<size_t>(agg.argument_list_size()));
   std::vector<ColumnBindings> outer_input_rows;
-  outer_input_rows.reserve(inner_results.size());
-  for (MultiLevelInnerRow& inner : inner_results) {
-    outer_input_rows.push_back(inner.bindings);
-    const size_t row_index = outer_input_rows.size() - 1;
-    EvalContext row_ctx = ctx;
-    row_ctx.columns = &outer_input_rows[row_index];
-    row_ctx.columns_by_name = &inner.by_name;
-    for (int a = 0; a < agg.argument_list_size(); ++a) {
-      auto v = EvalExpr(*agg.argument_list(a), row_ctx);
-      if (!v.ok()) return v.status();
-      arg_columns[static_cast<size_t>(a)].push_back(*std::move(v));
-    }
-  }
+  auto arg_columns_or =
+      BuildMultiLevelOuterArgColumns(agg, inner_results, outer_input_rows, ctx);
+  if (!arg_columns_or.ok()) return arg_columns_or.status();
 
-  return FinishAggregateFromArgColumns(agg, arg_columns, outer_input_rows, ctx);
+  return FinishAggregateFromArgColumns(
+      agg, *arg_columns_or, outer_input_rows, ctx);
 }
 
 }  // namespace scan_eval_internal

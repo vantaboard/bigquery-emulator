@@ -13,6 +13,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/aggregate_top_internal.h"
 #include "backend/engine/semantic/functions/hll_funcs.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
@@ -26,10 +27,14 @@ namespace engine {
 namespace semantic {
 namespace functions {
 
-struct RowValue {
-  Value v{};
-  bool is_null = false;
-};
+using aggregate_top_internal::AccumulateTopCounts;
+using aggregate_top_internal::AccumulateTopSums;
+using aggregate_top_internal::BuildTopCountArray;
+using aggregate_top_internal::BuildTopSumArray;
+using aggregate_top_internal::RowValue;
+using aggregate_top_internal::SortTopCountEntries;
+using aggregate_top_internal::SortTopSumEntries;
+using aggregate_top_internal::TopKLimitFromArgColumn;
 
 std::vector<RowValue> CollectAggregateInputs(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
@@ -177,65 +182,16 @@ absl::StatusOr<Value> ApproxQuantiles(
   return Value::Array(arr_type, std::move(elements));
 }
 
-struct TopCountEntry {
-  Value key{};
-  int64_t sum = 0;
-  bool weight_was_non_null = false;
-};
-
 absl::StatusOr<Value> ApproxTopCount(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
     const ::googlesql::Type* return_type) {
   std::vector<RowValue> rows =
       CollectAggregateInputs(call, input_column_values);
-  std::map<std::string, TopCountEntry> counts;
-  for (const RowValue& row : rows) {
-    const std::string key = row.is_null ? "NULL" : row.v.DebugString();
-    auto it = counts.find(key);
-    if (it == counts.end()) {
-      counts.emplace(
-          key,
-          TopCountEntry{row.is_null ? Value::NullString() : row.v, 1, true});
-    } else {
-      it->second.sum += 1;
-    }
-  }
-  int64_t k = 2;
-  if (input_column_values.size() > 1 && !input_column_values[1].empty() &&
-      !input_column_values[1][0].is_null()) {
-    k = input_column_values[1][0].int64_value();
-  }
-  std::vector<TopCountEntry> sorted;
-  sorted.reserve(counts.size());
-  for (auto& kv : counts)
-    sorted.push_back(std::move(kv.second));
-  std::sort(sorted.begin(),
-            sorted.end(),
-            [](const TopCountEntry& a, const TopCountEntry& b) {
-              if (a.sum != b.sum) return a.sum > b.sum;
-              return a.key.DebugString() < b.key.DebugString();
-            });
-  if (sorted.size() > static_cast<size_t>(k)) {
-    sorted.resize(static_cast<size_t>(k));
-  }
-  const ::googlesql::ArrayType* arr_type =
-      return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                       : nullptr;
-  const ::googlesql::StructType* struct_type =
-      arr_type != nullptr ? arr_type->element_type()->AsStruct() : nullptr;
-  std::vector<Value> out_elems;
-  for (const TopCountEntry& e : sorted) {
-    std::vector<Value> fields = {e.key, Value::Int64(e.sum)};
-    if (struct_type != nullptr) {
-      out_elems.push_back(Value::Struct(struct_type, std::move(fields)));
-    }
-  }
-  if (arr_type == nullptr) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "APPROX_TOP_COUNT requires ARRAY<STRUCT>");
-  }
-  return Value::Array(arr_type, std::move(out_elems));
+  const int64_t k = TopKLimitFromArgColumn(
+      input_column_values, /*arg_index=*/1, /*default_k=*/2);
+  auto sorted = SortTopCountEntries(AccumulateTopCounts(rows), k);
+  return BuildTopCountArray(sorted, return_type);
 }
 
 absl::StatusOr<Value> ApproxTopSum(
@@ -246,67 +202,10 @@ absl::StatusOr<Value> ApproxTopSum(
     return absl::InvalidArgumentError(
         "APPROX_TOP_SUM expects value and weight");
   }
-  const size_t nrows = input_column_values[0].size();
-  std::map<std::string, TopCountEntry> sums;
-  for (size_t r = 0; r < nrows; ++r) {
-    const Value& key_v = input_column_values[0][r];
-    const Value& weight_v = input_column_values[1][r];
-    const std::string key = key_v.is_null() ? "NULL" : key_v.DebugString();
-    auto it = sums.find(key);
-    if (it == sums.end()) {
-      TopCountEntry entry{
-          key_v.is_null() ? Value::NullString() : key_v, 0, false};
-      if (!weight_v.is_null() &&
-          weight_v.type_kind() == ::googlesql::TYPE_INT64) {
-        entry.sum = weight_v.int64_value();
-        entry.weight_was_non_null = true;
-      }
-      sums.emplace(key, std::move(entry));
-    } else if (!weight_v.is_null() &&
-               weight_v.type_kind() == ::googlesql::TYPE_INT64) {
-      it->second.sum += weight_v.int64_value();
-      it->second.weight_was_non_null = true;
-    }
-  }
-  int64_t k = 2;
-  if (input_column_values.size() > 2 && !input_column_values[2].empty() &&
-      !input_column_values[2][0].is_null()) {
-    k = input_column_values[2][0].int64_value();
-  }
-  std::vector<TopCountEntry> sorted;
-  for (auto& kv : sums)
-    sorted.push_back(std::move(kv.second));
-  std::sort(sorted.begin(),
-            sorted.end(),
-            [](const TopCountEntry& a, const TopCountEntry& b) {
-              if (a.sum != b.sum) return a.sum > b.sum;
-              if (a.weight_was_non_null != b.weight_was_non_null) {
-                return a.weight_was_non_null > b.weight_was_non_null;
-              }
-              return a.key.DebugString() < b.key.DebugString();
-            });
-  if (sorted.size() > static_cast<size_t>(k)) {
-    sorted.resize(static_cast<size_t>(k));
-  }
-  const ::googlesql::ArrayType* arr_type =
-      return_type != nullptr && return_type->IsArray() ? return_type->AsArray()
-                                                       : nullptr;
-  const ::googlesql::StructType* struct_type =
-      arr_type != nullptr ? arr_type->element_type()->AsStruct() : nullptr;
-  std::vector<Value> out_elems;
-  for (const TopCountEntry& e : sorted) {
-    Value weight_val =
-        e.weight_was_non_null ? Value::Int64(e.sum) : Value::NullInt64();
-    std::vector<Value> fields = {e.key, std::move(weight_val)};
-    if (struct_type != nullptr) {
-      out_elems.push_back(Value::Struct(struct_type, std::move(fields)));
-    }
-  }
-  if (arr_type == nullptr) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "APPROX_TOP_SUM requires ARRAY<STRUCT>");
-  }
-  return Value::Array(arr_type, std::move(out_elems));
+  const int64_t k = TopKLimitFromArgColumn(
+      input_column_values, /*arg_index=*/2, /*default_k=*/2);
+  auto sorted = SortTopSumEntries(AccumulateTopSums(input_column_values), k);
+  return BuildTopSumArray(sorted, return_type);
 }
 
 absl::StatusOr<Value> ArrayConcatAgg(

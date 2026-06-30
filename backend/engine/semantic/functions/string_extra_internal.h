@@ -29,6 +29,9 @@ std::string EncodeBase32(absl::string_view input);
 bool DecodeBase32(absl::string_view input,
                   std::string* out,
                   absl::Status* error);
+absl::StatusOr<int64_t> LengthOfValue(const Value& v);
+absl::StatusOr<std::string> LeftOfValue(const Value& v, int64_t n);
+absl::StatusOr<Value> PadValue(const std::vector<Value>& args, bool pad_left);
 
 }  // namespace string_extra_internal
 }  // namespace functions

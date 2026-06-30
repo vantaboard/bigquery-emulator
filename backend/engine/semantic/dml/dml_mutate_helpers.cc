@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,6 +37,59 @@ absl::StatusOr<const ::googlesql::Type*> RootColumnTypeForTarget(
   }
   return absl::InternalError(
       "semantic/dml: UPDATE target column missing from table scan");
+}
+
+struct ParsedUpdateListItem {
+  std::optional<SetAssignment> set;
+  std::optional<NestedArrayDeleteAssignment> nested_delete;
+};
+
+absl::StatusOr<ParsedUpdateListItem> ParseOneUpdateListItem(
+    const ::googlesql::ResolvedUpdateItem& item,
+    const ::googlesql::ResolvedTableScan& table_scan,
+    const schema::TableSchema& schema) {
+  ParsedUpdateListItem out;
+  if (!item.update_item_element_list().empty() || !item.update_list().empty() ||
+      !item.insert_list().empty()) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        "semantic/dml: nested UPDATE (array element / sub-record) is "
+        "deferred; see docs/ENGINE_POLICY.md");
+  }
+  if (!item.delete_list().empty()) {
+    if (item.target() == nullptr || item.element_column() == nullptr) {
+      return absl::InternalError(
+          "semantic/dml: nested DELETE item missing target/element_column");
+    }
+    auto parsed = ParseUpdateTarget(*item.target(), schema);
+    if (!parsed.ok()) return parsed.status();
+    auto root_type = RootColumnTypeForTarget(table_scan, schema, *parsed);
+    if (!root_type.ok()) return root_type.status();
+    out.nested_delete =
+        NestedArrayDeleteAssignment{*std::move(parsed), *root_type, &item};
+    return out;
+  }
+  if (item.element_column() != nullptr) {
+    return MakeSemanticError(
+        SemanticErrorReason::kNotImplemented,
+        "semantic/dml: nested UPDATE (array element / sub-record) is "
+        "deferred; see docs/ENGINE_POLICY.md");
+  }
+  if (item.target() == nullptr) {
+    return absl::InternalError(
+        "semantic/dml: ResolvedUpdateItem has null target");
+  }
+  if (item.set_value() == nullptr || item.set_value()->value() == nullptr) {
+    return absl::InternalError(
+        "semantic/dml: scalar UPDATE item has null set_value");
+  }
+  auto parsed = ParseUpdateTarget(*item.target(), schema);
+  if (!parsed.ok()) return parsed.status();
+  auto root_type = RootColumnTypeForTarget(table_scan, schema, *parsed);
+  if (!root_type.ok()) return root_type.status();
+  out.set =
+      SetAssignment{*std::move(parsed), item.set_value()->value(), *root_type};
+  return out;
 }
 
 }  // namespace
@@ -82,47 +136,14 @@ ParseUpdateAssignments(const ::googlesql::ResolvedUpdateStmt& upd,
       return absl::InternalError(
           "semantic/dml: UPDATE update_item_list contains a null entry");
     }
-    if (!item->update_item_element_list().empty() ||
-        !item->update_list().empty() || !item->insert_list().empty()) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "deferred; see docs/ENGINE_POLICY.md");
+    auto parsed_item = ParseOneUpdateListItem(*item, *upd.table_scan(), schema);
+    if (!parsed_item.ok()) return parsed_item.status();
+    if (parsed_item->set.has_value()) {
+      sets.push_back(*std::move(parsed_item->set));
     }
-    if (!item->delete_list().empty()) {
-      if (item->target() == nullptr || item->element_column() == nullptr) {
-        return absl::InternalError(
-            "semantic/dml: nested DELETE item missing target/element_column");
-      }
-      auto parsed = ParseUpdateTarget(*item->target(), schema);
-      if (!parsed.ok()) return parsed.status();
-      auto root_type =
-          RootColumnTypeForTarget(*upd.table_scan(), schema, *parsed);
-      if (!root_type.ok()) return root_type.status();
-      nested_deletes.push_back({*std::move(parsed), *root_type, item});
-      continue;
+    if (parsed_item->nested_delete.has_value()) {
+      nested_deletes.push_back(*std::move(parsed_item->nested_delete));
     }
-    if (item->element_column() != nullptr) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic/dml: nested UPDATE (array element / sub-record) is "
-          "deferred; see docs/ENGINE_POLICY.md");
-    }
-    if (item->target() == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: ResolvedUpdateItem has null target");
-    }
-    if (item->set_value() == nullptr || item->set_value()->value() == nullptr) {
-      return absl::InternalError(
-          "semantic/dml: scalar UPDATE item has null set_value");
-    }
-    auto parsed = ParseUpdateTarget(*item->target(), schema);
-    if (!parsed.ok()) return parsed.status();
-    auto root_type =
-        RootColumnTypeForTarget(*upd.table_scan(), schema, *parsed);
-    if (!root_type.ok()) return root_type.status();
-    sets.push_back(
-        {*std::move(parsed), item->set_value()->value(), *root_type});
   }
   return std::make_pair(std::move(sets), std::move(nested_deletes));
 }

@@ -162,6 +162,60 @@ absl::StatusOr<Value> ApplyNestedArrayDeleteItem(
     const ColumnBindings& row_ctx,
     EvalContext& ctx);
 
+namespace merge_internal {
+
+struct TargetMergeState {
+  ColumnBindings target_bind{};
+  storage::Row row{};
+  bool has_source_match = false;
+  int match_count = 0;
+  ColumnBindings matched_bind{};
+  bool acted = false;
+  bool deleted = false;
+};
+
+struct SourceMergeState {
+  ColumnBindings source_bind{};
+  bool has_target_match = false;
+  bool acted = false;
+};
+
+struct MergeParticipants {
+  std::vector<TargetMergeState> targets;
+  std::vector<SourceMergeState> sources;
+};
+
+absl::StatusOr<MergeParticipants> LoadMergeParticipants(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    storage::Storage& storage,
+    const schema::TableSchema& schema,
+    const absl::flat_hash_map<int, int>& target_by_id,
+    const catalog::StorageTable* target,
+    EvalContext& ctx);
+
+void CorrelateMergeTargetsAndSources(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    std::vector<TargetMergeState>& targets,
+    std::vector<SourceMergeState>& sources,
+    EvalContext& ctx);
+
+absl::Status CheckMatchedTargetMultiMatch(
+    const ::googlesql::ResolvedMergeStmt& merge,
+    const std::vector<TargetMergeState>& targets);
+
+absl::Status ApplyMergeWhenClauses(const ::googlesql::ResolvedMergeStmt& merge,
+                                   const schema::TableSchema& schema,
+                                   MergeParticipants& participants,
+                                   DmlStats& stats,
+                                   std::vector<storage::Row>& inserts,
+                                   EvalContext& ctx);
+
+std::vector<storage::Row> BuildMergeFinalRows(
+    const std::vector<TargetMergeState>& targets,
+    const std::vector<storage::Row>& inserts);
+
+}  // namespace merge_internal
+
 absl::StatusOr<DmlStats> ExecuteMerge(
     const ::googlesql::ResolvedMergeStmt& merge,
     storage::Storage& storage,
@@ -184,6 +238,22 @@ absl::StatusOr<DmlStats> ExecuteDelete(
     storage::Storage& storage,
     EvalContext& ctx,
     std::unique_ptr<RowSource>* returning_out);
+
+absl::Status ProcessOneUpdateRow(
+    const ::googlesql::ResolvedUpdateStmt& upd,
+    const storage::Row& row,
+    const ColumnBindings& target_bind,
+    const std::vector<SetAssignment>& sets,
+    const std::vector<NestedArrayDeleteAssignment>& nested_deletes,
+    const std::vector<ColumnBindings>& from_rows,
+    const absl::flat_hash_map<int, int>& by_id,
+    const schema::TableSchema& schema,
+    EvalContext& ctx,
+    std::vector<storage::Row>* rewritten,
+    std::vector<ColumnBindings>* returning_contexts,
+    std::vector<std::string>* returning_actions,
+    std::unique_ptr<RowSource>* returning_out,
+    int64_t* updated);
 
 absl::StatusOr<DmlStats> ExecuteUpdate(
     const ::googlesql::ResolvedUpdateStmt& upd,

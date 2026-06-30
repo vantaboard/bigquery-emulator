@@ -18,8 +18,10 @@ cc_library(
         "dml_executor_common.cc",
         "dml_insert_helpers.cc",
         "dml_merge.cc",
+        "dml_merge_helpers.cc",
         "dml_mutate.cc",
         "dml_mutate_helpers.cc",
+        "dml_update_helpers.cc",
         "dml_returning.cc",
     ],
     hdrs = [

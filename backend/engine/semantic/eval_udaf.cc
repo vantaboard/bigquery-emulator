@@ -12,6 +12,7 @@
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/eval_expr_internal.h"
+#include "backend/engine/semantic/eval_udaf_internal.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/functions/specialized_funcs.h"
 #include "backend/engine/semantic/value.h"
@@ -25,6 +26,9 @@ namespace engine {
 namespace semantic {
 
 namespace {
+
+using udaf_internal::DeclareOuterNonAggregateArgs;
+using udaf_internal::EvalListedUdafAggregates;
 
 absl::StatusOr<std::vector<bool>> ArgIsAggregateFlags(
     const ::googlesql::Function& fn) {
@@ -194,69 +198,27 @@ absl::StatusOr<Value> EvalSqlUdafBody(
         "semantic: SQL UDAF signature/name arity mismatch");
   }
 
-  std::vector<bool> is_agg = *is_agg_or;
-
   FrameStack outer_args;
   outer_args.PushFrame();
-  for (size_t i = 0; i < arg_names.size(); ++i) {
-    if ((*is_agg_or)[i]) continue;
-    if (i >= arg_columns.size() || arg_columns[i].empty()) {
-      return MakeSemanticError(
-          SemanticErrorReason::kInvalidArgument,
-          absl::StrCat("semantic: SQL UDAF non-aggregate parameter '",
-                       arg_names[i],
-                       "' has no evaluated argument value"));
-    }
-    size_t sample_row = row_indices.empty() ? 0 : row_indices.front();
-    if (sample_row >= arg_columns[i].size()) {
-      return absl::InternalError(
-          "semantic: SQL UDAF non-aggregate argument row out of range");
-    }
-    absl::Status declared =
-        outer_args.Declare(arg_names[i], arg_columns[i][sample_row]);
-    if (!declared.ok()) return declared;
-  }
+  absl::Status declared = DeclareOuterNonAggregateArgs(
+      outer_args, arg_names, *is_agg_or, arg_columns, row_indices);
+  if (!declared.ok()) return declared;
 
   UdafEvalScope udaf{
       .arg_columns = &arg_columns,
       .row_indices = &row_indices,
-      .arg_is_aggregate = &is_agg,
+      .arg_is_aggregate = &(*is_agg_or),
       .arg_names = &arg_names,
       .agg_column_to_arg = nullptr,
   };
 
-  ColumnBindings agg_results;
-  absl::flat_hash_map<std::string, Value> agg_results_by_name;
-  if (const auto* agg_list = sql_fn.aggregate_expression_list();
-      agg_list != nullptr) {
-    for (const auto& cc_ptr : *agg_list) {
-      const ::googlesql::ResolvedComputedColumn* cc = cc_ptr.get();
-      if (cc == nullptr || cc->expr() == nullptr) {
-        return absl::InternalError(
-            "semantic: SQL UDAF aggregate_expression_list entry is null");
-      }
-      const auto* agg_expr =
-          cc->expr()->GetAs<::googlesql::ResolvedAggregateFunctionCall>();
-      if (agg_expr == nullptr) {
-        return absl::InternalError(
-            "semantic: SQL UDAF aggregate_expression_list expr is not an "
-            "aggregate call");
-      }
-      EvalContext agg_ctx = ctx;
-      agg_ctx.arguments = &outer_args;
-      agg_ctx.udaf = &udaf;
-      absl::StatusOr<Value> agg_value =
-          EvalUdafInnerAggregate(*agg_expr, udaf, agg_ctx);
-      if (!agg_value.ok()) return agg_value.status();
-      agg_results.emplace(cc->column().column_id(), *agg_value);
-      agg_results_by_name.emplace(std::string(cc->column().name()), *agg_value);
-    }
-  }
+  auto listed_or = EvalListedUdafAggregates(sql_fn, udaf, outer_args, ctx);
+  if (!listed_or.ok()) return listed_or.status();
 
   EvalContext final_ctx = ctx;
   final_ctx.arguments = &outer_args;
-  final_ctx.columns = &agg_results;
-  final_ctx.columns_by_name = &agg_results_by_name;
+  final_ctx.columns = &listed_or->first;
+  final_ctx.columns_by_name = &listed_or->second;
   final_ctx.udaf = nullptr;
   return EvalExpr(*body, final_ctx);
 }

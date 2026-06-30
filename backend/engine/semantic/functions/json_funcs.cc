@@ -12,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/json_funcs_extract_internal.h"
 #include "backend/engine/semantic/functions/string_funcs.h"
 #include "backend/engine/semantic/geography_value.h"
 #include "backend/engine/semantic/value.h"
@@ -39,6 +40,8 @@ using ::googlesql::functions::ConvertJsonToInt64;
 using ::googlesql::functions::ConvertJsonToString;
 using ::googlesql::functions::JsonPathEvaluator;
 using ::googlesql::functions::WideNumberMode;
+using json_extract_internal::ExtractRawJsonArray;
+using json_extract_internal::ExtractUnquotedStringArray;
 
 constexpr bool kEscapingValues = true;
 constexpr bool kEscapingKeys = true;
@@ -219,51 +222,22 @@ absl::StatusOr<Value> ExtractArrayValues(const std::vector<Value>& args,
     return absl::InternalError(
         "semantic: JSON_*_ARRAY missing ARRAY return type");
   }
-  const ::googlesql::Type* elem_type = arr_type->element_type();
-  const bool elem_is_json =
-      elem_type != nullptr && elem_type->kind() == ::googlesql::TYPE_JSON;
-
-  auto make_elem = [&](std::string text) -> Value {
-    if (elem_is_json) {
-      return Value::UnvalidatedJsonString(std::move(text));
-    }
-    return Value::String(std::move(text));
-  };
-
   auto json_text = JsonInputText(args[0]);
   if (!json_text.ok()) return NullForReturnType(return_type);
 
   auto evaluator = MakeEvaluator(*path, sql_standard_mode);
   if (!evaluator.ok()) return evaluator.status();
 
-  std::vector<Value> values;
   if (unquote_strings) {
-    std::vector<std::optional<std::string>> elems;
-    bool is_null = false;
-    absl::Status st =
-        (*evaluator)->ExtractStringArray(*json_text, &elems, &is_null);
-    if (!st.ok()) return st;
-    if (is_null) return NullForReturnType(return_type);
-    values.reserve(elems.size());
-    for (const auto& elem : elems) {
-      if (!elem.has_value()) {
-        values.push_back(Value::NullString());
-      } else {
-        values.push_back(Value::String(*elem));
-      }
-    }
-  } else {
-    std::vector<std::string> elems;
-    bool is_null = false;
-    absl::Status st = (*evaluator)->ExtractArray(*json_text, &elems, &is_null);
-    if (!st.ok()) return st;
-    if (is_null) return NullForReturnType(return_type);
-    values.reserve(elems.size());
-    for (std::string& elem : elems) {
-      values.push_back(make_elem(std::move(elem)));
-    }
+    auto extracted = ExtractUnquotedStringArray(**evaluator, *json_text);
+    if (!extracted.ok()) return extracted.status();
+    if (extracted->is_null) return NullForReturnType(return_type);
+    return Value::Array(arr_type->AsArray(), std::move(extracted->values));
   }
-  return Value::Array(arr_type->AsArray(), std::move(values));
+  auto extracted = ExtractRawJsonArray(**evaluator, *json_text, arr_type);
+  if (!extracted.ok()) return extracted.status();
+  if (extracted->is_null) return NullForReturnType(return_type);
+  return Value::Array(arr_type->AsArray(), std::move(extracted->values));
 }
 
 }  // namespace

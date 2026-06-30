@@ -50,8 +50,14 @@ cc_test(
 
 cc_library(
     name = "json_funcs",
-    srcs = ["json_funcs.cc"],
-    hdrs = ["json_funcs.h"],
+    srcs = [
+        "json_funcs.cc",
+        "json_funcs_extract_helpers.cc",
+    ],
+    hdrs = [
+        "json_funcs.h",
+        "json_funcs_extract_internal.h",
+    ],
     deps = [
         "//backend/engine/semantic:geography_value",
         ":string_funcs",
@@ -151,6 +157,7 @@ cc_library(
         "string_extra_encoding.cc",
         "string_extra_substr.cc",
         "string_extra_helpers.cc",
+        "string_extra_pad_helpers.cc",
         "string_extra_regex_format.cc",
         "string_extra_unicode.cc",
         "contains_substr.cc",
@@ -284,9 +291,15 @@ cc_library(
         "aggregate_safe_wrap.cc",
         "aggregate_specialized.cc",
         "aggregate_sum_avg.cc",
+        "aggregate_sum_avg_helpers.cc",
+        "aggregate_top_helpers.cc",
         "net_funcs.cc",
     ],
-    hdrs = ["specialized_funcs.h"],
+    hdrs = [
+        "specialized_funcs.h",
+        "aggregate_sum_avg_internal.h",
+        "aggregate_top_internal.h",
+    ],
     deps = [
         ":hll_funcs",
         ":kll_funcs",

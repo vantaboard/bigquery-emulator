@@ -38,6 +38,7 @@ using ::googlesql::functions::StringFormatUtf8;
 using string_extra_internal::AnyNull;
 using string_extra_internal::AsStringOrBytes;
 using string_extra_internal::MakeRegExpForValue;
+using string_extra_internal::PadValue;
 using string_extra_internal::StringOrBytesFromView;
 
 absl::StatusOr<Value> RegexpExtract(const std::vector<Value>& args) {
@@ -90,7 +91,7 @@ absl::StatusOr<Value> RegexpExtractAll(const std::vector<Value>& args,
     if (return_type != nullptr && return_type->IsArray()) {
       return Value::Array(return_type->AsArray(), {});
     }
-    return Value::Null(return_type);
+    return Value::NullString();
   }
   if (return_type == nullptr || !return_type->IsArray()) {
     return absl::InvalidArgumentError(
@@ -167,134 +168,12 @@ absl::StatusOr<Value> RegexpInstr(const std::vector<Value>& args) {
   return Value::Int64(out);
 }
 
-absl::StatusOr<int64_t> LengthOfValue(const Value& v) {
-  absl::Status error;
-  int64_t out = 0;
-  if (v.type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LengthBytes(v.bytes_value(), &out, &error)) {
-      return error;
-    }
-  } else if (!::googlesql::functions::LengthUtf8(
-                 v.string_value(), &out, &error)) {
-    return error;
-  }
-  return out;
-}
-
-absl::StatusOr<std::string> LeftOfValue(const Value& v, int64_t n) {
-  absl::Status error;
-  absl::string_view out;
-  if (v.type_kind() == ::googlesql::TYPE_BYTES) {
-    if (!::googlesql::functions::LeftBytes(v.bytes_value(), n, &out, &error)) {
-      return error;
-    }
-  } else if (!::googlesql::functions::LeftUtf8(
-                 v.string_value(), n, &out, &error)) {
-    return error;
-  }
-  return std::string(out);
-}
-
 absl::StatusOr<Value> Lpad(const std::vector<Value>& args) {
-  if (args.size() < 2 || args.size() > 3) {
-    return absl::InvalidArgumentError(
-        "semantic: LPAD expects two or three arguments");
-  }
-  if (args[0].is_null() || args[1].is_null() ||
-      (args.size() == 3 && args[2].is_null())) {
-    if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-      return Value::NullBytes();
-    }
-    return Value::NullString();
-  }
-  const int64_t target = args[1].int64_value();
-  auto current_len = LengthOfValue(args[0]);
-  if (!current_len.ok()) return current_len.status();
-  absl::string_view pad;
-  if (args.size() == 3) {
-    pad = AsStringOrBytes(args[2]);
-    if (pad.empty()) {
-      return absl::InvalidArgumentError(
-          "semantic: LPAD pattern must not be empty");
-    }
-  } else {
-    pad = args[0].type_kind() == ::googlesql::TYPE_BYTES
-              ? absl::string_view("\x20", 1)
-              : " ";
-  }
-  if (*current_len >= target) {
-    auto truncated = LeftOfValue(args[0], target);
-    if (!truncated.ok()) return truncated.status();
-    return StringOrBytesFromView(args[0], *truncated);
-  }
-  const int64_t pad_needed = target - *current_len;
-  std::string padding;
-  while (true) {
-    auto plen = LengthOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
-                                  ? Value::Bytes(padding)
-                                  : Value::String(padding));
-    if (!plen.ok()) return plen.status();
-    if (*plen >= pad_needed) break;
-    padding.append(pad);
-  }
-  auto trunc_pad = LeftOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
-                                   ? Value::Bytes(padding)
-                                   : Value::String(padding),
-                               pad_needed);
-  if (!trunc_pad.ok()) return trunc_pad.status();
-  return StringOrBytesFromView(
-      args[0], absl::StrCat(*trunc_pad, AsStringOrBytes(args[0])));
+  return PadValue(args, /*pad_left=*/true);
 }
 
 absl::StatusOr<Value> Rpad(const std::vector<Value>& args) {
-  if (args.size() < 2 || args.size() > 3) {
-    return absl::InvalidArgumentError(
-        "semantic: RPAD expects two or three arguments");
-  }
-  if (args[0].is_null() || args[1].is_null() ||
-      (args.size() == 3 && args[2].is_null())) {
-    if (args[0].type_kind() == ::googlesql::TYPE_BYTES) {
-      return Value::NullBytes();
-    }
-    return Value::NullString();
-  }
-  const int64_t target = args[1].int64_value();
-  auto current_len = LengthOfValue(args[0]);
-  if (!current_len.ok()) return current_len.status();
-  absl::string_view pad;
-  if (args.size() == 3) {
-    pad = AsStringOrBytes(args[2]);
-    if (pad.empty()) {
-      return absl::InvalidArgumentError(
-          "semantic: RPAD pattern must not be empty");
-    }
-  } else {
-    pad = args[0].type_kind() == ::googlesql::TYPE_BYTES
-              ? absl::string_view("\x20", 1)
-              : " ";
-  }
-  if (*current_len >= target) {
-    auto truncated = LeftOfValue(args[0], target);
-    if (!truncated.ok()) return truncated.status();
-    return StringOrBytesFromView(args[0], *truncated);
-  }
-  const int64_t pad_needed = target - *current_len;
-  std::string padding;
-  while (true) {
-    auto plen = LengthOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
-                                  ? Value::Bytes(padding)
-                                  : Value::String(padding));
-    if (!plen.ok()) return plen.status();
-    if (*plen >= pad_needed) break;
-    padding.append(pad);
-  }
-  auto trunc_pad = LeftOfValue(args[0].type_kind() == ::googlesql::TYPE_BYTES
-                                   ? Value::Bytes(padding)
-                                   : Value::String(padding),
-                               pad_needed);
-  if (!trunc_pad.ok()) return trunc_pad.status();
-  return StringOrBytesFromView(
-      args[0], absl::StrCat(AsStringOrBytes(args[0]), *trunc_pad));
+  return PadValue(args, /*pad_left=*/false);
 }
 
 absl::StatusOr<Value> FormatString(const std::vector<Value>& args) {

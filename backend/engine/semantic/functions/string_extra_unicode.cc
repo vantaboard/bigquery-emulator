@@ -150,7 +150,7 @@ absl::StatusOr<Value> CodePointsToString(const std::vector<Value>& args) {
         "semantic: CODE_POINTS_TO_STRING expects one argument");
   }
   if (args[0].is_null()) return Value::NullString();
-  if (!args[0].type()->IsArray()) {
+  if (args[0].type() == nullptr || !args[0].type()->IsArray()) {
     return absl::InvalidArgumentError(
         "semantic: CODE_POINTS_TO_STRING expects ARRAY<INT64>");
   }
@@ -198,7 +198,8 @@ absl::StatusOr<Value> ToCodePoints(const std::vector<Value>& args,
     if (return_type != nullptr && return_type->IsArray()) {
       return Value::Array(return_type->AsArray(), {});
     }
-    return Value::Null(return_type);
+    return absl::InvalidArgumentError(
+        "semantic: TO_CODE_POINTS missing array return type");
   }
   if (return_type == nullptr || !return_type->IsArray()) {
     return absl::InvalidArgumentError(
@@ -236,7 +237,10 @@ absl::StatusOr<Value> LeastGreatest(absl::string_view name,
   }
   for (const Value& arg : args) {
     if (arg.is_null()) {
-      return Value::Null(return_type);
+      if (return_type != nullptr) {
+        return Value::Null(return_type);
+      }
+      return Value::NullString();
     }
   }
   Value best = args[0];

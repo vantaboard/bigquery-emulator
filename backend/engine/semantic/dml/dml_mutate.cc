@@ -155,52 +155,21 @@ absl::StatusOr<DmlStats> ExecuteUpdate(
   for (const storage::Row& row : rows) {
     auto bind = BindRow(row, *upd.table_scan(), *by_id, schema);
     if (!bind.ok()) return bind.status();
-    ColumnBindings target_bind = *std::move(bind);
-
-    if (upd.from_scan() == nullptr) {
-      ctx.columns = &target_bind;
-      auto matched_or = EvalWherePredicate(upd.where_expr(), ctx);
-      ctx.columns = nullptr;
-      if (!matched_or.ok()) return matched_or.status();
-      if (!*matched_or) {
-        rewritten.push_back(row);
-        continue;
-      }
-      storage::Row mutated = row;
-      absl::Status applied = ApplyUpdateSets(
-          mutated, sets, nested_deletes, target_bind, schema, ctx);
-      if (!applied.ok()) return applied;
-      ++updated;
-      if (upd.returning() != nullptr && returning_out != nullptr) {
-        auto post_bind = BindRow(mutated, *upd.table_scan(), *by_id, schema);
-        if (!post_bind.ok()) return post_bind.status();
-        returning_contexts.push_back(*std::move(post_bind));
-        returning_actions.push_back("UPDATE");
-      }
-      rewritten.push_back(std::move(mutated));
-      continue;
-    }
-
-    ColumnBindings matched_from;
-    auto from_match_or =
-        CountFromScanMatches(upd, target_bind, from_rows, ctx, &matched_from);
-    if (!from_match_or.ok()) return from_match_or.status();
-    if (!*from_match_or) {
-      rewritten.push_back(row);
-      continue;
-    }
-    storage::Row mutated = row;
-    absl::Status applied = ApplyUpdateSets(
-        mutated, sets, nested_deletes, matched_from, schema, ctx);
-    if (!applied.ok()) return applied;
-    ++updated;
-    if (upd.returning() != nullptr && returning_out != nullptr) {
-      auto post_bind = BindRow(mutated, *upd.table_scan(), *by_id, schema);
-      if (!post_bind.ok()) return post_bind.status();
-      returning_contexts.push_back(*std::move(post_bind));
-      returning_actions.push_back("UPDATE");
-    }
-    rewritten.push_back(std::move(mutated));
+    absl::Status processed = ProcessOneUpdateRow(upd,
+                                                 row,
+                                                 *bind,
+                                                 sets,
+                                                 nested_deletes,
+                                                 from_rows,
+                                                 *by_id,
+                                                 schema,
+                                                 ctx,
+                                                 &rewritten,
+                                                 &returning_contexts,
+                                                 &returning_actions,
+                                                 returning_out,
+                                                 &updated);
+    if (!processed.ok()) return processed;
   }
   ctx.columns = nullptr;
 

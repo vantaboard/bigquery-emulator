@@ -2,6 +2,7 @@
 #define BIGQUERY_EMULATOR_BACKEND_ENGINE_SEMANTIC_SCAN_EVAL_INTERNAL_H_
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -108,6 +109,48 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeSampleScan(
     const ::googlesql::ResolvedSampleScan& scan, EvalContext& ctx);
 std::string GroupKeyFingerprint(const std::vector<Value>& keys);
 std::string PlainAggregateNameForPrivacyStub(absl::string_view agg_name);
+
+bool IsGrainLockAnyValue(
+    const ::googlesql::ResolvedAggregateFunctionCall& inner_agg,
+    const ::googlesql::ResolvedComputedColumnBase& cc);
+absl::StatusOr<Value> EvalGrainLockInnerWithOuterAggregate(
+    const ::googlesql::ResolvedAggregateFunctionCall& outer_agg,
+    const ::googlesql::ResolvedAggregateFunctionCall& inner_any_value,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
+
+struct MultiLevelInnerRow {
+  ColumnBindings bindings{};
+  absl::flat_hash_map<std::string, Value> by_name{};
+};
+
+absl::StatusOr<
+    std::map<std::string, std::pair<std::vector<Value>, std::vector<size_t>>>>
+BuildMultiLevelInnerGroups(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<size_t>& effective_rows,
+    EvalContext& ctx);
+absl::StatusOr<MultiLevelInnerRow> EvalMultiLevelInnerGroup(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const ::googlesql::ResolvedScan* input_scan,
+    const std::vector<ColumnBindings>& input_rows,
+    const std::vector<Value>& group_keys,
+    const std::vector<size_t>& row_indices,
+    EvalContext& ctx);
+absl::StatusOr<bool> EvalMultiLevelHaving(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    const MultiLevelInnerRow& inner,
+    EvalContext& ctx);
+absl::StatusOr<std::vector<std::vector<Value>>> BuildMultiLevelOuterArgColumns(
+    const ::googlesql::ResolvedAggregateFunctionCall& agg,
+    std::vector<MultiLevelInnerRow>& inner_results,
+    std::vector<ColumnBindings>& outer_input_rows,
+    EvalContext& ctx);
+
 absl::StatusOr<Value> FinishAggregateFromArgColumns(
     const ::googlesql::ResolvedAggregateFunctionCall& agg,
     const std::vector<std::vector<Value>>& arg_columns,
