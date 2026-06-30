@@ -175,6 +175,12 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   ::grpc::Status CommitBufferedPrefix(StreamState* state, std::int64_t offset)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
+  struct StreamSessionSnapshot {
+    backend::storage::TableId table;
+    backend::schema::TableSchema schema;
+    std::optional<v1::WriteStream::Type> type;
+  };
+
   ::grpc::Status LoadStreamSessionForAppend(absl::string_view bound_stream_name,
                                             StreamSessionSnapshot* session)
       ABSL_LOCKS_EXCLUDED(mu_);
@@ -206,12 +212,6 @@ class StorageWriteService final : public v1::StorageWrite::Service {
       ::grpc::ServerReaderWriter<v1::AppendRowsResponse, v1::AppendRowsRequest>*
           stream,
       v1::AppendRowsResponse resp);
-
-  struct StreamSessionSnapshot {
-    backend::storage::TableId table;
-    backend::schema::TableSchema schema;
-    std::optional<v1::WriteStream::Type> type;
-  };
 
   backend::storage::Storage* storage_;  // not owned
   mutable absl::Mutex mu_;

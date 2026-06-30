@@ -154,7 +154,7 @@ absl::StatusOr<std::vector<AggListRow>> SortAggRows(
 
 absl::StatusOr<std::vector<AggListRow>> ApplyAggRowLimit(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
-    EvalContext& ctx,
+    const EvalContext& ctx,
     std::vector<AggListRow> rows) {
   if (call.limit() == nullptr) return rows;
   auto limit_or = EvalExpr(*call.limit(), ctx);
@@ -184,7 +184,7 @@ absl::StatusOr<Value> EvalArrayAgg(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   if (input_column_values.size() != 1) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "semantic: ARRAY_AGG expects one argument");
@@ -241,7 +241,7 @@ absl::StatusOr<Value> EvalStringAgg(
     const ::googlesql::ResolvedAggregateFunctionCall& call,
     const std::vector<std::vector<Value>>& input_column_values,
     const std::vector<ColumnBindings>& input_rows,
-    EvalContext& ctx) {
+    const EvalContext& ctx) {
   if (input_column_values.empty()) {
     return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                              "semantic: STRING_AGG expects one argument");

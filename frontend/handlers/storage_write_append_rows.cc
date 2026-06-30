@@ -201,6 +201,7 @@ DecodedAppendBatch DecodeAppendRowBatch(
   }
 
   std::int64_t prior_offset = 0;
+  const std::int64_t row_count = static_cast<std::int64_t>(batch.rows.size());
   if (session.type == v1::WriteStream::BUFFERED ||
       session.type == v1::WriteStream::PENDING) {
     if (auto commit_status = CommitBufferedAppendRows(
@@ -224,7 +225,7 @@ DecodedAppendBatch DecodeAppendRowBatch(
   }
 
   resp.mutable_append_result()->set_offset(prior_offset);
-  resp.set_row_count(static_cast<std::int64_t>(batch.rows.size()));
+  resp.set_row_count(row_count);
   return WriteAppendResponse(stream, std::move(resp));
 }
 

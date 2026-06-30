@@ -35,6 +35,53 @@ namespace {
 
 constexpr std::int32_t kMaxStreamCount = 1000;
 
+absl::StatusOr<std::optional<std::string>> ParseReadSessionWhereSql(
+    const v1::ReadSession& read_session,
+    const backend::storage::TableId& table_id,
+    backend::storage::Storage* storage) {
+  if (!read_session.has_read_options() ||
+      read_session.read_options().row_restriction().empty()) {
+    return std::nullopt;
+  }
+  std::string transpiled;
+  const absl::Status parse_status =
+      TranspileRowRestriction(read_session.read_options().row_restriction(),
+                              table_id,
+                              storage,
+                              &transpiled);
+  if (!parse_status.ok()) {
+    return parse_status;
+  }
+  return std::optional<std::string>(std::move(transpiled));
+}
+
+absl::StatusOr<std::vector<std::string>> ParseReadSessionSelectedFields(
+    const v1::ReadSession& read_session,
+    const backend::schema::TableSchema& schema) {
+  std::vector<std::string> selected_fields;
+  if (!read_session.has_read_options() ||
+      read_session.read_options().selected_fields_size() == 0) {
+    return selected_fields;
+  }
+  selected_fields.reserve(read_session.read_options().selected_fields_size());
+  for (const auto& name : read_session.read_options().selected_fields()) {
+    if (name.empty()) {
+      return absl::InvalidArgumentError(
+          "StorageRead.CreateReadSession: read_options.selected_fields "
+          "entries must be non-empty");
+    }
+    if (FindColumnByName(schema, name) == kColumnNotFound) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "StorageRead.CreateReadSession: read_options.selected_fields "
+          "names unknown column `",
+          name,
+          "` (table has no top-level column with that name)"));
+    }
+    selected_fields.emplace_back(name);
+  }
+  return selected_fields;
+}
+
 std::int32_t NegotiateStreamCount(std::int32_t requested,
                                   std::int64_t total_rows) {
   if (requested <= 0) return 1;
@@ -200,46 +247,19 @@ absl::StatusOr<std::int64_t> StorageReadService::CountTableRows(
     return AbslToGrpcStatus(schema_or.status());
   }
 
-  std::optional<std::string> where_sql;
-  if (request->read_session().has_read_options() &&
-      !request->read_session().read_options().row_restriction().empty()) {
-    std::string transpiled;
-    const absl::Status parse_status = TranspileRowRestriction(
-        request->read_session().read_options().row_restriction(),
-        table_id,
-        storage_,
-        &transpiled);
-    if (!parse_status.ok()) {
-      return AbslToGrpcStatus(parse_status);
-    }
-    where_sql = std::move(transpiled);
+  auto where_or =
+      ParseReadSessionWhereSql(request->read_session(), table_id, storage_);
+  if (!where_or.ok()) {
+    return AbslToGrpcStatus(where_or.status());
   }
+  std::optional<std::string> where_sql = std::move(*where_or);
 
-  std::vector<std::string> selected_fields;
-  if (request->read_session().has_read_options() &&
-      request->read_session().read_options().selected_fields_size() > 0) {
-    selected_fields.reserve(
-        request->read_session().read_options().selected_fields_size());
-    for (const auto& name :
-         request->read_session().read_options().selected_fields()) {
-      if (name.empty()) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::INVALID_ARGUMENT,
-            "StorageRead.CreateReadSession: read_options.selected_fields "
-            "entries must be non-empty");
-      }
-      if (FindColumnByName(*schema_or, name) == kColumnNotFound) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::INVALID_ARGUMENT,
-            absl::StrCat(
-                "StorageRead.CreateReadSession: read_options.selected_fields "
-                "names unknown column `",
-                name,
-                "` (table has no top-level column with that name)"));
-      }
-      selected_fields.emplace_back(name);
-    }
+  auto selected_or =
+      ParseReadSessionSelectedFields(request->read_session(), *schema_or);
+  if (!selected_or.ok()) {
+    return AbslToGrpcStatus(selected_or.status());
   }
+  std::vector<std::string> selected_fields = std::move(*selected_or);
 
   absl::StatusOr<std::int64_t> total_rows_or = CountTableRows(table_id);
   if (!total_rows_or.ok()) {
