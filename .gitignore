@@ -119,6 +119,9 @@ third_party/**/.flattened-pom.xml
 # bazel:cache:clear` to reclaim space.
 /.cache/bazel-disk/
 
+# Editor-only clangd compile database (engine binary graph; no cc_test union).
+/.cache/clangd-editor/
+
 # Writable combined C++ LCOV from `task bazel:coverage` /
 # `aggregate_profraw_lcov.sh` (Bazel's bazel-out copy is read-only).
 /.cache/coverage/

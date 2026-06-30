@@ -603,6 +603,51 @@ tasks:
         fi
         '
 
+  cpp:compile-commands-editor:
+    desc: |
+      Generate a lightweight compile_commands.json for editor clangd only
+      (engine binary deps, no cc_test union). Writes to
+      .cache/clangd-editor/compile_commands.json — pair with
+      --compile-commands-dir in .vscode/settings.json. Full-tree lint
+      still uses `task lint:cpp:compile-commands` at the repo root.
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [ ! -x tools/lint/cpp/compile_db.py ]; then
+          echo 'lint:cpp:compile-commands-editor: tools/lint/cpp/compile_db.py is missing.' >&2
+          exit 1
+        fi
+        mkdir -p .cache/clangd-editor
+        export GOOGLESQL_SOURCE="${GOOGLESQL_SOURCE:-prebuilt}"
+        bash -c '
+        set -eo pipefail
+        case "${GOOGLESQL_SOURCE:-prebuilt}" in
+          prebuilt)
+            aquery_cfg=googlesql-prebuilt
+            ;;
+          local|source)
+            aquery_cfg=
+            ;;
+          *)
+            echo "lint:cpp:compile-commands-editor: GOOGLESQL_SOURCE must be local/source or prebuilt" >&2
+            exit 2
+            ;;
+        esac
+        target_args=( --target //binaries/emulator_main:emulator_main )
+        if [ -n "$aquery_cfg" ]; then
+          python3 tools/lint/cpp/compile_db.py \
+            "${target_args[@]}" \
+            --bazel-config "$aquery_cfg" \
+            --output .cache/clangd-editor/compile_commands.json
+        else
+          python3 tools/lint/cpp/compile_db.py \
+            "${target_args[@]}" \
+            --output .cache/clangd-editor/compile_commands.json
+        fi
+        '
+
   cpp:test:
     desc: |
       Run every first-party `cc_test` via the throttled

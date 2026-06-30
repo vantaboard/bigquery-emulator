@@ -50,9 +50,22 @@ ownership boundary is pinned by
 | clang-tidy (parallel batch) | `task lint:cpp:tidy-parallel` | Per-file parallel run; set `JOBS` (default 5) and `LOG` (default `lint-cpp-tidy.log`). |
 | Parse tidy batch log | `task lint:cpp:tidy-report` | Reads `LOG`, writes `lint-cpp-tidy.csv` + `docs/dev/cpp-lint-tidy-triage.md`. |
 | Generate compile DB | `task lint:cpp:compile-commands` | Uses `bazel query` + `bazel aquery`; honors `GOOGLESQL_SOURCE` for `--config`. |
+| Editor clangd compile DB | `task lint:cpp:compile-commands-editor` | Smaller CDB at `.cache/clangd-editor/` for IDE only (engine binary, no `cc_test` union). |
 | cppcheck | `task lint:cpp:cppcheck` | Secondary-analysis lane; also runs inside `task lint:run`. |
 | First-party `cc_test` | `task lint:cpp:test` | Discovers via `bazel query` (`--config` aligned with `task bazel:test`); reuses `task bazel:test`. |
 | Match CI locally | `task ci:run` / `task ci:cpp-analysis` | Both lanes — fast (blocking) and slow (warning-only). |
+
+### IDE (clangd)
+
+Cursor / VS Code uses the [clangd extension](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) with repo-local [`.clangd`](https://github.com/vantaboard/bigquery-emulator/blob/main/.clangd) and [`.vscode/settings.json`](https://github.com/vantaboard/bigquery-emulator/blob/main/.vscode/settings.json). Editor clangd is intentionally lightweight: no background indexing, no editor-time clang-tidy (those run via `task lint:cpp:tidy-*` instead).
+
+After a Bazel graph change, regenerate the editor compile database:
+
+```bash
+GOOGLESQL_SOURCE=local task lint:cpp:compile-commands-editor
+```
+
+Then run **Clangd: Restart language server** from the command palette so the new flags and CDB path take effect.
 
 ## What each tool covers
 

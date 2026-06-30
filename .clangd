@@ -1,0 +1,21 @@
+# Editor-time clangd policy for this repo.
+#
+# Full clang-tidy / include-cleaner / project-wide indexing run via:
+#   task lint:cpp:tidy-files
+#   task lint:cpp:tidy-parallel
+#   task lint:check
+#
+# Keep clangd lightweight so opening .cc/.h files does not OOM the IDE.
+
+Index:
+  Background: Skip
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    Remove: '*'
+    FastCheckFilter: Strict
+
+Completion:
+  HeaderInsertion: Never

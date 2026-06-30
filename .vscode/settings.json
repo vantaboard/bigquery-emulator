@@ -27,8 +27,12 @@
     "exp-vscode-go.testExplorer.enable": true,
 
     "clangd.arguments": [
-        "--background-index",
-        "--clang-tidy"
+        "-j=2",
+        "--background-index=false",
+        "--malloc-trim",
+        "--pch-storage=disk",
+        "--header-insertion=never",
+        "--compile-commands-dir=.cache/clangd-editor"
     ],
     "[cpp]": {
         "editor.formatOnSave": true,
