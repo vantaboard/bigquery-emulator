@@ -20,6 +20,21 @@ namespace engine {
 namespace duckdb {
 namespace internal {
 
+InsertSelectConnection::InsertSelectConnection(
+    InsertSelectConnection&& other) noexcept
+    : db(std::exchange(other.db, nullptr)),
+      conn(std::exchange(other.conn, nullptr)) {}
+
+InsertSelectConnection& InsertSelectConnection::operator=(
+    InsertSelectConnection&& other) noexcept {
+  if (this == &other) return *this;
+  if (conn != nullptr) ::duckdb_disconnect(&conn);
+  if (db != nullptr) ::duckdb_close(&db);
+  db = std::exchange(other.db, nullptr);
+  conn = std::exchange(other.conn, nullptr);
+  return *this;
+}
+
 InsertSelectConnection::~InsertSelectConnection() {
   if (conn != nullptr) ::duckdb_disconnect(&conn);
   if (db != nullptr) ::duckdb_close(&db);

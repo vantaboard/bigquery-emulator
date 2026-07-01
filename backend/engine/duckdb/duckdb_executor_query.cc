@@ -78,6 +78,25 @@ struct InMemoryDuckdb {
   ::duckdb_database db = nullptr;
   ::duckdb_connection conn = nullptr;
 
+  // Move-only. The user-declared destructor suppresses the implicit
+  // move constructor, and without one `return out;` in
+  // `OpenInMemoryDuckdb` copies the raw handles into the StatusOr and
+  // then destroys them via the local's destructor — handing the
+  // caller freed db/conn handles (use-after-free on the first query).
+  InMemoryDuckdb() = default;
+  InMemoryDuckdb(const InMemoryDuckdb&) = delete;
+  InMemoryDuckdb& operator=(const InMemoryDuckdb&) = delete;
+  InMemoryDuckdb(InMemoryDuckdb&& other) noexcept
+      : db(std::exchange(other.db, nullptr)),
+        conn(std::exchange(other.conn, nullptr)) {}
+  InMemoryDuckdb& operator=(InMemoryDuckdb&& other) noexcept {
+    if (this == &other) return *this;
+    Close();
+    db = std::exchange(other.db, nullptr);
+    conn = std::exchange(other.conn, nullptr);
+    return *this;
+  }
+
   void Close() {
     if (conn != nullptr) ::duckdb_disconnect(&conn);
     if (db != nullptr) ::duckdb_close(&db);

@@ -42,6 +42,16 @@ struct InsertSelectConnection {
   ::duckdb_database db = nullptr;
   ::duckdb_connection conn = nullptr;
 
+  // Move-only: the user-declared destructor suppresses the implicit
+  // move constructor; without explicit move ops, `return out;` in
+  // `OpenInsertSelectConnection` would copy the raw handles and then
+  // free them in the local's destructor, handing the caller dangling
+  // db/conn pointers.
+  InsertSelectConnection() = default;
+  InsertSelectConnection(const InsertSelectConnection&) = delete;
+  InsertSelectConnection& operator=(const InsertSelectConnection&) = delete;
+  InsertSelectConnection(InsertSelectConnection&& other) noexcept;
+  InsertSelectConnection& operator=(InsertSelectConnection&& other) noexcept;
   ~InsertSelectConnection();
 };
 
