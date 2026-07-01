@@ -272,7 +272,10 @@ jobs:
   build-source:
     name: build (source)
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # The from-source GoogleSQL build (~8K TUs) has outgrown 180 minutes
+    # on the standard runner; give it headroom so the comparison jobs
+    # get a parity-source-results artifact instead of a timeout.
+    timeout-minutes: 300
     outputs:
       mode: source
       googlesql_commit: ${{ steps.googlesql.outputs.googlesql-commit-full }}
