@@ -198,7 +198,7 @@ def _bazel_output_base(repo_root: Path) -> Path:
 
 
 def _resolve_bazel_relative_path(
-    path: str, exec_root: Path, output_base: Path
+    path: str, exec_root: Path, output_base: Path, repo_root: Path
 ) -> str:
     """Map execroot-relative `external/` / `bazel-out/` paths to absolutes.
 
@@ -218,14 +218,25 @@ def _resolve_bazel_relative_path(
                 return str(candidate.resolve())
         return str((output_base / path).resolve())
     if path.startswith("bazel-out/"):
-        candidate = exec_root / path
+        for base in (
+            exec_root,
+            output_base / "execroot" / "_main",
+            repo_root,
+        ):
+            candidate = base / path
+            if candidate.exists():
+                return str(candidate.resolve())
+        return str((exec_root / path).resolve())
+    # Workspace-relative paths (`.cache/googlesql-prebuilt/...`, etc.).
+    for base in (exec_root, repo_root):
+        candidate = base / path
         if candidate.exists():
             return str(candidate.resolve())
-    return path
+    return str((repo_root / path).resolve())
 
 
 def _canonicalize_compile_args(
-    args: list[str], exec_root: Path, output_base: Path
+    args: list[str], exec_root: Path, output_base: Path, repo_root: Path
 ) -> list[str]:
     """Rewrite `-I`/`-isystem`/`-iquote` operands as absolute paths."""
 
@@ -236,7 +247,9 @@ def _canonicalize_compile_args(
         if arg in _PATH_FLAG_OPTS and i + 1 < len(args):
             out.append(arg)
             out.append(
-                _resolve_bazel_relative_path(args[i + 1], exec_root, output_base)
+                _resolve_bazel_relative_path(
+                    args[i + 1], exec_root, output_base, repo_root
+                )
             )
             i += 2
             continue
@@ -247,7 +260,9 @@ def _canonicalize_compile_args(
         ):
             out.append(
                 "-I"
-                + _resolve_bazel_relative_path(arg[2:], exec_root, output_base)
+                + _resolve_bazel_relative_path(
+                    arg[2:], exec_root, output_base, repo_root
+                )
             )
             i += 1
             continue
@@ -318,7 +333,7 @@ def _extract_actions(aquery: dict, repo_root: Path) -> list[dict]:
         if not any(source.startswith(p) for p in FIRST_PARTY_PREFIXES):
             continue
         args = _promote_external_includes_to_system(args)
-        args = _canonicalize_compile_args(args, exec_root, output_base)
+        args = _canonicalize_compile_args(args, exec_root, output_base, repo_root)
         args = _sanitize_args_for_clang_tidy(args)
         # `compile_commands.json` requires either a `command` string
         # or an `arguments` list. We use the latter so quoting stays

@@ -691,11 +691,17 @@ tasks:
           target_args+=( --target "$t" )
         done
         if [ -n "$aquery_cfg" ]; then
+          echo "lint:cpp:compile-commands: prefetching generated proto headers..."
+          task bazel:build \
+            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto"
           python3 tools/lint/cpp/compile_db.py \
             "${target_args[@]}" \
             --bazel-config "$aquery_cfg" \
             --output compile_commands.json
         else
+          echo "lint:cpp:compile-commands: prefetching generated proto headers..."
+          task bazel:build \
+            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto"
           python3 tools/lint/cpp/compile_db.py \
             "${target_args[@]}" \
             --output compile_commands.json
