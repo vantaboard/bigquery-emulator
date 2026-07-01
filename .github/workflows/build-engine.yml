@@ -106,12 +106,8 @@ jobs:
         id: googlesql
         uses: ./.github/actions/setup-googlesql
         with:
-          # googlesql-prebuilt v0.1.3 corrupts STRING literals (4x/8x payload
-          # expansion) so mixed-quote LIKE fails (googlesql-corpus
-          # regexp_functions_newline). Build from source until v0.1.4 republish;
-          # parity smoke includes select_string_literal_newline.yaml.
-          prebuilt-url: ""
-          prebuilt-sha256: ""
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256 }}
 
       - name: Build C++ engine via Bazel (cache miss or stale restore)
         id: engine-build

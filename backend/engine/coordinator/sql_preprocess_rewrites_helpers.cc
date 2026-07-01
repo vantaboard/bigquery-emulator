@@ -43,8 +43,8 @@ bool AdvanceSingleQuoted(absl::string_view sql,
                          bool* in_single_quoted,
                          size_t* next_i) {
   const char c = sql[i];
-  out->push_back(c);
   if (c != '\'') return false;
+  out->push_back(c);
   if (i + 1 < sql.size() && sql[i + 1] == '\'') {
     out->push_back(sql[++i]);
     *next_i = i;
@@ -61,8 +61,8 @@ bool AdvanceDoubleQuoted(absl::string_view sql,
                          bool* in_double_quoted,
                          size_t* next_i) {
   const char c = sql[i];
-  out->push_back(c);
   if (c != '"') return false;
+  out->push_back(c);
   if (i + 1 < sql.size() && sql[i + 1] == '"') {
     out->push_back(sql[++i]);
     *next_i = i;

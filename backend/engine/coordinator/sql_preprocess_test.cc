@@ -254,6 +254,19 @@ TEST(SqlPreprocess, RewritesFormatTypeLiteralStandalone) {
   EXPECT_EQ("emu_format_t(input)", out);
 }
 
+TEST(SqlPreprocess, PreservesDoubleQuotedStringLiterals) {
+  const std::string sql =
+      R"(SELECT "FirstLine\nSeattleKirkland\nAnotherLine" LIKE 'F%Seattle%Line')";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_EQ(sql, out);
+}
+
+TEST(SqlPreprocess, PreservesSingleQuotedStringLiterals) {
+  const std::string sql = "SELECT 'SeattleKirkland' LIKE 'Seattle%'";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_EQ(sql, out);
+}
+
 TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
   const std::string sql =
       "SELECT TO_JSON_STRING(STRUCT(CAST(2.8957935572829476 AS FLOAT64) AS "
