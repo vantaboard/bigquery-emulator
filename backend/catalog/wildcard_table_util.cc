@@ -73,7 +73,7 @@ std::string WildcardTablePrefix(absl::string_view wildcard_table_id) {
 bool TableMatchesWildcard(absl::string_view table_id,
                           absl::string_view wildcard_table_id) {
   if (!IsWildcardTableId(wildcard_table_id)) return false;
-  const absl::string_view prefix = WildcardTablePrefix(wildcard_table_id);
+  const std::string prefix = WildcardTablePrefix(wildcard_table_id);
   return absl::StartsWith(table_id, prefix);
 }
 

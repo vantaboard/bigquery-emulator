@@ -67,6 +67,7 @@ cc_binary(
     linkopts = [
         "-static-libgcc",
         "-static-libstdc++",
+        "-Wno-unused-command-line-argument",
         "-Wl,-rpath,$$ORIGIN",
     ],
     deps = [

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -190,7 +191,7 @@ void InjectArrayScanInternalColumns(const ::googlesql::ResolvedArrayScan& scan,
     const ::googlesql::ResolvedColumn& col = scan.column_list(i);
     if (known_ids.contains(col.column_id())) continue;
     if (bindings.count(col.column_id()) != 0) continue;
-    const absl::string_view name = col.name();
+    const std::string name = col.name();
     if (name.empty() || name[0] != '$') continue;
     if (name == "$side_effects") {
       const ::googlesql::Type* type = col.type();

@@ -31,6 +31,10 @@ build:clang --cxxopt=-Wno-reorder-ctor
 build:clang --cxxopt=-Wno-unused-const-variable
 build:clang --cxxopt=-Wno-unused-function
 build:clang --cxxopt=-Wno-macro-redefined
+build:clang --cxxopt=-Wno-deprecated-this-capture
+build:clang --host_cxxopt=-Wno-deprecated-this-capture
+build:clang --copt=-Wno-unused-but-set-variable
+build:clang --host_copt=-Wno-unused-but-set-variable
 build:clang --cxxopt=-Werror=undefined-internal
 
 # GCC fallback (kept here for symmetry; the default `--config=clang`

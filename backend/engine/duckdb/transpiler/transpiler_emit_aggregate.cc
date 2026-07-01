@@ -135,7 +135,7 @@ std::string TryEmitArrayAggDistinctUnnestScan(
   }
   std::string arr = emit_expr(arr_scan->array_expr_list(0));
   if (arr.empty()) return "";
-  const absl::string_view col = arr_scan->element_column_list(0).name();
+  const std::string col = arr_scan->element_column_list(0).name();
   const std::string quoted_col = internal::QuoteIdent(col);
   return absl::StrCat(
       "SELECT (SELECT list(",

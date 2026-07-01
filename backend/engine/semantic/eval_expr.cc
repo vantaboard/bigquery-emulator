@@ -47,7 +47,7 @@ namespace {
 
 absl::StatusOr<Value> DefaultInternalAnalyzerColumn(
     const ::googlesql::ResolvedColumn& col) {
-  const absl::string_view name = col.name();
+  const std::string name = col.name();
   if (name.empty() || name[0] != '$') {
     return absl::NotFoundError("not an internal analyzer column");
   }

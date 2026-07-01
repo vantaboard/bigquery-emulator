@@ -190,14 +190,16 @@ absl::Status GoogleSqlCatalog::FindTable(
 
   lock.Release();
 
+  std::vector<std::unique_ptr<const ::googlesql::AnalyzerOutput>> new_outputs;
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedExpr>> new_exprs;
   absl::Status measures =
       ApplyMeasureColumnsFromSchema(*storage_table,
                                     logical_schema,
                                     *this,
                                     *type_factory_,
                                     MakeCatalogLanguageOptions(),
-                                    measure_outputs_,
-                                    measure_resolved_exprs_);
+                                    new_outputs,
+                                    new_exprs);
   if (!measures.ok()) {
     absl::MutexLock relock(&mu_);
     if (!keys_.empty() && keys_.back() == key) {
@@ -205,6 +207,16 @@ absl::Status GoogleSqlCatalog::FindTable(
       tables_.pop_back();
     }
     return measures;
+  }
+
+  {
+    absl::MutexLock relock(&mu_);
+    for (auto& output : new_outputs) {
+      measure_outputs_.push_back(std::move(output));
+    }
+    for (auto& expr : new_exprs) {
+      measure_resolved_exprs_.push_back(std::move(expr));
+    }
   }
 
   *table = storage_table;

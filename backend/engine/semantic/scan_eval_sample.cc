@@ -44,7 +44,7 @@ absl::StatusOr<double> EvalSampleWeight(
   const int col_id = scan.weight_column()->column().column_id();
   auto it = row.find(col_id);
   if (it == row.end()) {
-    const absl::string_view weight_name = scan.weight_column()->column().name();
+    const std::string weight_name = scan.weight_column()->column().name();
     const ::googlesql::ResolvedScan* input =
         StripBarrierScans(scan.input_scan());
     const auto* table = input != nullptr

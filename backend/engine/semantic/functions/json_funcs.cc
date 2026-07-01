@@ -84,7 +84,7 @@ absl::StatusOr<JSONValueConstRef> JsonRefFromArg(
     if (arg.is_validated_json()) {
       return arg.json_value();
     }
-    absl::string_view text =
+    const std::string text =
         arg.is_unparsed_json() ? arg.json_value_unparsed() : arg.json_string();
     auto parsed = JSONValue::ParseJSONString(text);
     if (!parsed.ok()) {
