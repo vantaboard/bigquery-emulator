@@ -215,6 +215,7 @@ jobs:
           # Stage the smoke subset into a tmp dir the runner picks up.
           smoke=$(mktemp -d -t parity-smoke-XXXXXX)
           cp conformance/fixtures/select_literal_value.yaml         "$smoke/" || true
+          cp conformance/fixtures/select_string_literal_newline.yaml "$smoke/" || true
           cp conformance/fixtures/select_computed_expression.yaml   "$smoke/" || true
           cp conformance/fixtures/aggregate_count_star.yaml         "$smoke/" || true
           cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true
@@ -350,6 +351,7 @@ jobs:
           set -euo pipefail
           smoke=$(mktemp -d -t parity-smoke-XXXXXX)
           cp conformance/fixtures/select_literal_value.yaml         "$smoke/" || true
+          cp conformance/fixtures/select_string_literal_newline.yaml "$smoke/" || true
           cp conformance/fixtures/select_computed_expression.yaml   "$smoke/" || true
           cp conformance/fixtures/aggregate_count_star.yaml         "$smoke/" || true
           cp conformance/fixtures/groupby_count.yaml                "$smoke/" || true

@@ -1,0 +1,15 @@
+# Pins STRING literal escape + LIKE across quote styles. Caught a
+# googlesql-prebuilt v0.1.3 regression where prebuilt-linked engines
+# expanded literal payloads (4x for ", 8x for ') and broke mixed-quote
+# LIKE (regexp_functions_newline in the googlesql corpus).
+name: select_string_literal_newline
+description: |
+  Double-quoted STRING with \\n escapes must fold to real newlines and
+  match a single-quoted LIKE pattern (BigQuery LIKE is case-sensitive).
+project_id: proj-str-lit
+query: |
+  SELECT "FirstLine\nSeattleKirkland\nAnotherLine" LIKE 'F%Seattle%Line' AS result
+expected:
+  route: semantic_executor
+  rows:
+    - {result: "true"}
