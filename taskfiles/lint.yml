@@ -692,8 +692,15 @@ tasks:
         done
         if [ -n "$aquery_cfg" ]; then
           echo "lint:cpp:compile-commands: prefetching generated proto headers..."
+          # `@googlesql//:_all_hdrs` materializes the prebuilt artifact
+          # `_virtual_includes` symlink tree (strip_include_prefix)
+          # that every `-Ibazel-out/.../external/googlesql~/...` entry
+          # in the compile DB points at. Without it, clang-tidy on a
+          # fresh runner fails every googlesql-including TU with
+          # "googlesql/public/*.h file not found" (the tree is a build
+          # output, not part of the unpacked tarball).
           task bazel:build \
-            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto"
+            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto @googlesql//:_all_hdrs"
           python3 tools/lint/cpp/compile_db.py \
             "${target_args[@]}" \
             --bazel-config "$aquery_cfg" \
