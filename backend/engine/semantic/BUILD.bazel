@@ -290,6 +290,17 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "external_query_fixture_test",
+    srcs = ["external_query_fixture_test.cc"],
+    deps = [
+        ":external_query_fixture",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:type",
+    ],
+)
+
 cc_library(
     name = "outer_row_eval",
     srcs = ["outer_row_eval.cc"],

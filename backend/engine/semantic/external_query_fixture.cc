@@ -242,18 +242,41 @@ absl::StatusOr<std::string> LookupResultFile(JSONValueConstRef manifest_root,
       "EXTERNAL_QUERY fixture has no entry for query: ", query_sql));
 }
 
+std::string StripYamlQuotes(absl::string_view value) {
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+    return std::string(value.substr(1, value.size() - 2));
+  }
+  return std::string(value);
+}
+
+std::string YamlFieldValue(absl::string_view line, absl::string_view key) {
+  if (!absl::StartsWith(line, key)) {
+    return {};
+  }
+  return StripYamlQuotes(absl::StripAsciiWhitespace(line.substr(key.size())));
+}
+
+struct YamlManifestEntry {
+  std::string query;
+  std::string alias;
+  std::string result;
+};
+
+bool YamlEntryMatches(const YamlManifestEntry& entry,
+                      absl::string_view query_sql) {
+  return entry.query == query_sql || entry.alias == query_sql;
+}
+
 absl::StatusOr<std::string> LookupResultFileFromYamlManifest(
     const fs::path& yaml_path, absl::string_view query_sql) {
   absl::StatusOr<std::string> raw = ReadFileToString(yaml_path);
   if (!raw.ok()) {
     return raw.status();
   }
-  std::string current_result;
   bool in_queries = false;
   std::istringstream lines(*raw);
   std::string line;
-  std::string pending_query;
-  std::string pending_alias;
+  YamlManifestEntry current;
   while (std::getline(lines, line)) {
     const std::string trimmed = std::string(absl::StripAsciiWhitespace(line));
     if (trimmed.empty() || absl::StartsWith(trimmed, "#")) {
@@ -267,45 +290,33 @@ absl::StatusOr<std::string> LookupResultFileFromYamlManifest(
       continue;
     }
     if (absl::StartsWith(trimmed, "- ")) {
-      pending_query.clear();
-      pending_alias.clear();
-      current_result.clear();
+      if (!current.result.empty() && YamlEntryMatches(current, query_sql)) {
+        return current.result;
+      }
+      current = {};
       const std::string rest = trimmed.substr(2);
-      if (absl::StartsWith(rest, "query:")) {
-        pending_query = std::string(absl::StripAsciiWhitespace(rest.substr(6)));
-        if (!pending_query.empty() && pending_query.front() == '"' &&
-            pending_query.back() == '"') {
-          pending_query = pending_query.substr(1, pending_query.size() - 2);
-        }
-      } else if (absl::StartsWith(rest, "alias:")) {
-        pending_alias = std::string(absl::StripAsciiWhitespace(rest.substr(6)));
-      } else if (absl::StartsWith(rest, "result:")) {
-        current_result =
-            std::string(absl::StripAsciiWhitespace(rest.substr(7)));
+      if (std::string q = YamlFieldValue(rest, "query:"); !q.empty()) {
+        current.query = std::move(q);
+      } else if (std::string a = YamlFieldValue(rest, "alias:"); !a.empty()) {
+        current.alias = std::move(a);
+      } else if (std::string r = YamlFieldValue(rest, "result:"); !r.empty()) {
+        current.result = std::move(r);
       }
       continue;
     }
-    if (absl::StartsWith(trimmed, "query:")) {
-      pending_query =
-          std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
-      if (!pending_query.empty() && pending_query.front() == '"' &&
-          pending_query.back() == '"') {
-        pending_query = pending_query.substr(1, pending_query.size() - 2);
-      }
-    } else if (absl::StartsWith(trimmed, "alias:")) {
-      pending_alias =
-          std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
-    } else if (absl::StartsWith(trimmed, "result:")) {
-      current_result =
-          std::string(absl::StripAsciiWhitespace(trimmed.substr(7)));
-      if (pending_query == std::string(query_sql) ||
-          pending_alias == std::string(query_sql)) {
-        if (current_result.empty()) {
-          break;
-        }
-        return current_result;
+    if (std::string q = YamlFieldValue(trimmed, "query:"); !q.empty()) {
+      current.query = std::move(q);
+    } else if (std::string a = YamlFieldValue(trimmed, "alias:"); !a.empty()) {
+      current.alias = std::move(a);
+    } else if (std::string r = YamlFieldValue(trimmed, "result:"); !r.empty()) {
+      current.result = std::move(r);
+      if (YamlEntryMatches(current, query_sql) && !current.result.empty()) {
+        return current.result;
       }
     }
+  }
+  if (!current.result.empty() && YamlEntryMatches(current, query_sql)) {
+    return current.result;
   }
   return absl::NotFoundError(absl::StrCat(
       "EXTERNAL_QUERY fixture has no YAML entry for query: ", query_sql));

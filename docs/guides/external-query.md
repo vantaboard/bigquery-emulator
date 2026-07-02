@@ -9,7 +9,20 @@ $data_dir/external/connections/<connection_id>/
   <result>.json   # schema + rows per manifest entry
 ```
 
-## Manifest (`queries.yaml`)
+## Manifest (`queries.json` or flat `queries.yaml`)
+
+**JSON** (`queries.json`) is fully supported. **YAML** is limited to a flat
+subset the engine parses line-by-line (not a full YAML loader):
+
+- Top-level `queries:` list only
+- Each entry is a list item (`- query:` / `- alias:` / `- result:`) with
+  fields on subsequent lines at the same indentation, or a single inline
+  `- query: …` / `- alias: …` / `- result: …` per item
+- Quoted string values are stripped of surrounding `"` characters
+
+Unsupported in YAML manifests: nested maps, anchors/aliases, flow collections,
+multi-line folded scalars, and keys other than `query`, `alias`, and `result`.
+Prefer `queries.json` when manifests grow beyond simple flat entries.
 
 ```yaml
 queries:

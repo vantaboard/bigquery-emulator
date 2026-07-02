@@ -44,29 +44,33 @@ func CopyTree(dataDir, connID, srcDir string) error {
 	if err := os.MkdirAll(dst, 0o750); err != nil {
 		return err
 	}
-	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	return filepath.WalkDir(srcDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
+		rel, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return relErr
 		}
-		in, err := os.Open(path) //nolint:gosec // test fixture path
-		if err != nil {
-			return err
+		in, openErr := os.Open(path) //nolint:gosec // test fixture path
+		if openErr != nil {
+			return openErr
 		}
-		defer in.Close()
+		defer func() { _ = in.Close() }()
 		outPath := filepath.Join(dst, rel)
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil {
-			return err
+		if mkdirErr := os.MkdirAll(filepath.Dir(outPath), 0o750); mkdirErr != nil {
+			return mkdirErr
 		}
-		out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-		if err != nil {
-			return err
+		out, outErr := os.OpenFile(
+			outPath,
+			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+			0o600,
+		) //nolint:gosec // fixture path under dataDir
+		if outErr != nil {
+			return outErr
 		}
 		_, cpErr := io.Copy(out, in)
 		closeErr := out.Close()
@@ -87,19 +91,19 @@ func WriteInline(dataDir, connID string, manifest Manifest, resultName string, r
 		return err
 	}
 	manifestPath := filepath.Join(root, "queries.json")
-	manifestRaw, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return err
+	manifestRaw, marshalErr := json.MarshalIndent(manifest, "", "  ")
+	if marshalErr != nil {
+		return marshalErr
 	}
-	if err := os.WriteFile(manifestPath, manifestRaw, 0o600); err != nil {
-		return err
+	if writeErr := os.WriteFile(manifestPath, manifestRaw, 0o600); writeErr != nil {
+		return writeErr
 	}
 	if resultName == "" {
 		resultName = "result.json"
 	}
-	resultRaw, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return err
+	resultRaw, resultMarshalErr := json.MarshalIndent(result, "", "  ")
+	if resultMarshalErr != nil {
+		return resultMarshalErr
 	}
 	return os.WriteFile(filepath.Join(root, resultName), resultRaw, 0o600)
 }
