@@ -414,6 +414,8 @@ absl::string_view StatementTypeFor(const ::googlesql::ResolvedStatement& stmt) {
       return "LOAD_DATA";
     case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
       return "EXPORT_DATA";
+    case ::googlesql::RESOLVED_UNDROP_STMT:
+      return "UNDROP_SCHEMA";
     case ::googlesql::RESOLVED_GRANT_STMT:
       return "GRANT";
     case ::googlesql::RESOLVED_REVOKE_STMT:

@@ -128,6 +128,10 @@ absl::Status RunDropTable(storage::Storage& storage,
                           absl::string_view default_dataset_id,
                           const ::googlesql::ResolvedDropStmt* stmt);
 
+absl::Status RunDropSchema(storage::Storage& storage,
+                           absl::string_view project_id,
+                           const ::googlesql::ResolvedDropStmt* stmt);
+
 absl::StatusOr<int64_t> RunTruncateTable(
     storage::Storage& storage, const ::googlesql::ResolvedTruncateStmt* stmt);
 
@@ -170,7 +174,7 @@ absl::Status RunCloneData(storage::Storage& storage,
                           absl::string_view default_dataset_id,
                           const ::googlesql::ResolvedCloneDataStmt* stmt);
 
-absl::Status RunUndrop(const storage::Storage& storage,
+absl::Status RunUndrop(storage::Storage& storage,
                        absl::string_view project_id,
                        absl::string_view default_dataset_id,
                        const ::googlesql::ResolvedUndropStmt* stmt);

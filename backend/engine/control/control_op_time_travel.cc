@@ -7,6 +7,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/control/control_op_internal.h"
@@ -259,7 +260,63 @@ absl::Status RunCloneData(storage::Storage& storage,
       storage, target_storage->storage_table_id(), **source, *as_of_ms);
 }
 
-absl::Status RunUndrop(const storage::Storage& storage,
+namespace {
+
+absl::StatusOr<storage::DatasetId> NamePathToDatasetId(
+    const std::vector<std::string>& name_path,
+    absl::string_view default_project_id) {
+  std::vector<std::string> segments = name_path;
+  if (segments.size() == 1 && absl::StrContains(segments[0], '.')) {
+    segments = absl::StrSplit(segments[0], '.');
+  }
+  if (segments.size() == 1) {
+    return storage::DatasetId{std::string(default_project_id), segments[0]};
+  }
+  if (segments.size() == 2) {
+    return storage::DatasetId{segments[0], segments[1]};
+  }
+  return absl::InvalidArgumentError(absl::StrCat(
+      "control op executor: DDL schema target must be <dataset> or "
+      "<project>.<dataset>; got ",
+      segments.size(),
+      " segments"));
+}
+
+}  // namespace
+
+absl::Status RunDropSchema(storage::Storage& storage,
+                           absl::string_view project_id,
+                           const ::googlesql::ResolvedDropStmt* stmt) {
+  if (stmt == nullptr) {
+    return absl::InternalError(
+        "ControlOpExecutor::ExecuteDdl: DROP SCHEMA has null stmt");
+  }
+  absl::StatusOr<storage::DatasetId> target =
+      NamePathToDatasetId(stmt->name_path(), project_id);
+  if (!target.ok()) return target.status();
+  const bool cascade =
+      stmt->drop_mode() == ::googlesql::ResolvedDropStmt::CASCADE;
+  if (!cascade) {
+    auto tables_or = storage.ListTables(*target);
+    if (!tables_or.ok()) return tables_or.status();
+    if (!tables_or->empty()) {
+      return absl::FailedPreconditionError(
+          absl::StrCat("dataset is not empty: ",
+                       target->project_id,
+                       ".",
+                       target->dataset_id,
+                       " (use CASCADE to drop with tables)"));
+    }
+  }
+  absl::Status dropped = storage.DropDataset(*target, /*delete_contents=*/true);
+  if (!dropped.ok() && stmt->is_if_exists() &&
+      dropped.code() == absl::StatusCode::kNotFound) {
+    return absl::OkStatus();
+  }
+  return dropped;
+}
+
+absl::Status RunUndrop(storage::Storage& storage,
                        absl::string_view project_id,
                        absl::string_view default_dataset_id,
                        const ::googlesql::ResolvedUndropStmt* stmt) {
@@ -267,15 +324,36 @@ absl::Status RunUndrop(const storage::Storage& storage,
     return absl::InternalError(
         "ControlOpExecutor::ExecuteDdl: UNDROP has null stmt");
   }
-  // BigQuery only defines `UNDROP SCHEMA` (and only via DDL); there is
-  // no `UNDROP TABLE` statement (bq dry-run rejects it with "Unexpected
-  // keyword TABLE"). Neither form is implemented locally today.
-  (void)storage;
-  (void)project_id;
-  (void)default_dataset_id;
   const absl::string_view kind = stmt->schema_object_kind();
-  return absl::UnimplementedError(absl::StrCat(
-      "control op executor: UNDROP ", kind, " is not implemented"));
+  if (kind != "SCHEMA") {
+    return absl::UnimplementedError(absl::StrCat(
+        "control op executor: UNDROP ",
+        kind,
+        " is not a BigQuery statement (only UNDROP SCHEMA is supported)"));
+  }
+  (void)default_dataset_id;
+  absl::StatusOr<storage::DatasetId> target =
+      NamePathToDatasetId(stmt->name_path(), project_id);
+  if (!target.ok()) return target.status();
+  absl::Status restored = storage.RestoreDataset(*target);
+  if (restored.ok()) return absl::OkStatus();
+  if (stmt->is_if_not_exists()) {
+    if (restored.code() == absl::StatusCode::kAlreadyExists) {
+      return absl::OkStatus();
+    }
+    if (restored.code() == absl::StatusCode::kNotFound) {
+      auto datasets_or = storage.ListDatasets(project_id);
+      if (datasets_or.ok()) {
+        for (const storage::DatasetId& id : *datasets_or) {
+          if (id.project_id == target->project_id &&
+              id.dataset_id == target->dataset_id) {
+            return absl::OkStatus();
+          }
+        }
+      }
+    }
+  }
+  return restored;
 }
 
 absl::Status RunDropSnapshotTable(

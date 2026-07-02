@@ -407,11 +407,8 @@ absl::Status RunCreateTableAsSelect(
 }
 
 // --- DROP TABLE handler ---------------------------------------------------
-//
-// statementType: `DROP_TABLE`. Currently only `DROP TABLE`; other
-// `DROP <kind>` forms surface UNIMPLEMENTED. View / materialized-
-// view drops belong here once view storage exists (today the
-// `Storage` interface has no view-CRUD surface).
+// statementType: `DROP_TABLE`. `DROP VIEW` / `DROP SCHEMA` delegate to
+// sibling handlers; other `DROP <kind>` forms surface UNIMPLEMENTED.
 absl::Status RunDropTable(storage::Storage& storage,
                           absl::string_view project_id,
                           absl::string_view default_dataset_id,
@@ -434,6 +431,9 @@ absl::Status RunDropTable(storage::Storage& storage,
     }
     if (!dropped.ok()) return dropped;
     return catalog::DeletePersistedView(&storage, vid);
+  }
+  if (stmt->object_type() == "SCHEMA") {
+    return RunDropSchema(storage, project_id, stmt);
   }
   if (stmt->object_type() != "TABLE") {
     return absl::UnimplementedError(
