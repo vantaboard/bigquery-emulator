@@ -808,11 +808,11 @@ and
 
 ## Planned work
 
-The items below are deliberately deferred today (`unsupported` in
+The items below were once deliberately deferred (`unsupported` in
 [`functions.yaml`](./backend/engine/duckdb/transpiler/functions.yaml) and
 [`node_dispositions.yaml`](./backend/engine/duckdb/transpiler/node_dispositions.yaml);
-summarized in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)) but are on
-the roadmap to land with **local** implementations. Query execution never
+summarized in [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md)) and have
+since landed with **local** implementations. Query execution never
 proxies through the real BigQuery service; external data sources (below) may
 optionally reach live upstream APIs when configured. Each promotion off
 `unsupported` requires the handler, conformance fixture(s), and
@@ -821,7 +821,8 @@ disposition-registry update in the same commit (per
 
 The table below mirrors the `unsupported` / `local_stub` families in
 [`docs/ENGINE_POLICY.md`](docs/ENGINE_POLICY.md) §Unsupported families.
-Every row is ⏳ planned. **Planned work is one of two kinds:**
+Every row has landed (or resolved to a deliberate posture).
+**Planned work is one of two kinds:**
 
 - **real** — the feature is useful locally, so land exact BigQuery
   semantics + conformance fixtures.
@@ -837,12 +838,12 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | `ST_GEOGFROMWKB` (`st_geogfromwkb`) | `local_impl` | **real** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
 | KLL quantile sketches (`KLL_QUANTILES.*`) | `local_impl` | **real** (landed) | [KLL quantile sketches](#kll-quantile-sketches) |
-| MEASURE / measure functions | `local_impl` | **real** | [Measure functions](#measure-functions) |
+| MEASURE / measure functions | `local_impl` | **real** (landed) | [Measure functions](#measure-functions) |
 | Sequences (`ResolvedSequence`, `NEXT VALUE FOR`) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Expression columns (`ResolvedExpressionColumn`) | `semantic_executor` | **real** (landed) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
-| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
-| `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
+| Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** (landed) | [Python UDFs](#python-udfs) |
+| `LOAD DATA <gs://...>` (cloud storage) | `control_op` | **real** (landed) | [External data sources](#external-data-sources) |
 | `UNDROP SCHEMA` | `control_op` | **real** (landed) | [DML / DDL](#dml--ddl) (`RunUndrop` + `datasets.undelete`) |
 | SQL Tools API (format/parse/complete/analyze) | ✅ landed | **real** (landed) | [SQL Tools API](#sql-tools-api) (M4 query editor) |
 
