@@ -167,7 +167,7 @@
 				
 				<option value="file55">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/types.go (24.8%)</option>
 				
-				<option value="file56">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire.go (60.9%)</option>
+				<option value="file56">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire.go (63.1%)</option>
 				
 				<option value="file57">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire_compat.go (36.7%)</option>
 				
@@ -3515,8 +3515,8 @@ func scanDataDirRoot(dataDir string) (hasCatalog bool, legacyDB []string, readEr
         if err != nil </span><span class="cov0" title="0">{
                 return false, nil, fmt.Sprintf("WARN: cannot read --data-dir %q: %v", dataDir, err)
         }</span>
-        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="13">{
-                if e.IsDir() </span><span class="cov7" title="11">{
+        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="14">{
+                if e.IsDir() </span><span class="cov7" title="12">{
                         continue</span>
                 }
                 <span class="cov2" title="2">name := e.Name()
@@ -7235,7 +7235,7 @@ func multisetsEqual(a, b map[string]int) bool <span class="cov4" title="3">{
         if len(a) != len(b) </span><span class="cov1" title="1">{
                 return false
         }</span>
-        <span class="cov3" title="2">for k, v := range a </span><span class="cov4" title="3">{
+        <span class="cov3" title="2">for k, v := range a </span><span class="cov5" title="4">{
                 if b[k] != v </span><span class="cov1" title="1">{
                         return false
                 }</span>
@@ -12174,6 +12174,7 @@ type ObjectTableOptions struct {
 		<pre class="file" id="file56" style="display: none">package bqtypes
 
 import (
+        "errors"
         "strconv"
         "strings"
         "time"
@@ -12358,8 +12359,16 @@ func arrayElementFieldSchema(field *enginepb.FieldSchema) *enginepb.FieldSchema 
 // TimestampStringToMicros parses an engine TIMESTAMP wire string and
 // returns the BigQuery REST query-result encoding: decimal microseconds
 // since 1970-01-01 UTC.
-func TimestampStringToMicros(s string) (string, error) <span class="cov5" title="7">{
-        t, err := parseTimestampWireString(s)
+func TimestampStringToMicros(s string) (string, error) <span class="cov5" title="8">{
+        s = strings.TrimSpace(s)
+        if s == "" </span><span class="cov0" title="0">{
+                return "", errors.New("empty timestamp")
+        }</span>
+        // Storage Read and some engine paths already emit epoch micros as decimal digits.
+        <span class="cov5" title="8">if isDecimalIntString(s) </span><span class="cov1" title="1">{
+                return s, nil
+        }</span>
+        <span class="cov5" title="7">t, err := parseTimestampWireString(s)
         if err != nil </span><span class="cov0" title="0">{
                 return "", err
         }</span>
@@ -12388,6 +12397,18 @@ func parseTimestampWireString(s string) (time.Time, error) <span class="cov5" ti
                 <span class="cov0" title="0">lastErr = err</span>
         }
         <span class="cov0" title="0">return time.Time{}, lastErr</span>
+}
+
+func isDecimalIntString(s string) bool <span class="cov5" title="8">{
+        if s == "" </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov5" title="8">for _, r := range s </span><span class="cov9" title="50">{
+                if r &lt; '0' || r &gt; '9' </span><span class="cov5" title="7">{
+                        return false
+                }</span>
+        }
+        <span class="cov1" title="1">return true</span>
 }
 </pre>
 		
