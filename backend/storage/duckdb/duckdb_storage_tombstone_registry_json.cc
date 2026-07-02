@@ -128,11 +128,10 @@ absl::StatusOr<ViewRecord> ParseViewRecordJson(absl::string_view json,
 }
 
 std::string RenderRoutineRecordJson(const RoutineRecord& rec) {
-  std::string sig = rec.signature_json.empty()
-                        ? "null"
-                        : absl::StrCat("\"",
-                                       internal::JsonEscape(rec.signature_json),
-                                       "\"");
+  std::string sig =
+      rec.signature_json.empty()
+          ? "null"
+          : absl::StrCat("\"", internal::JsonEscape(rec.signature_json), "\"");
   return absl::StrCat("{\"routine_id\":\"",
                       internal::JsonEscape(rec.id.routine_id),
                       "\",\"kind\":\"",
@@ -229,18 +228,17 @@ std::string RenderGovernanceSnapshotJson(
   for (const auto& [tid, gov] : tables) {
     std::vector<std::string> policies;
     for (const RowAccessPolicyRecord& p : gov.row_access_policies) {
-      policies.push_back(absl::StrCat(
-          "{\"policy_id\":\"",
-          internal::JsonEscape(p.policy_id),
-          "\",\"filter_predicate\":\"",
-          internal::JsonEscape(p.filter_predicate),
-          "\",\"grantees\":",
-          RenderQuotedJsonStrings(p.grantees),
-          ",\"creation_time_ms\":",
-          p.creation_time_ms,
-          ",\"last_modified_time_ms\":",
-          p.last_modified_time_ms,
-          "}"));
+      policies.push_back(absl::StrCat("{\"policy_id\":\"",
+                                      internal::JsonEscape(p.policy_id),
+                                      "\",\"filter_predicate\":\"",
+                                      internal::JsonEscape(p.filter_predicate),
+                                      "\",\"grantees\":",
+                                      RenderQuotedJsonStrings(p.grantees),
+                                      ",\"creation_time_ms\":",
+                                      p.creation_time_ms,
+                                      ",\"last_modified_time_ms\":",
+                                      p.last_modified_time_ms,
+                                      "}"));
     }
     std::vector<std::string> columns;
     for (const auto& [col, col_gov] : gov.columns) {
@@ -262,18 +260,18 @@ std::string RenderGovernanceSnapshotJson(
           mask = "NONE";
           break;
       }
-      columns.push_back(absl::StrCat(
-          "{\"column\":\"",
-          internal::JsonEscape(col),
-          "\",\"policy_tags\":",
-          RenderQuotedJsonStrings(col_gov.policy_tags),
-          ",\"mask_kind\":\"",
-          mask,
-          "\",\"mask_grantees\":",
-          RenderQuotedJsonStrings(col_gov.mask_grantees),
-          ",\"default_mask_value\":\"",
-          internal::JsonEscape(col_gov.default_mask_value),
-          "\"}"));
+      columns.push_back(
+          absl::StrCat("{\"column\":\"",
+                       internal::JsonEscape(col),
+                       "\",\"policy_tags\":",
+                       RenderQuotedJsonStrings(col_gov.policy_tags),
+                       ",\"mask_kind\":\"",
+                       mask,
+                       "\",\"mask_grantees\":",
+                       RenderQuotedJsonStrings(col_gov.mask_grantees),
+                       ",\"default_mask_value\":\"",
+                       internal::JsonEscape(col_gov.default_mask_value),
+                       "\"}"));
     }
     entries.push_back(absl::StrCat("{\"table_id\":\"",
                                    internal::JsonEscape(tid.table_id),

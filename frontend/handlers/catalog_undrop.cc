@@ -1,5 +1,3 @@
-#include "frontend/handlers/catalog.h"
-
 #include <string>
 
 #include "absl/status/status.h"
@@ -9,6 +7,7 @@
 #include "backend/engine/coordinator/view_rehydrate.h"
 #include "backend/storage/duckdb/duckdb_storage.h"
 #include "backend/storage/storage.h"
+#include "frontend/handlers/catalog.h"
 #include "frontend/handlers/handler_common.h"
 
 namespace bigquery_emulator {
@@ -43,8 +42,8 @@ absl::Status RehydrateDatasetCatalog(backend::storage::Storage* storage,
   if (!routines_or.ok()) return routines_or.status();
   for (const backend::storage::RoutineRecord& rec : *routines_or) {
     if (rec.is_temp) continue;
-    absl::Status reg = backend::engine::coordinator::RehydrateRoutineRecord(
-        storage, rec);
+    absl::Status reg =
+        backend::engine::coordinator::RehydrateRoutineRecord(storage, rec);
     if (!reg.ok()) return reg;
   }
   auto views_or = storage->ListAllViews();

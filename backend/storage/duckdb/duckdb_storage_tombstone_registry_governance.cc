@@ -33,7 +33,8 @@ absl::Status RestoreGovernanceFromSnapshotLocked(DuckDBStorage::Impl* impl,
         for (absl::string_view policy_json :
              SplitTopLevelJsonObjects(entry.substr(open, close - open + 1))) {
           auto policy_id_or = ParseJsonStringField(policy_json, "policy_id");
-          auto filter_or = ParseJsonStringField(policy_json, "filter_predicate");
+          auto filter_or =
+              ParseJsonStringField(policy_json, "filter_predicate");
           if (!policy_id_or.ok() || !filter_or.ok()) continue;
           RowAccessPolicyRecord policy;
           policy.policy_id = *policy_id_or;
@@ -102,7 +103,8 @@ absl::Status RestoreGovernanceFromSnapshotLocked(DuckDBStorage::Impl* impl,
                   col_json.substr(m_open, m_close - m_open + 1));
             }
           }
-          auto default_or = ParseJsonStringField(col_json, "default_mask_value");
+          auto default_or =
+              ParseJsonStringField(col_json, "default_mask_value");
           if (default_or.ok()) {
             col_gov.default_mask_value = *default_or;
           }
