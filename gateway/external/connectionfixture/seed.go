@@ -5,7 +5,6 @@ package connectionfixture
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,11 +55,6 @@ func CopyTree(dataDir, connID, srcDir string) error {
 		if relErr != nil {
 			return relErr
 		}
-		in, openErr := os.Open(path) //nolint:gosec // test fixture path
-		if openErr != nil {
-			return openErr
-		}
-		defer func() { _ = in.Close() }()
 		outPath := filepath.Join(dst, rel)
 		if !isPathWithin(outPath, dst) {
 			return errors.New("fixture path escapes destination directory")
@@ -68,20 +62,18 @@ func CopyTree(dataDir, connID, srcDir string) error {
 		if mkdirErr := os.MkdirAll(filepath.Dir(outPath), 0o750); mkdirErr != nil {
 			return mkdirErr
 		}
-		out, outErr := os.OpenFile(
+		data, readErr := os.ReadFile(path) //nolint:gosec // fixture path under srcDir
+		if readErr != nil {
+			return readErr
+		}
+		if writeErr := os.WriteFile(
 			outPath,
-			os.O_CREATE|os.O_TRUNC|os.O_WRONLY,
+			data,
 			0o600,
-		) //nolint:gosec // fixture path under dataDir
-		if outErr != nil {
-			return outErr
+		); writeErr != nil { //nolint:gosec // outPath validated under dst
+			return writeErr
 		}
-		_, cpErr := io.Copy(out, in)
-		closeErr := out.Close()
-		if cpErr != nil {
-			return cpErr
-		}
-		return closeErr
+		return nil
 	})
 }
 
