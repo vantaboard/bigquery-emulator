@@ -102,6 +102,8 @@ type Dataset struct {
 	// Replicas echoes cross-region replica references supplied on write;
 	// the emulator does not model active replication.
 	Replicas []TableReference `json:"replicas,omitempty"`
+	// ExternalDatasetReference marks a Spanner / Cloud SQL external dataset.
+	ExternalDatasetReference *ExternalDatasetReference `json:"externalDatasetReference,omitempty"`
 
 	labelsWire            labelsWireState    `json:"-"`
 	defaultCollationWire  collationWireState `json:"-"`
@@ -268,6 +270,10 @@ type Table struct {
 	TableConstraints *TableConstraints `json:"tableConstraints,omitempty"`
 	// Replicas echoes cross-region replica references on write.
 	Replicas []TableReference `json:"replicas,omitempty"`
+	// BiglakeConfiguration marks a BigLake-managed table (unsupported).
+	BiglakeConfiguration *BiglakeConfiguration `json:"biglakeConfiguration,omitempty"`
+	// ObjectTableOptions marks an object table (unsupported).
+	ObjectTableOptions *ObjectTableOptions `json:"objectTableOptions,omitempty"`
 
 	labelsWire            labelsWireState    `json:"-"`
 	defaultCollationWire  collationWireState `json:"-"`
@@ -523,4 +529,23 @@ type TableFieldSchema struct {
 	// SetColumnGovernance on tables.insert/patch/update.
 	MaskKind string             `json:"maskKind,omitempty"`
 	Fields   []TableFieldSchema `json:"fields,omitempty"` // for STRUCT/RECORD
+}
+
+// ExternalDatasetReference links a dataset to an external Spanner / Cloud SQL source.
+type ExternalDatasetReference struct {
+	Connection string `json:"connection,omitempty"`
+	Source     string `json:"source,omitempty"`
+}
+
+// BiglakeConfiguration marks a BigLake-managed table.
+type BiglakeConfiguration struct {
+	ConnectionID string `json:"connectionId,omitempty"`
+	StorageURI   string `json:"storageUri,omitempty"`
+	FileFormat   string `json:"fileFormat,omitempty"`
+	TableFormat  string `json:"tableFormat,omitempty"`
+}
+
+// ObjectTableOptions marks an object table over GCS object metadata.
+type ObjectTableOptions struct {
+	SourceURIs []string `json:"sourceUris,omitempty"`
 }

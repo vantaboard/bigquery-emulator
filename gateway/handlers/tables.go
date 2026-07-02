@@ -166,6 +166,9 @@ func TableInsert(deps Dependencies) http.HandlerFunc {
 		if !populateViewSchema(w, deps, r, projectID, &t) {
 			return
 		}
+		if rejectUnsupportedTablePosture(w, &t) {
+			return
+		}
 		if !registerInsertedTable(w, r, deps, projectID, datasetID, tableID, &t) {
 			return
 		}

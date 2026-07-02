@@ -165,6 +165,9 @@ func DatasetInsert(deps Dependencies) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid", err.Error())
 			return
 		}
+		if rejectUnsupportedDatasetPosture(w, &ds) {
+			return
+		}
 		if deps.Catalog == nil {
 			NotImplemented(w, r)
 			return
