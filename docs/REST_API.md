@@ -46,6 +46,13 @@ omit the host and use `{x}` for path variables.
 | `datasets.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetDelete`][datasets] |
 | `datasets.undelete` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete` | done | [`gateway/handlers/datasets.go::DatasetUndelete`][datasets] |
 
+**`datasets.undelete` semantics:** Restores the newest soft-deleted tombstone
+for the dataset (same 7-day window as table time travel). Restores member
+tables, views, routines, row-access policies, and gateway REST metadata
+(labels, `friendlyName`, …) captured at delete time. Returns **409**
+(`alreadyExists`) when a live dataset with the same id already exists.
+There is no `deletedTime` selector — only the newest tombstone is restored.
+
 **Dataset metadata:** REST-only fields (`friendlyName`, `description`,
 `labels`, `defaultCollation`, `defaultTableExpirationMs`,
 `defaultPartitionExpirationMs`, `defaultRoundingMode`,
@@ -66,6 +73,15 @@ non-empty dataset returns **400** (`failedPrecondition`).
 |---|---|---|---|
 | `tables.list` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | done | [`gateway/handlers/tables.go::TableList`][tables] |
 | `tables.insert` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables` | done | [`gateway/handlers/tables.go::TableInsert`][tables] |
+
+**Federated / BigLake posture (insert, update, patch):** Requests that set
+`biglakeConfiguration`, `objectTableOptions`, or
+`externalDataConfiguration.sourceFormat=OBJECT_TABLE` return **501**
+`notImplemented` with a pointer to [`docs/ENGINE_POLICY.md`](ENGINE_POLICY.md).
+`datasets.insert` / `datasets.update` / `datasets.patch` with
+`externalDatasetReference` (Spanner / Cloud SQL external datasets) return the
+same envelope. Use fixture-backed `EXTERNAL_QUERY` or local external tables
+instead — see [`docs/guides/external-query.md`](guides/external-query.md).
 | `tables.get` | `GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableGet`][tables] |
 | `tables.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TableUpdate`][tables] |
 | `tables.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}` | done | [`gateway/handlers/tables.go::TablePatch`][tables] |
@@ -239,6 +255,11 @@ store mirrors responses for the synchronous query path and supplies
 `CREATE FUNCTION` / `CREATE PROCEDURE` DDL via `jobs.query` also
 registers routines and surfaces `ddlTargetRoutine` on the job
 statistics envelope.
+
+**`pythonOptions` on `routines.get`:** Python scalar UDFs created with
+`CREATE FUNCTION ... LANGUAGE python OPTIONS (packages=[...], entry_point=...)`
+round-trip `pythonOptions.packages` and `pythonOptions.entryPoint` on the
+REST `Routine` resource. See [`docs/guides/python-udfs.md`](guides/python-udfs.md).
 
 | Method | Path | Status | Handler |
 |---|---|---|---|

@@ -287,7 +287,8 @@ tasks:
       `GOOGLESQL_SOURCE` env var (`prebuilt`/`googlesql-prebuilt`,
       `local`/`source`/`googlesql-source`; default `prebuilt`) and:
         - In prebuilt mode: refuses when the cache at
-          .cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64 is
+          `.cache/googlesql-prebuilt/googlesql_prebuilt_linux_{amd64,arm64}`
+          (selected by `GOOGLESQL_PREBUILT_ARCH` / host arch) is
           empty / wrong-named, then runs validate_artifact.py for the
           full closed-schema + identity + payload-integrity gates. The
           escape hatch `BIGQUERY_EMULATOR_SKIP_PREBUILT_VALIDATE=1`

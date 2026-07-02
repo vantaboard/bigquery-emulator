@@ -22,7 +22,8 @@ namespace fs = std::filesystem;
 
 class ScopedDataDirEnv {
  public:
-  explicit ScopedDataDirEnv(const fs::path& dir) : name_("BIGQUERY_EMULATOR_DATA_DIR") {
+  explicit ScopedDataDirEnv(const fs::path& dir)
+      : name_("BIGQUERY_EMULATOR_DATA_DIR") {
     if (const char* prev = std::getenv(name_)) {
       prev_ = prev;
     }
@@ -100,8 +101,8 @@ TEST(ExternalQueryFixtureTest, YamlManifestAliasLookup) {
 })");
 
   ::googlesql::TypeFactory type_factory;
-  absl::StatusOr<ExternalQueryFixtureResult> result =
-      LoadExternalQueryFixture("alias_conn", "info_schema_tables", &type_factory);
+  absl::StatusOr<ExternalQueryFixtureResult> result = LoadExternalQueryFixture(
+      "alias_conn", "info_schema_tables", &type_factory);
   ASSERT_TRUE(result.ok()) << result.status();
   ASSERT_EQ(result->schema.size(), 1u);
   ASSERT_EQ(result->rows.size(), 1u);
@@ -139,8 +140,9 @@ TEST(ExternalQueryFixtureTest, MissingResultFileReturnsNotFound) {
       LoadExternalQueryFixture("broken_conn", "SELECT 1", &type_factory);
   ASSERT_FALSE(result.ok());
   EXPECT_EQ(result.status().code(), absl::StatusCode::kNotFound);
-  EXPECT_NE(std::string(result.status().message()).find("result file not found"),
-            std::string::npos);
+  EXPECT_NE(
+      std::string(result.status().message()).find("result file not found"),
+      std::string::npos);
 }
 
 TEST(ExternalQueryFixtureTest, MissingConnectionDirectoryReturnsNotFound) {
@@ -154,7 +156,8 @@ TEST(ExternalQueryFixtureTest, MissingConnectionDirectoryReturnsNotFound) {
       LoadExternalQueryFixture("nope", "SELECT 1", &type_factory);
   ASSERT_FALSE(result.ok());
   EXPECT_EQ(result.status().code(), absl::StatusCode::kNotFound);
-  EXPECT_NE(std::string(result.status().message()).find("fixture directory not found"),
+  EXPECT_NE(std::string(result.status().message())
+                .find("fixture directory not found"),
             std::string::npos);
 }
 

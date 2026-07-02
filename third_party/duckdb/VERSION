@@ -38,12 +38,11 @@ Bumping the pin
 ---------------
 
 1. Pick the new release tag from https://github.com/duckdb/duckdb/releases.
-2. Download `libduckdb-linux-amd64.zip` from that release and run
-   `sha256sum` on it (arm64 is captured here too for future reference,
-   but only amd64 is wired into the Bazel build today).
-3. Update the version and the amd64 SHA-256 hash in this file and in
-   the `http_archive(name = "duckdb_linux_amd64", ...)` block in
-   `MODULE.bazel`.
+2. Download `libduckdb-linux-amd64.zip` and `libduckdb-linux-arm64.zip`
+   from that release and run `sha256sum` on each.
+3. Update the version and both SHA-256 hashes in this file and in the
+   `http_archive(name = "duckdb_linux_amd64", ...)` and
+   `duckdb_linux_arm64` blocks in `MODULE.bazel`.
 4. `task emulator:build-engine-bazel` and
    `ldd bin/emulator_main | grep libduckdb.so` to verify the binary
    still links cleanly.

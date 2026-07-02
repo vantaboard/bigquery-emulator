@@ -160,6 +160,14 @@ The `setup` list is dispatched by which field is present in each step:
    are on the `unsupported` route today; use `rows:` for seeding
    instead. The setup step fails the fixture if the gateway responds
    with a non-2xx status.
+5. `connection_fixture:` — copies committed snapshot files from `source_dir`
+   into `$data_dir/external/connections/<connection_id>/` for
+   `EXTERNAL_QUERY` fixture mode. Fields: `connection_id`, `source_dir`
+   (path relative to the repo root). See
+   [`docs/guides/external-query.md`](../docs/guides/external-query.md).
+6. `row_access_policy:` / `column_governance:` — seed row/column security
+   catalog state for security fixtures (see fixtures under
+   `conformance/fixtures/security/`).
 
 A fixture that needs only a `SELECT` (with no catalog state) omits
 `setup` entirely.

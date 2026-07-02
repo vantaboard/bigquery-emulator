@@ -254,15 +254,28 @@ jobs:
           cache-version: 1
           repository-cache: true
 
+      - name: Skip arm64 spike when prebuilt vars unset
+        id: arm64_gate
+        run: |
+          if [ -z "${{ vars.GOOGLESQL_PREBUILT_URL_ARM64 }}" ] || [ -z "${{ vars.GOOGLESQL_PREBUILT_SHA256_ARM64 }}" ]; then
+            echo "::notice::Skipping arm64 engine spike: set GOOGLESQL_PREBUILT_URL_ARM64 and GOOGLESQL_PREBUILT_SHA256_ARM64 after the first arm64 prebuilt publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Resolve GoogleSQL build mode (arm64)
+        if: steps.arm64_gate.outputs.skip != 'true'
         id: googlesql
         uses: ./.github/actions/setup-googlesql
         with:
           target-arch: arm64
           prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL_ARM64 }}
           prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256_ARM64 }}
+          fail-on-source-fallback: true
 
       - name: Build C++ engine via Bazel (linux/arm64 spike)
+        if: steps.arm64_gate.outputs.skip != 'true'
         env:
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
           GOOGLESQL_PREBUILT_ARCH: arm64
@@ -272,6 +285,7 @@ jobs:
           task emulator:build-engine:bazel
 
       - name: Smoke engine binary
+        if: steps.arm64_gate.outputs.skip != 'true'
         run: |
           set -euo pipefail
           file bin/emulator_main

@@ -76,7 +76,10 @@ See [`ROADMAP.md`](./ROADMAP.md) for the design rationale and
 ## Quickstart
 
 The fastest path is the published Docker image — no Bazel build, no
-GoogleSQL toolchain:
+GoogleSQL checkout. **Architecture:** release archives and the default
+Docker image ship a **linux/amd64** engine binary; Apple Silicon and
+Graviton hosts should use the published Docker image (or wait for the
+in-flight arm64 release lane — see [`docs/RELEASES.md`](./docs/RELEASES.md)).
 
 ```bash
 docker run --rm -p 9050:9050 ghcr.io/vantaboard/bigquery-emulator:latest

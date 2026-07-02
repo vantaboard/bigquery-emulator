@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ManifestEntry maps a query string or alias to a result filename.
@@ -61,6 +62,9 @@ func CopyTree(dataDir, connID, srcDir string) error {
 		}
 		defer func() { _ = in.Close() }()
 		outPath := filepath.Join(dst, rel)
+		if !isPathWithin(outPath, dst) {
+			return errors.New("fixture path escapes destination directory")
+		}
 		if mkdirErr := os.MkdirAll(filepath.Dir(outPath), 0o750); mkdirErr != nil {
 			return mkdirErr
 		}
@@ -106,4 +110,20 @@ func WriteInline(dataDir, connID string, manifest Manifest, resultName string, r
 		return resultMarshalErr
 	}
 	return os.WriteFile(filepath.Join(root, resultName), resultRaw, 0o600)
+}
+
+func isPathWithin(path, root string) bool {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
