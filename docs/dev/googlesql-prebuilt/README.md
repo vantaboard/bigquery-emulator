@@ -13,7 +13,8 @@ must be called out as such in commit messages and CI release notes.
 
 ## Scope
 
-- Platform: `linux/amd64` only.
+- Platforms: `linux/amd64` (shipping) and `linux/arm64` (producer + CI spike in
+  flight — see [`arm64-feasibility.md`](./arm64-feasibility.md)).
 - Upstream GoogleSQL pin: module name `googlesql`, version `2026.1.1`
   (upstream tag `2026.01.1`, commit `36dd14aa0657ea299725504bc0f938732f58f380`
   — see `MODULE.bazel` in this repo for the gazelle leading-zero workaround).

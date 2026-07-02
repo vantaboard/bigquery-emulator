@@ -81,6 +81,13 @@ inputs:
       `false` so a temporarily-unset repo var does not block the merge.
     required: false
     default: "false"
+  target-arch:
+    description: |
+      Target CPU for the prebuilt cache (`amd64` or `arm64`). When empty,
+      auto-detects from the runner (`uname -m`). CI arm64 lanes pass
+      `arm64` explicitly; amd64 lanes leave this empty.
+    required: false
+    default: ""
 
 outputs:
   mode:
@@ -139,6 +146,29 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve target arch
+      id: arch
+      shell: bash
+      run: |
+        set -euo pipefail
+        arch='${{ inputs.target-arch }}'
+        if [ -z "$arch" ]; then
+          case "$(uname -m)" in
+            aarch64|arm64) arch=arm64 ;;
+            *) arch=amd64 ;;
+          esac
+        fi
+        case "$arch" in
+          amd64|arm64) ;;
+          *)
+            echo "::error::target-arch must be 'amd64' or 'arm64'; got '$arch'"
+            exit 1
+            ;;
+        esac
+        echo "arch=$arch" >> "$GITHUB_OUTPUT"
+        echo "repo-name=googlesql_prebuilt_linux_${arch}" >> "$GITHUB_OUTPUT"
+        echo "::notice::GoogleSQL prebuilt target arch=$arch repo=googlesql_prebuilt_linux_${arch}"
+
     - name: Resolve GoogleSQL mode
       id: resolve
       shell: bash
@@ -171,7 +201,7 @@ runs:
       working-directory: ${{ github.workspace }}
       run: |
         set -euo pipefail
-        cache=".cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64"
+        cache=".cache/googlesql-prebuilt/${{ steps.arch.outputs.repo-name }}"
         if [ -f "$cache/MODULE.bazel" ] \
           && python3 tools/googlesql-prebuilt/validate_artifact.py \
             --repo-root "$cache" --summary-line >/dev/null 2>&1; then
@@ -187,7 +217,8 @@ runs:
           # has already cleared the full identity + payload integrity gates.
           task googlesql:fetch-prebuilt \
             URL='${{ inputs.prebuilt-url }}' \
-            SHA256='${{ inputs.prebuilt-sha256 }}'
+            SHA256='${{ inputs.prebuilt-sha256 }}' \
+            GOOGLESQL_PREBUILT_ARCH='${{ steps.arch.outputs.arch }}'
         fi
 
     - name: Validate prebuilt artifact identity (safety-gate pins)
@@ -200,7 +231,7 @@ runs:
         # lane can demand artifact_version + googlesql.commit match the
         # workflow's pin even if the underlying tarball happens to share
         # a SHA-256 with a prior publish (defensive belt + braces).
-        args=( --repo-root .cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64 --summary-line --summary-json /tmp/googlesql-validate.json )
+        args=( --repo-root .cache/googlesql-prebuilt/${{ steps.arch.outputs.repo-name }} --summary-line --summary-json /tmp/googlesql-validate.json )
         if [ -n '${{ inputs.expected-googlesql-sha }}' ]; then
           args+=( --expected-googlesql-sha '${{ inputs.expected-googlesql-sha }}' )
         fi
@@ -234,7 +265,7 @@ runs:
         set -euo pipefail
         mode='${{ steps.resolve.outputs.mode }}'
         if [ "$mode" = "prebuilt" ]; then
-          mf=".cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/manifest.json"
+          mf=".cache/googlesql-prebuilt/${{ steps.arch.outputs.repo-name }}/manifest.json"
           ver="$(python3 -c "import json; print(json.load(open('$mf')).get('artifact_version','?'))" 2>/dev/null || echo '?')"
           gs_full="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?'))" 2>/dev/null || echo '?')"
           gs="${gs_full:0:12}"

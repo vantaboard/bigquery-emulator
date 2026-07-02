@@ -138,9 +138,9 @@ gRPC engine, with the gateway lifecycle wiring them together.
   (`thirdparty-samples.yml`), GoogleSQL parity + prebuilt artifact
   (`googlesql-parity.yml`, `googlesql-prebuilt.yml`), coverage
   publish (`coverage-bazel.yml`, `coverage-publish.yml`), and
-  tag-triggered release (`release.yml`). Linux/amd64 only — the
-  GoogleSQL hermetic LLVM toolchain does not cross-build cleanly
-  to linux/arm64 yet (see "Build systems" below)
+  tag-triggered release (`release.yml`). Linux/amd64 engine ships today; a
+  non-blocking `build-engine-arm64` lane on `ubuntu-24.04-arm` exercises native
+  arm64 builds (see [`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./docs/dev/googlesql-prebuilt/arm64-feasibility.md))
 
 ## Gateway HTTP surface (Go)
 
@@ -284,7 +284,8 @@ behind each, and the multi-strategy coordinator is the only
 
 - ✅ Vendor `libduckdb` v1.5.3 via Bazel `http_archive`
   ([`third_party/duckdb/`](./third_party/duckdb/)); the engine links
-  the prebuilt `libduckdb.so` (linux/amd64 zip) and surfaces its
+  the prebuilt `libduckdb.so` (linux/amd64 and linux/arm64 zips; engine still
+  ships amd64-only until the arm64 lane is green) and surfaces its
   Arrow APIs to the build
 - ✅ [`backend/storage/duckdb/`](./backend/storage/duckdb/):
   `DuckDBStorage` impl backed by a single `catalog.duckdb` file
@@ -1085,10 +1086,13 @@ Build with `task emulator:build-engine:bazel` (alias
 `task emulator:build-engine`) or directly
 `bazel build //binaries/emulator_main:emulator_main`.
 
-Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain ships
-amd64 binaries and does not cross-build cleanly to linux/arm64 yet,
-so the engine binary is not produced for arm64. Non-amd64 hosts
-should use the published Docker image.
+Linux/amd64 engine ships in release archives today. DuckDB prebuilts and CI
+infra for `linux/arm64` are wired (non-blocking `build-engine-arm64` job,
+arm64 GoogleSQL prebuilt producer); native arm64 `emulator_main` is still
+proving out on GitHub arm runners — see
+[`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./docs/dev/googlesql-prebuilt/arm64-feasibility.md).
+Non-amd64 hosts should use the published Docker image until arm64 engine
+releases land.
 
 The integration tests under [`gateway/e2e/`](./gateway/e2e/)
 discover the engine binary via `./bin/emulator_main`, and

@@ -27,7 +27,26 @@
 version: "3"
 
 vars:
-  PREBUILT_REPO_NAME: "googlesql_prebuilt_linux_amd64"
+  PREBUILT_ARCH:
+    sh: |
+      if [ -n "${GOOGLESQL_PREBUILT_ARCH:-}" ]; then
+        echo "$GOOGLESQL_PREBUILT_ARCH"
+      else
+        case "$(uname -m)" in
+          aarch64|arm64) echo arm64 ;;
+          *) echo amd64 ;;
+        esac
+      fi
+  PREBUILT_REPO_NAME:
+    sh: |
+      arch="${GOOGLESQL_PREBUILT_ARCH:-}"
+      if [ -z "$arch" ]; then
+        case "$(uname -m)" in
+          aarch64|arm64) arch=arm64 ;;
+          *) arch=amd64 ;;
+        esac
+      fi
+      echo "googlesql_prebuilt_linux_${arch}"
   CACHE_DIR:
     sh: |
       root="$(git rev-parse --show-toplevel)"

@@ -264,10 +264,10 @@ def validate_config(config: dict) -> None:
         raise SystemExit(
             f"manifest_writer: platform must contain exactly {sorted(pf_keys)}"
         )
-    if pf["os"] != "linux" or pf["arch"] != "amd64":
+    if pf["os"] != "linux" or pf["arch"] not in ("amd64", "arm64"):
         raise SystemExit(
             "manifest_writer: the compatibility surface freezes platform to "
-            f"linux/amd64; got {pf['os']}/{pf['arch']}"
+            f"linux/{{amd64,arm64}}; got {pf['os']}/{pf['arch']}"
         )
 
     tc = config["toolchain"]

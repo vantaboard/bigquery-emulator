@@ -69,8 +69,18 @@ concurrency:
 
 jobs:
   build-and-verify:
-    name: build, package, verify
-    runs-on: ubuntu-latest
+    name: build, package, verify (${{ matrix.target_arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_arch: amd64
+            runner: ubuntu-latest
+            disk_cache: googlesql-prebuilt
+          - target_arch: arm64
+            runner: ubuntu-24.04-arm
+            disk_cache: googlesql-prebuilt-arm64
+    runs-on: ${{ matrix.runner }}
     # Cold-cache GoogleSQL is the same ~95% / 2 hr profile the release
     # workflow hit; same 180 min budget.
     timeout-minutes: 180
@@ -107,7 +117,7 @@ jobs:
           # Keep this cache distinct from ci.yml / conformance.yml /
           # release.yml so prebuilt producer runs don't churn caches
           # the on-PR lanes rely on.
-          disk-cache: googlesql-prebuilt
+          disk-cache: ${{ matrix.disk_cache }}
           repository-cache: true
 
       - name: Checkout sibling googlesql (pinned)
@@ -156,7 +166,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="googlesql-prebuilt/v${{ inputs.artifact_version }}+gs-${{ steps.googlesql.outputs.short_sha }}"
-          asset="googlesql-prebuilt-linux-amd64-clang18-${{ steps.googlesql.outputs.short_sha }}-v${{ inputs.artifact_version }}.tar.gz"
+          asset="googlesql-prebuilt-linux-${{ matrix.target_arch }}-clang18-${{ steps.googlesql.outputs.short_sha }}-v${{ inputs.artifact_version }}.tar.gz"
           # Distinguish "release doesn't exist" (exit 1, expected, gate
           # passes) from "gh broke for some other reason" (still exit 1
           # but with a real error on stderr) by capturing stdout+stderr
@@ -195,6 +205,7 @@ jobs:
           cd bigquery-emulator
           ./tools/googlesql-prebuilt/package.sh \
             --mode=bazel \
+            --target-arch=${{ matrix.target_arch }} \
             --googlesql-src ../../googlesql \
             --emulator-src . \
             --artifact-version "${{ inputs.artifact_version }}" \
@@ -255,7 +266,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: googlesql-prebuilt-${{ steps.package.outputs.googlesql_short_sha }}-v${{ inputs.artifact_version }}
+          name: googlesql-prebuilt-${{ matrix.target_arch }}-${{ steps.package.outputs.googlesql_short_sha }}-v${{ inputs.artifact_version }}
           path: |
             ${{ steps.package.outputs.tarball_path }}
             ${{ steps.package.outputs.tarball_path }}.sha256
@@ -286,7 +297,7 @@ jobs:
           title="GoogleSQL prebuilt v${{ inputs.artifact_version }} (googlesql@${{ steps.package.outputs.googlesql_short_sha }})"
           notes_file="$(mktemp)"
           cat > "$notes_file" <<EOF
-          GoogleSQL prebuilt artifact (linux/amd64, clang-18).
+          GoogleSQL prebuilt artifact (linux/${{ matrix.target_arch }}, clang-18).
 
           - Artifact version: ${{ inputs.artifact_version }}
           - GoogleSQL commit: ${{ steps.package.outputs.googlesql_commit }}

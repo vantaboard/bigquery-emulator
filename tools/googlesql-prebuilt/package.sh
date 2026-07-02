@@ -35,6 +35,7 @@
 #   --workflow-id NAME          producer.workflow field (default: "manual").
 #   --run-id ID                 producer.run_id field (default: "0").
 #   --tarball-name NAME         Override default name shape.
+#   --target-arch ARCH          Target CPU for the artifact: amd64 (default) or arm64.
 #   -h | --help                 Print this help and exit.
 #
 # Outputs (under --out-dir):
@@ -54,6 +55,7 @@ MANIFEST_WRITER="$SCRIPT_DIR/manifest_writer.py"
 WRAPPER_WRITER="$SCRIPT_DIR/wrapper_writer.py"
 
 REPO_NAME="googlesql_prebuilt_linux_amd64"
+TARGET_ARCH="amd64"
 
 usage() {
     sed -n '2,/^set -euo pipefail/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -101,6 +103,8 @@ while [ $# -gt 0 ]; do
         --run-id) RUN_ID="$2"; shift 2 ;;
         --tarball-name=*) TARBALL_NAME="${1#--tarball-name=}"; shift ;;
         --tarball-name) TARBALL_NAME="$2"; shift 2 ;;
+        --target-arch=*) TARGET_ARCH="${1#--target-arch=}"; shift ;;
+        --target-arch) TARGET_ARCH="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
@@ -115,6 +119,12 @@ esac
 [ -n "$EMULATOR_SRC" ] || die "--emulator-src is required"
 [ -n "$ARTIFACT_VERSION" ] || die "--artifact-version is required (strict semver)"
 [ -n "$OUT_DIR" ] || die "--out-dir is required"
+
+case "$TARGET_ARCH" in
+    amd64) REPO_NAME="googlesql_prebuilt_linux_amd64" ;;
+    arm64) REPO_NAME="googlesql_prebuilt_linux_arm64" ;;
+    *) die "--target-arch must be 'amd64' or 'arm64'; got '$TARGET_ARCH'" ;;
+esac
 
 GOOGLESQL_SRC="$(cd "$GOOGLESQL_SRC" && pwd)"
 EMULATOR_SRC="$(cd "$EMULATOR_SRC" && pwd)"
@@ -1097,7 +1107,7 @@ cat > "$MANIFEST_CONFIG" <<EOF
   },
   "platform": {
     "os": "linux",
-    "arch": "amd64",
+    "arch": "$TARGET_ARCH",
     "libc": "$LIBC_VERSION",
     "cxx_abi": "cxx11"
   },
@@ -1138,7 +1148,7 @@ python3 "$MANIFEST_WRITER" --validate-only "$REPO_STAGE/manifest.json"
 # ---------------------------------------------------------------------------
 
 if [ -z "$TARBALL_NAME" ]; then
-    TARBALL_NAME="googlesql-prebuilt-linux-amd64-clang18-${SHORT_SHA}-v${ARTIFACT_VERSION}.tar.gz"
+    TARBALL_NAME="googlesql-prebuilt-linux-${TARGET_ARCH}-clang18-${SHORT_SHA}-v${ARTIFACT_VERSION}.tar.gz"
 fi
 TARBALL_PATH="$OUT_DIR/$TARBALL_NAME"
 

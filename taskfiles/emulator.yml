@@ -157,9 +157,22 @@ tasks:
       GOOGLESQL_SOURCE:
         sh: |
           v="${GOOGLESQL_SOURCE:-prebuilt}"
+          arch="${GOOGLESQL_PREBUILT_ARCH:-}"
+          if [ -z "$arch" ]; then
+            case "$(uname -m)" in
+              aarch64|arm64) arch=arm64 ;;
+              *) arch=amd64 ;;
+            esac
+          fi
           case "$v" in
             local|source) echo "googlesql-source" ;;
-            prebuilt)     echo "googlesql-prebuilt" ;;
+            prebuilt)
+              if [ "$arch" = "arm64" ]; then
+                echo "googlesql-prebuilt-arm64"
+              else
+                echo "googlesql-prebuilt"
+              fi
+              ;;
             *)
               echo "GOOGLESQL_SOURCE must be 'local'/'source' or 'prebuilt'; got '$v'" >&2
               exit 2
@@ -182,19 +195,26 @@ tasks:
         sh: |
           v="{{._GOOGLESQL_SOURCE_RAW}}"
           root="$(git rev-parse --show-toplevel)"
+          arch="${GOOGLESQL_PREBUILT_ARCH:-}"
+          if [ -z "$arch" ]; then
+            case "$(uname -m)" in
+              aarch64|arm64) arch=arm64 ;;
+              *) arch=amd64 ;;
+            esac
+          fi
           case "$v" in
             local|source)
               sha="$(git -C "$root/../googlesql" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
               echo "source googlesql=$sha"
               ;;
             *)
-              mf="$root/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/manifest.json"
+              mf="$root/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_${arch}/manifest.json"
               if [ -f "$mf" ]; then
                 ver="$(python3 -c "import json; print(json.load(open('$mf')).get('artifact_version','?'))" 2>/dev/null || echo "?")"
                 gs="$(python3 -c "import json; print(json.load(open('$mf')).get('googlesql',{}).get('commit','?')[:12])" 2>/dev/null || echo "?")"
-                echo "prebuilt artifact_version=$ver googlesql=$gs"
+                echo "prebuilt artifact_version=$ver googlesql=$gs arch=$arch"
               else
-                echo "prebuilt manifest=missing"
+                echo "prebuilt manifest=missing arch=$arch"
               fi
               ;;
           esac

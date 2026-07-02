@@ -110,9 +110,11 @@ under `gateway/e2e/` drive this binary directly.
 GoogleSQL is wired in via Bazel; DuckDB v1.5.3 is pulled in as a prebuilt
 tarball through `http_archive` (see [`third_party/duckdb/`](https://github.com/vantaboard/bigquery-emulator/tree/main/third_party/duckdb)).
 
-Linux/amd64 only today — the GoogleSQL hermetic LLVM toolchain does not
-cross-build cleanly to linux/arm64 yet, so the engine binary ships only for
-amd64. Non-amd64 hosts should use the published Docker image.
+Linux/amd64 engine ships in release archives. CI exercises native
+`linux/arm64` builds on `ubuntu-24.04-arm` (non-blocking); see
+[`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./docs/dev/googlesql-prebuilt/arm64-feasibility.md).
+Until arm64 engine releases land, non-amd64 hosts should use the published
+Docker image.
 
 ### GoogleSQL build mode (prebuilt by default)
 

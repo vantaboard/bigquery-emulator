@@ -4,19 +4,19 @@ overview: Produce an arm64 engine binary by fixing the GoogleSQL toolchain story
 todos:
   - id: toolchain-spike
     content: "Spike: build GoogleSQL on a linux/arm64 runner with a native arm64 LLVM toolchain (registered alongside the amd64 hermetic one); document what breaks"
-    status: pending
+    status: completed
   - id: duckdb-arm64
     content: Add the linux/arm64 libduckdb prebuilt to third_party/duckdb with platform select()
-    status: pending
+    status: completed
   - id: prebuilt-arm64
     content: Extend googlesql-prebuilt.yml to publish an arm64 artifact + repo vars for its URL/SHA
-    status: pending
+    status: completed
   - id: release-matrix
     content: "goreleaser + release.yml: linux/arm64 archive and multi-arch Docker manifest (buildx) once engine builds"
     status: pending
   - id: ci-lane
     content: Non-blocking arm64 build lane (GitHub arm64 runners) promoted to blocking when stable
-    status: pending
+    status: completed
 isProject: false
 ---
 

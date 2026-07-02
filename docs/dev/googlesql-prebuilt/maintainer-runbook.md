@@ -23,7 +23,7 @@ repo today; no placeholders. Cross-reference the source if in doubt:
 | Role | Surface they own |
 |---|---|
 | **Artifact producer** | The producer workflow + scripts, the `.tar.gz` + `manifest.json` + `.tar.gz.sha256` triple under the `googlesql-prebuilt/v<...>+gs-<...>` GitHub Release. |
-| **Consumer-pin owner** | `vars.GOOGLESQL_PREBUILT_URL` + `vars.GOOGLESQL_PREBUILT_SHA256` (every CI workflow's pin), and `env.RELEASE_GOOGLESQL_PREBUILT_URL` / `_SHA256` in `release.yml` (the release pin). |
+| **Consumer-pin owner** | `vars.GOOGLESQL_PREBUILT_URL` + `vars.GOOGLESQL_PREBUILT_SHA256` (amd64 CI pin), `vars.GOOGLESQL_PREBUILT_URL_ARM64` + `vars.GOOGLESQL_PREBUILT_SHA256_ARM64` (arm64 CI pin), and `env.RELEASE_GOOGLESQL_PREBUILT_URL` / `_SHA256` in `release.yml` (the release pin). |
 | **Local environment** | The developer's machine — `.cache/googlesql-prebuilt/` and the sibling `../googlesql/` checkout. |
 | **Compatibility surface** | The compatibility-surface docs under this directory: label inventory, manifest schema, repo layout, upgrade rules. Bumping this surface is a breaking change (see [`upgrade-rules.md`](upgrade-rules.md)). |
 

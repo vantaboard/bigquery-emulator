@@ -140,6 +140,12 @@ build:googlesql-source --define=googlesql_mode=source
 common:googlesql-prebuilt --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64
 common:googlesql-prebuilt --build_metadata=GOOGLESQL_MODE=prebuilt
 common:googlesql-prebuilt --define=googlesql_mode=prebuilt
+# linux/arm64 sibling — populated by `task googlesql:fetch-prebuilt` when
+# GOOGLESQL_PREBUILT_ARCH=arm64 (or on an aarch64 host). CI arm64 lanes
+# pass `--config=googlesql-prebuilt-arm64` via `task emulator:build-engine:bazel`.
+common:googlesql-prebuilt-arm64 --override_module=googlesql=.cache/googlesql-prebuilt/googlesql_prebuilt_linux_arm64
+common:googlesql-prebuilt-arm64 --build_metadata=GOOGLESQL_MODE=prebuilt
+common:googlesql-prebuilt-arm64 --define=googlesql_mode=prebuilt
 # ABI parity with the prebuilt artifact. The compatibility-surface manifest commits
 # the producer to `-DNDEBUG` (see
 # `docs/dev/googlesql-prebuilt/manifest.md`'s `cflags` field), which
@@ -158,6 +164,8 @@ common:googlesql-prebuilt --define=googlesql_mode=prebuilt
 # fastbuild ABI). The CI/Docker/release track owns standardising the default mode.
 build:googlesql-prebuilt --copt=-DNDEBUG
 build:googlesql-prebuilt --host_copt=-DNDEBUG
+build:googlesql-prebuilt-arm64 --copt=-DNDEBUG
+build:googlesql-prebuilt-arm64 --host_copt=-DNDEBUG
 
 # ---------------------------------------------------------------------------
 # Local disk cache.

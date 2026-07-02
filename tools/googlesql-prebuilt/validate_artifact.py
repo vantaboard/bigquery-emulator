@@ -61,7 +61,8 @@ import manifest_writer  # noqa: E402  (sibling import after sys.path tweak)
 # what the artifact claims"; the defaults below are the consumer-side
 # expectations and match what every entrypoint (local task, CI, Docker,
 # release) targets today. A future
-# arm64 lane (per upgrade-rules.md) lights up by extending this map.
+# arm64 lane (per upgrade-rules.md) lights up by extending this map and
+# inferring arch from the unpacked repo directory name when unset.
 EXPECTED_PLATFORM = {
     "os": "linux",
     "arch": "amd64",
@@ -69,6 +70,13 @@ EXPECTED_PLATFORM = {
 EXPECTED_COMPILER = "clang"
 
 REPO_NAME = "googlesql_prebuilt_linux_amd64"
+
+
+def _default_expected_arch(repo_root: pathlib.Path) -> str:
+    """Infer amd64 vs arm64 from the unpacked repo directory name."""
+    if "_arm64" in repo_root.name:
+        return "arm64"
+    return "amd64"
 
 WRAPPER_REQUIRED_FILES = (
     "MODULE.bazel",
@@ -275,11 +283,11 @@ def _check_pin(
         )
 
 
-def _check_platform(manifest: dict, pin: ExpectedPin) -> None:
-    """OS/arch/libc/compiler gates. Defaults stay linux/amd64/clang per the compatibility surface."""
+def _check_platform(manifest: dict, pin: ExpectedPin, repo_root: pathlib.Path) -> None:
+    """OS/arch/libc/compiler gates. Defaults infer arch from repo dir name."""
     platform = manifest.get("platform", {})
     expected_os = pin.os or EXPECTED_PLATFORM["os"]
-    expected_arch = pin.arch or EXPECTED_PLATFORM["arch"]
+    expected_arch = pin.arch or _default_expected_arch(repo_root)
     actual_os = platform.get("os")
     actual_arch = platform.get("arch")
     if actual_os != expected_os:
@@ -540,7 +548,7 @@ def validate(repo_root: pathlib.Path, pin: ExpectedPin) -> ValidationSummary:
         ) from exc
 
     _check_identity(manifest, pin)
-    _check_platform(manifest, pin)
+    _check_platform(manifest, pin, repo_root)
     _check_wrappers(repo_root)
     _check_wrapper_targets(repo_root)
     _check_payload(repo_root, manifest)
