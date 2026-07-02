@@ -50,6 +50,9 @@ namespace internal {
     case absl::StatusCode::kNotFound:
       code = ::grpc::StatusCode::NOT_FOUND;
       break;
+    case absl::StatusCode::kAlreadyExists:
+      code = ::grpc::StatusCode::ALREADY_EXISTS;
+      break;
     case absl::StatusCode::kFailedPrecondition:
       code = ::grpc::StatusCode::FAILED_PRECONDITION;
       break;

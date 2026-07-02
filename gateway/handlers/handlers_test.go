@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestHealth(t *testing.T) {
@@ -47,6 +50,31 @@ func TestNotImplementedShape(t *testing.T) {
 	}
 	if env.Error.Errors[0].Reason == "" {
 		t.Fatal("error.errors[0].reason is empty")
+	}
+}
+
+func TestQueryGRPCToHTTPAlreadyExists(t *testing.T) {
+	t.Parallel()
+	rec := httptest.NewRecorder()
+	err := status.Error(codes.AlreadyExists, "dataset already exists: dev.foo")
+	if !queryGRPCToHTTPError(rec, err) {
+		t.Fatal("expected error to be written")
+	}
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+	var env errorEnvelope
+	if decodeErr := json.NewDecoder(rec.Body).Decode(&env); decodeErr != nil {
+		t.Fatalf("decode: %v", decodeErr)
+	}
+	if env.Error.Code != http.StatusConflict {
+		t.Fatalf("error.code = %d, want %d", env.Error.Code, http.StatusConflict)
+	}
+	if env.Error.Errors[0].Reason != reasonDuplicate {
+		t.Fatalf("reason = %q, want %q", env.Error.Errors[0].Reason, reasonDuplicate)
+	}
+	if env.Error.Message != "Already Exists: Dataset dev:foo" {
+		t.Fatalf("message = %q", env.Error.Message)
 	}
 }
 

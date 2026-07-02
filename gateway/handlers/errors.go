@@ -26,6 +26,8 @@ import (
 //     because GoogleSQL surfaces them through the analyzer, but
 //     storage-side NOT_FOUNDs from `DescribeTable` need their own
 //     mapping to keep parity with `tables.get`).
+//   - ALREADY_EXISTS → 409 duplicate (DDL/control-op conflicts such as
+//     UNDROP SCHEMA after recreating the same dataset id).
 //   - FAILED_PRECONDITION → 400 invalidQuery (the engine raises this
 //     when the catalog has not been initialized; the gateway folds it
 //     into the same 400 reason a client sees when the SQL itself is
@@ -58,6 +60,8 @@ func queryGRPCToHTTPError(w http.ResponseWriter, err error) bool {
 		httpStatus, reason = http.StatusBadRequest, reasonInvalidQuery
 	case codes.NotFound:
 		httpStatus, reason = http.StatusNotFound, reasonNotFound
+	case codes.AlreadyExists:
+		httpStatus, reason = http.StatusConflict, reasonDuplicate
 	case codes.PermissionDenied:
 		httpStatus, reason = http.StatusForbidden, reasonAccessDenied
 	case codes.Unauthenticated:
