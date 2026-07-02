@@ -15,6 +15,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "backend/catalog/emulator_builtin_extensions.h"
+#include "backend/catalog/emulator_external_query_tvf_extensions.h"
 #include "backend/catalog/emulator_ml_tvf_extensions.h"
 #include "backend/catalog/googlesql_catalog_find_helpers.h"
 #include "backend/catalog/info_schema_table.h"
@@ -95,6 +96,7 @@ GoogleSqlCatalog::GoogleSqlCatalog(absl::string_view project_id,
   }
   RegisterEmulatorBuiltinFunctions(*this);
   RegisterEmulatorMlTvfStubs(*this);
+  RegisterEmulatorExternalQueryTvf(*this);
   ReplayFunctionsIntoCatalog(project_id_, *this);
   // NOTE: views are intentionally NOT eagerly replayed into the catalog.
   // `SimpleCatalog::AddTable` keys tables by their bare name, but BigQuery

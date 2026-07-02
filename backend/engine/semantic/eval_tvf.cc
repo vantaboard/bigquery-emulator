@@ -1,5 +1,6 @@
 #include "backend/engine/semantic/eval_tvf.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/eval_expr.h"
+#include "backend/engine/semantic/external_query_fixture.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "backend/engine/semantic/scan_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
@@ -153,6 +155,77 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTemplatedSqlTvf(
   return RemapScanOutputColumns(*rows, inner, scan);
 }
 
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeExternalQueryTvf(
+    const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
+  if (scan.argument_list_size() < 2) {
+    return absl::InvalidArgumentError(
+        "EXTERNAL_QUERY requires (connection STRING, query STRING)");
+  }
+  const ::googlesql::ResolvedFunctionArgument* conn_arg = scan.argument_list(0);
+  const ::googlesql::ResolvedFunctionArgument* query_arg =
+      scan.argument_list(1);
+  if (conn_arg == nullptr || conn_arg->expr() == nullptr ||
+      query_arg == nullptr || query_arg->expr() == nullptr) {
+    return absl::InvalidArgumentError(
+        "EXTERNAL_QUERY requires constant connection and query arguments");
+  }
+  auto connection = EvalExpr(*conn_arg->expr(), ctx);
+  if (!connection.ok()) {
+    return connection.status();
+  }
+  if (connection->type_kind() != ::googlesql::TYPE_STRING) {
+    return absl::InvalidArgumentError(
+        "EXTERNAL_QUERY connection argument must be STRING");
+  }
+  auto query = EvalExpr(*query_arg->expr(), ctx);
+  if (!query.ok()) {
+    return query.status();
+  }
+  if (query->type_kind() != ::googlesql::TYPE_STRING) {
+    return absl::InvalidArgumentError(
+        "EXTERNAL_QUERY query argument must be STRING");
+  }
+  absl::StatusOr<ExternalQueryFixtureResult> fixture = LoadExternalQueryFixture(
+      connection->string_value(), query->string_value(), nullptr);
+  if (!fixture.ok()) {
+    return fixture.status();
+  }
+  std::vector<ColumnBindings> out;
+  out.reserve(fixture->rows.size());
+  for (const ColumnBindings& in_row : fixture->rows) {
+    ColumnBindings row;
+    row.reserve(scan.column_list_size());
+    for (int i = 0; i < scan.column_list_size(); ++i) {
+      const std::string& name = scan.column_list(i).name();
+      const int dst_id = scan.column_list(i).column_id();
+      auto it = std::find_if(fixture->schema.begin(),
+                             fixture->schema.end(),
+                             [&name](const ExternalQueryFixtureColumn& col) {
+                               return absl::EqualsIgnoreCase(col.name, name);
+                             });
+      if (it == fixture->schema.end()) {
+        return absl::InternalError(absl::StrCat(
+            "semantic: EXTERNAL_QUERY fixture missing output column '",
+            name,
+            "'"));
+      }
+      const size_t schema_idx =
+          static_cast<size_t>(it - fixture->schema.begin());
+      const int src_id = fixture->column_ids[schema_idx];
+      auto cell = in_row.find(src_id);
+      if (cell == in_row.end()) {
+        return absl::InternalError(absl::StrCat(
+            "semantic: EXTERNAL_QUERY fixture row missing column '",
+            name,
+            "'"));
+      }
+      row.emplace(dst_id, cell->second);
+    }
+    out.push_back(std::move(row));
+  }
+  return out;
+}
+
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeRegisteredSqlTvf(
     const ::googlesql::ResolvedTVFScan& scan, EvalContext& ctx) {
   const auto* sql_tvf =
@@ -197,6 +270,9 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeTvfScan(
   }
   if (tvf_name == "ml.forecast") {
     return stubs::MlForecastStub(scan);
+  }
+  if (tvf_name == "external_query") {
+    return MaterializeExternalQueryTvf(scan, ctx);
   }
   if (scan.signature() != nullptr) {
     const auto* templated_sig =

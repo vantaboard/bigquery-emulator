@@ -618,6 +618,9 @@ ml.predict: local_stub
 ml.forecast: local_stub
 ml.evaluate: local_stub
 
+# Fixture-backed federated query TVF (no live Cloud SQL / Spanner proxy).
+external_query: semantic_executor
+
 # NET.* IP / URL parsing on the semantic executor via
 # `backend/engine/semantic/functions/net_funcs.cc`.
 net.ip_from_string: semantic_executor

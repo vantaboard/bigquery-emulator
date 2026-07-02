@@ -467,6 +467,23 @@ cc_test(
 )
 
 cc_library(
+    name = "emulator_external_query_tvf_extensions",
+    srcs = ["emulator_external_query_tvf_extensions.cc"],
+    hdrs = ["emulator_external_query_tvf_extensions.h"],
+    deps = [
+        "//backend/engine/semantic:external_query_fixture",
+        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:function",
+        "@googlesql//googlesql/public:simple_catalog",
+        "@googlesql//googlesql/public:type",
+    ] + GOOGLESQL_SQL_TVF_DEPS,
+)
+
+cc_library(
     name = "measure_catalog",
     srcs = ["measure_catalog.cc"],
     hdrs = ["measure_catalog.h"],
@@ -525,6 +542,7 @@ cc_library(
     ],
     deps = [
         ":emulator_builtin_extensions",
+        ":emulator_external_query_tvf_extensions",
         ":emulator_ml_tvf_extensions",
         ":info_schema_table",
         ":measure_catalog",
