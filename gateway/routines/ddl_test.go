@@ -112,3 +112,27 @@ func TestParseCreateRoutineDDLPythonUdf(t *testing.T) {
 		t.Errorf("body = %q", rt.DefinitionBody)
 	}
 }
+
+func TestParseCreateRoutineDDLPythonPackages(t *testing.T) {
+	rt, ok := parseCreateRoutineDDL("p", "d",
+		`CREATE FUNCTION py_lxml(x STRING) RETURNS STRING
+LANGUAGE python
+OPTIONS (entry_point='do_lxml', packages=['lxml'])
+AS r"""
+from lxml import etree
+def do_lxml(x):
+  return x
+"""`)
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	if rt.PythonOptions == nil {
+		t.Fatal("pythonOptions missing")
+	}
+	if rt.PythonOptions.EntryPoint != "do_lxml" {
+		t.Errorf("entryPoint = %q", rt.PythonOptions.EntryPoint)
+	}
+	if len(rt.PythonOptions.Packages) != 1 || rt.PythonOptions.Packages[0] != "lxml" {
+		t.Errorf("packages = %#v", rt.PythonOptions.Packages)
+	}
+}

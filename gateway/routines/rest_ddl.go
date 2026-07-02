@@ -37,6 +37,22 @@ func buildScalarFunctionDDL(name string, rt bqtypes.Routine) string {
 		b.WriteString(" LANGUAGE ")
 		b.WriteString(string(rt.Language))
 	}
+	if rt.PythonOptions != nil {
+		b.WriteString(" OPTIONS (")
+		var opts []string
+		if rt.PythonOptions.EntryPoint != "" {
+			opts = append(opts, fmt.Sprintf("entry_point='%s'", rt.PythonOptions.EntryPoint))
+		}
+		if len(rt.PythonOptions.Packages) > 0 {
+			quoted := make([]string, 0, len(rt.PythonOptions.Packages))
+			for _, pkg := range rt.PythonOptions.Packages {
+				quoted = append(quoted, fmt.Sprintf("'%s'", pkg))
+			}
+			opts = append(opts, fmt.Sprintf("packages=[%s]", strings.Join(quoted, ", ")))
+		}
+		b.WriteString(strings.Join(opts, ", "))
+		b.WriteString(")")
+	}
 	b.WriteString(" AS (")
 	b.WriteString(rt.DefinitionBody)
 	b.WriteString(")")

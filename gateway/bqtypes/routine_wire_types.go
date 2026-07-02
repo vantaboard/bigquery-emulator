@@ -110,4 +110,12 @@ type Routine struct {
 	DefinitionBody   string                `json:"definitionBody,omitempty"`
 	Description      string                `json:"description,omitempty"`
 	StrictMode       *bool                 `json:"strictMode,omitempty"`
+	PythonOptions    *PythonOptions        `json:"pythonOptions,omitempty"`
+}
+
+// PythonOptions mirrors the BigQuery REST PythonOptions resource for
+// LANGUAGE python routines.
+type PythonOptions struct {
+	EntryPoint string   `json:"entryPoint,omitempty"`
+	Packages   []string `json:"packages,omitempty"`
 }

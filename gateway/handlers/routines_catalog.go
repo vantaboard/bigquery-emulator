@@ -105,6 +105,9 @@ func applyRoutineFromDDL(rt *bqtypes.Routine, parsed bqtypes.Routine) {
 	if parsed.Language != "" {
 		rt.Language = parsed.Language
 	}
+	if parsed.PythonOptions != nil {
+		rt.PythonOptions = parsed.PythonOptions
+	}
 }
 
 func catalogGetRoutine(

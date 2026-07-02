@@ -63,7 +63,7 @@ func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Rou
 		return bqtypes.Routine{}, false
 	}
 	now := nowMillis()
-	return bqtypes.Routine{
+	rt := bqtypes.Routine{
 		Etag: MintEtag(),
 		RoutineReference: bqtypes.RoutineReference{
 			ProjectID: pID,
@@ -77,7 +77,11 @@ func parseCreateRoutineDDL(projectID, defaultDatasetID, sql string) (bqtypes.Rou
 		DefinitionBody:   body,
 		CreationTime:     now,
 		LastModifiedTime: now,
-	}, true
+	}
+	if opts := parsePythonOptionsFromDDL(sql); opts != nil {
+		rt.PythonOptions = opts
+	}
+	return rt, true
 }
 
 func stripCreateRoutineHeader(sql string) (rest, routineType string, ok bool) {
@@ -125,6 +129,7 @@ func skipLanguageAndOptions(rest string) string {
 			continue
 		}
 		if strings.HasPrefix(upper, "OPTIONS") {
+			rest = strings.TrimSpace(rest[len("OPTIONS"):])
 			if !strings.HasPrefix(rest, "(") {
 				break
 			}
@@ -399,6 +404,14 @@ func parseDefinitionBody(s string) (string, bool) {
 	// the first quoted span verbatim.
 	if s[0] == 'r' && len(s) > 1 && (s[1] == '\'' || s[1] == '"') {
 		s = s[1:]
+	}
+	if len(s) >= 3 && (s[0] == '\'' || s[0] == '"') && s[0] == s[1] && s[1] == s[2] {
+		quote := s[0]
+		end := strings.Index(s[3:], strings.Repeat(string(quote), 3))
+		if end < 0 {
+			return "", false
+		}
+		return s[3 : 3+end], true
 	}
 	if s[0] == '\'' || s[0] == '"' {
 		quote := s[0]
