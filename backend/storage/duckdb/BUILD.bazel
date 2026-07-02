@@ -19,6 +19,8 @@ cc_library(
         "duckdb_storage_views.cc",
         "duckdb_storage_governance.cc",
         "duckdb_storage_tombstone_registry.cc",
+        "duckdb_storage_tombstone_registry_governance.cc",
+        "duckdb_storage_tombstone_registry_json.cc",
         "duckdb_storage_version_log.cc",
         "duckdb_storage_version_log_tombstone.cc",
     ],
@@ -26,6 +28,7 @@ cc_library(
         "duckdb_storage.h",
         "duckdb_storage_governance.h",
         "duckdb_storage_internal.h",
+        "duckdb_storage_tombstone_registry_internal.h",
         "duckdb_storage_version_log.h",
     ],
     deps = [
