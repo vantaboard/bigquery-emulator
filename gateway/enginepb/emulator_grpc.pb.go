@@ -32,6 +32,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	Catalog_RegisterDataset_FullMethodName       = "/bigquery_emulator.v1.Catalog/RegisterDataset"
 	Catalog_DropDataset_FullMethodName           = "/bigquery_emulator.v1.Catalog/DropDataset"
+	Catalog_UndeleteDataset_FullMethodName       = "/bigquery_emulator.v1.Catalog/UndeleteDataset"
 	Catalog_ListDatasets_FullMethodName          = "/bigquery_emulator.v1.Catalog/ListDatasets"
 	Catalog_RegisterTable_FullMethodName         = "/bigquery_emulator.v1.Catalog/RegisterTable"
 	Catalog_DropTable_FullMethodName             = "/bigquery_emulator.v1.Catalog/DropTable"
@@ -55,6 +56,7 @@ const (
 type CatalogClient interface {
 	RegisterDataset(ctx context.Context, in *RegisterDatasetRequest, opts ...grpc.CallOption) (*RegisterDatasetResponse, error)
 	DropDataset(ctx context.Context, in *DropDatasetRequest, opts ...grpc.CallOption) (*DropDatasetResponse, error)
+	UndeleteDataset(ctx context.Context, in *UndeleteDatasetRequest, opts ...grpc.CallOption) (*UndeleteDatasetResponse, error)
 	// Lists every dataset registered under `project_id`. The gateway's
 	// `datasets.list` REST handler delegates here; the response is
 	// shaped as a single page (no continuation cursor today, the
@@ -109,6 +111,16 @@ func (c *catalogClient) DropDataset(ctx context.Context, in *DropDatasetRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DropDatasetResponse)
 	err := c.cc.Invoke(ctx, Catalog_DropDataset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *catalogClient) UndeleteDataset(ctx context.Context, in *UndeleteDatasetRequest, opts ...grpc.CallOption) (*UndeleteDatasetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UndeleteDatasetResponse)
+	err := c.cc.Invoke(ctx, Catalog_UndeleteDataset_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +283,7 @@ func (c *catalogClient) SetColumnGovernance(ctx context.Context, in *SetColumnGo
 type CatalogServer interface {
 	RegisterDataset(context.Context, *RegisterDatasetRequest) (*RegisterDatasetResponse, error)
 	DropDataset(context.Context, *DropDatasetRequest) (*DropDatasetResponse, error)
+	UndeleteDataset(context.Context, *UndeleteDatasetRequest) (*UndeleteDatasetResponse, error)
 	// Lists every dataset registered under `project_id`. The gateway's
 	// `datasets.list` REST handler delegates here; the response is
 	// shaped as a single page (no continuation cursor today, the
@@ -315,6 +328,9 @@ func (UnimplementedCatalogServer) RegisterDataset(context.Context, *RegisterData
 }
 func (UnimplementedCatalogServer) DropDataset(context.Context, *DropDatasetRequest) (*DropDatasetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DropDataset not implemented")
+}
+func (UnimplementedCatalogServer) UndeleteDataset(context.Context, *UndeleteDatasetRequest) (*UndeleteDatasetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UndeleteDataset not implemented")
 }
 func (UnimplementedCatalogServer) ListDatasets(context.Context, *ListDatasetsRequest) (*ListDatasetsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDatasets not implemented")
@@ -413,6 +429,24 @@ func _Catalog_DropDataset_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CatalogServer).DropDataset(ctx, req.(*DropDatasetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Catalog_UndeleteDataset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UndeleteDatasetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).UndeleteDataset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_UndeleteDataset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).UndeleteDataset(ctx, req.(*UndeleteDatasetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -701,6 +735,10 @@ var Catalog_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DropDataset",
 			Handler:    _Catalog_DropDataset_Handler,
+		},
+		{
+			MethodName: "UndeleteDataset",
+			Handler:    _Catalog_UndeleteDataset_Handler,
 		},
 		{
 			MethodName: "ListDatasets",

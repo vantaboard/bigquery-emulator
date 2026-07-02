@@ -43,6 +43,14 @@ func (f *fakeCatalogClient) DropDataset(
 	return &enginepb.DropDatasetResponse{}, nil
 }
 
+func (f *fakeCatalogClient) UndeleteDataset(
+	_ context.Context,
+	_ *enginepb.UndeleteDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UndeleteDatasetResponse, error) {
+	return &enginepb.UndeleteDatasetResponse{}, nil
+}
+
 func (f *fakeCatalogClient) RegisterTable(
 	ctx context.Context,
 	in *enginepb.RegisterTableRequest,

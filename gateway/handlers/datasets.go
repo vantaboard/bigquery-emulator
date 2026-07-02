@@ -323,9 +323,28 @@ func DatasetDelete(deps Dependencies) http.HandlerFunc {
 //	POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete
 //
 // Reached via DatasetCustomMethodPOST after parsing the trailing :op.
-// The engine has no undelete RPC yet; remain a 501 stub.
-func DatasetUndelete(_ Dependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { NotImplemented(w, r) }
+func DatasetUndelete(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		projectID, datasetID := datasetIDFromPath(r)
+		if deps.Catalog == nil {
+			NotImplemented(w, r)
+			return
+		}
+		_, err := deps.Catalog.UndeleteDataset(r.Context(), &enginepb.UndeleteDatasetRequest{
+			Dataset: &enginepb.DatasetRef{
+				ProjectId: projectID,
+				DatasetId: datasetID,
+			},
+		})
+		if grpcToHTTPError(w, err) {
+			return
+		}
+		ds, ok := deps.Metadata.GetDataset(projectID, datasetID)
+		if !ok {
+			ds = bqtypes.Dataset{Location: "US"}
+		}
+		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
+	}
 }
 
 // DatasetCustomMethodPOST dispatches the AIP-136 custom-method POST

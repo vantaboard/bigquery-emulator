@@ -20,6 +20,7 @@ import (
 type fakeCatalogClient struct {
 	registerDatasetFn func(context.Context, *enginepb.RegisterDatasetRequest) (*enginepb.RegisterDatasetResponse, error)
 	dropDatasetFn     func(context.Context, *enginepb.DropDatasetRequest) (*enginepb.DropDatasetResponse, error)
+	undeleteDatasetFn func(context.Context, *enginepb.UndeleteDatasetRequest) (*enginepb.UndeleteDatasetResponse, error)
 	listDatasetsFn    func(context.Context, *enginepb.ListDatasetsRequest) (*enginepb.ListDatasetsResponse, error)
 	registerTableFn   func(context.Context, *enginepb.RegisterTableRequest) (*enginepb.RegisterTableResponse, error)
 	dropTableFn       func(context.Context, *enginepb.DropTableRequest) (*enginepb.DropTableResponse, error)
@@ -38,6 +39,7 @@ type fakeCatalogClient struct {
 	// to set a callback on every test.
 	lastRegisterDataset *enginepb.RegisterDatasetRequest
 	lastDropDataset     *enginepb.DropDatasetRequest
+	lastUndeleteDataset *enginepb.UndeleteDatasetRequest
 	lastListDatasets    *enginepb.ListDatasetsRequest
 	lastRegisterTable   *enginepb.RegisterTableRequest
 	registeredTableIDs  []string
@@ -88,6 +90,22 @@ func (f *fakeCatalogClient) DropDataset(
 	}
 	f.registeredDatasets = out
 	return &enginepb.DropDatasetResponse{}, nil
+}
+
+func (f *fakeCatalogClient) UndeleteDataset(
+	ctx context.Context,
+	in *enginepb.UndeleteDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UndeleteDatasetResponse, error) {
+	f.lastUndeleteDataset = in
+	if f.undeleteDatasetFn != nil {
+		return f.undeleteDatasetFn(ctx, in)
+	}
+	ref := in.GetDataset()
+	if ref != nil {
+		f.registeredDatasets = append(f.registeredDatasets, ref)
+	}
+	return &enginepb.UndeleteDatasetResponse{}, nil
 }
 
 func (f *fakeCatalogClient) RegisterTable(

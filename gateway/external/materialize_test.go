@@ -43,6 +43,14 @@ func (f *materializeFakeCatalog) DropDataset(
 	return &enginepb.DropDatasetResponse{}, nil
 }
 
+func (f *materializeFakeCatalog) UndeleteDataset(
+	_ context.Context,
+	_ *enginepb.UndeleteDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UndeleteDatasetResponse, error) {
+	return &enginepb.UndeleteDatasetResponse{}, nil
+}
+
 func (f *materializeFakeCatalog) RegisterTable(
 	_ context.Context,
 	in *enginepb.RegisterTableRequest,

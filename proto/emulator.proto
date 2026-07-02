@@ -34,6 +34,7 @@ option cc_enable_arenas = true;
 service Catalog {
   rpc RegisterDataset(RegisterDatasetRequest) returns (RegisterDatasetResponse);
   rpc DropDataset(DropDatasetRequest) returns (DropDatasetResponse);
+  rpc UndeleteDataset(UndeleteDatasetRequest) returns (UndeleteDatasetResponse);
   // Lists every dataset registered under `project_id`. The gateway's
   // `datasets.list` REST handler delegates here; the response is
   // shaped as a single page (no continuation cursor today, the
@@ -115,6 +116,11 @@ message DropDatasetRequest {
   bool delete_contents = 2;
 }
 message DropDatasetResponse {}
+
+message UndeleteDatasetRequest {
+  DatasetRef dataset = 1;
+}
+message UndeleteDatasetResponse {}
 
 message ListDatasetsRequest {
   string project_id = 1;

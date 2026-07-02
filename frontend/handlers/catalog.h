@@ -43,6 +43,11 @@ class CatalogService final : public v1::Catalog::Service {
                              const v1::DropDatasetRequest* request,
                              v1::DropDatasetResponse* response) override;
 
+  ::grpc::Status UndeleteDataset(
+      ::grpc::ServerContext* context,
+      const v1::UndeleteDatasetRequest* request,
+      v1::UndeleteDatasetResponse* response) override;
+
   ::grpc::Status ListDatasets(::grpc::ServerContext* context,
                               const v1::ListDatasetsRequest* request,
                               v1::ListDatasetsResponse* response) override;

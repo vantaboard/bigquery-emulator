@@ -27,12 +27,7 @@ namespace frontend {
 
 namespace {
 
-// Translates an `absl::Status` from the storage layer into the closest
-// matching gRPC status the gateway / external clients can route on.
-// Mirrors the table in `catalog.h`: only the four storage codes we
-// actually surface today get a structured mapping; everything else
-// degrades to INTERNAL so a misbehaving backend cannot be mistaken for
-// a NOT_FOUND on the wire.
+// Maps storage `absl::Status` codes to gRPC for the gateway wire.
 ::grpc::Status AbslToGrpcStatus(const absl::Status& status) {
   if (status.ok()) return ::grpc::Status::OK;
   ::grpc::StatusCode code = ::grpc::StatusCode::INTERNAL;
@@ -222,6 +217,22 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
   const auto id = DatasetIdFromProto(request->dataset());
   return AbslToGrpcStatus(
       storage_->DropDataset(id, request->delete_contents()));
+}
+
+::grpc::Status CatalogService::UndeleteDataset(
+    ::grpc::ServerContext* /*context*/,
+    const v1::UndeleteDatasetRequest* request,
+    v1::UndeleteDatasetResponse* /*response*/) {
+  if (storage_ == nullptr) {
+    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
+                          "CatalogService: storage backend is not configured");
+  }
+  if (auto v = ValidateDatasetRef(request->dataset(), "UndeleteDataset");
+      !v.ok()) {
+    return v;
+  }
+  return AbslToGrpcStatus(
+      storage_->RestoreDataset(DatasetIdFromProto(request->dataset())));
 }
 
 ::grpc::Status CatalogService::ListDatasets(

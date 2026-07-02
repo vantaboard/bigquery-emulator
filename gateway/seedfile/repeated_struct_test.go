@@ -32,6 +32,14 @@ func (c *insertRowsCaptureClient) DropDataset(
 	return &enginepb.DropDatasetResponse{}, nil
 }
 
+func (c *insertRowsCaptureClient) UndeleteDataset(
+	_ context.Context,
+	_ *enginepb.UndeleteDatasetRequest,
+	_ ...grpc.CallOption,
+) (*enginepb.UndeleteDatasetResponse, error) {
+	return &enginepb.UndeleteDatasetResponse{}, nil
+}
+
 func (c *insertRowsCaptureClient) ListDatasets(
 	_ context.Context,
 	_ *enginepb.ListDatasetsRequest,
