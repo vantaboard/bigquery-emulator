@@ -7235,7 +7235,7 @@ func multisetsEqual(a, b map[string]int) bool <span class="cov4" title="3">{
         if len(a) != len(b) </span><span class="cov1" title="1">{
                 return false
         }</span>
-        <span class="cov3" title="2">for k, v := range a </span><span class="cov5" title="4">{
+        <span class="cov3" title="2">for k, v := range a </span><span class="cov4" title="3">{
                 if b[k] != v </span><span class="cov1" title="1">{
                         return false
                 }</span>
@@ -43627,7 +43627,7 @@ func PublicDataRefsFullySeeded(text string) bool <span class="cov5" title="10">{
         for _, t := range SeededPublicTables </span><span class="cov10" title="70">{
                 seeded[t] = struct{}{}
         }</span>
-        <span class="cov5" title="10">for ref := range refs </span><span class="cov5" title="10">{
+        <span class="cov5" title="10">for ref := range refs </span><span class="cov6" title="11">{
                 if _, ok := seeded[ref]; !ok </span><span class="cov2" title="2">{
                         return false
                 }</span>
