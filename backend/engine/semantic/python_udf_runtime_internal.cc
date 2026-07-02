@@ -212,8 +212,8 @@ std::string PackagePreflightCacheKey(absl::string_view python_path,
   return absl::StrCat(python_path, "\0", absl::StrJoin(packages, "\0"));
 }
 
-absl::Status DoPreflightPythonPackages(absl::string_view python_path,
-                                     const std::vector<std::string>& packages) {
+absl::Status DoPreflightPythonPackages(
+    absl::string_view python_path, const std::vector<std::string>& packages) {
   if (packages.empty()) {
     return absl::OkStatus();
   }
@@ -266,12 +266,10 @@ absl::Status DoPreflightPythonPackages(absl::string_view python_path,
   return MissingPythonPackageError(entry.missing_package);
 }
 
-
 }  // namespace
 
-absl::Status PreflightPythonPackages(
-    absl::string_view python_path,
-    const std::vector<std::string>& packages) {
+absl::Status PreflightPythonPackages(absl::string_view python_path,
+                                     const std::vector<std::string>& packages) {
   return DoPreflightPythonPackages(python_path, packages);
 }
 

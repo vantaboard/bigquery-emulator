@@ -98,9 +98,8 @@ absl::StatusOr<std::vector<ExternalQueryFixtureColumn>> ParseSchema(
       return absl::InvalidArgumentError(
           "EXTERNAL_QUERY fixture: schema entry requires name and type");
     }
-    out.push_back(
-        ExternalQueryFixtureColumn{std::string(name->GetString()),
-                                   std::string(type->GetString())});
+    out.push_back(ExternalQueryFixtureColumn{std::string(name->GetString()),
+                                             std::string(type->GetString())});
   }
   return out;
 }
@@ -113,9 +112,11 @@ absl::StatusOr<ExternalQueryFixtureResult> ParseResultFile(
   }
   absl::StatusOr<JSONValue> doc = JSONValue::ParseJSONString(*raw);
   if (!doc.ok()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "EXTERNAL_QUERY fixture: invalid JSON in ", path.string(), ": ",
-        doc.status().message()));
+    return absl::InvalidArgumentError(
+        absl::StrCat("EXTERNAL_QUERY fixture: invalid JSON in ",
+                     path.string(),
+                     ": ",
+                     doc.status().message()));
   }
   JSONValueConstRef root = doc->GetConstRef();
   if (!root.IsObject()) {
@@ -188,9 +189,12 @@ absl::StatusOr<fs::path> ResolveResultPath(const fs::path& conn_dir,
   if (fs::exists(json_alt)) {
     return json_alt;
   }
-  return absl::NotFoundError(absl::StrCat(
-      "EXTERNAL_QUERY fixture result file not found: ", candidate.string(),
-      " (add snapshot under ", conn_dir.string(), ")"));
+  return absl::NotFoundError(
+      absl::StrCat("EXTERNAL_QUERY fixture result file not found: ",
+                   candidate.string(),
+                   " (add snapshot under ",
+                   conn_dir.string(),
+                   ")"));
 }
 
 absl::StatusOr<fs::path> FindManifest(const fs::path& conn_dir) {
@@ -202,9 +206,10 @@ absl::StatusOr<fs::path> FindManifest(const fs::path& conn_dir) {
   if (fs::exists(yaml_manifest)) {
     return yaml_manifest;
   }
-  return absl::NotFoundError(absl::StrCat(
-      "EXTERNAL_QUERY fixture manifest not found under ", conn_dir.string(),
-      " (expected queries.json or queries.yaml)"));
+  return absl::NotFoundError(
+      absl::StrCat("EXTERNAL_QUERY fixture manifest not found under ",
+                   conn_dir.string(),
+                   " (expected queries.json or queries.yaml)"));
 }
 
 absl::StatusOr<std::string> LookupResultFile(JSONValueConstRef manifest_root,
@@ -223,13 +228,13 @@ absl::StatusOr<std::string> LookupResultFile(JSONValueConstRef manifest_root,
     if (!result.has_value() || !result->IsString()) {
       continue;
     }
-    if (auto q = entry.GetMemberIfExists("query"); q.has_value() &&
-                 q->IsString() && q->GetString() == normalized_query) {
+    if (auto q = entry.GetMemberIfExists("query");
+        q.has_value() && q->IsString() && q->GetString() == normalized_query) {
       return std::string(result->GetString());
     }
-    if (auto alias = entry.GetMemberIfExists("alias"); alias.has_value() &&
-                     alias->IsString() &&
-                     alias->GetString() == normalized_query) {
+    if (auto alias = entry.GetMemberIfExists("alias");
+        alias.has_value() && alias->IsString() &&
+        alias->GetString() == normalized_query) {
       return std::string(result->GetString());
     }
   }
@@ -275,20 +280,24 @@ absl::StatusOr<std::string> LookupResultFileFromYamlManifest(
       } else if (absl::StartsWith(rest, "alias:")) {
         pending_alias = std::string(absl::StripAsciiWhitespace(rest.substr(6)));
       } else if (absl::StartsWith(rest, "result:")) {
-        current_result = std::string(absl::StripAsciiWhitespace(rest.substr(7)));
+        current_result =
+            std::string(absl::StripAsciiWhitespace(rest.substr(7)));
       }
       continue;
     }
     if (absl::StartsWith(trimmed, "query:")) {
-      pending_query = std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
+      pending_query =
+          std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
       if (!pending_query.empty() && pending_query.front() == '"' &&
           pending_query.back() == '"') {
         pending_query = pending_query.substr(1, pending_query.size() - 2);
       }
     } else if (absl::StartsWith(trimmed, "alias:")) {
-      pending_alias = std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
+      pending_alias =
+          std::string(absl::StripAsciiWhitespace(trimmed.substr(6)));
     } else if (absl::StartsWith(trimmed, "result:")) {
-      current_result = std::string(absl::StripAsciiWhitespace(trimmed.substr(7)));
+      current_result =
+          std::string(absl::StripAsciiWhitespace(trimmed.substr(7)));
       if (pending_query == std::string(query_sql) ||
           pending_alias == std::string(query_sql)) {
         if (current_result.empty()) {
@@ -305,7 +314,8 @@ absl::StatusOr<std::string> LookupResultFileFromYamlManifest(
 }  // namespace
 
 absl::StatusOr<ExternalQueryFixtureResult> LoadExternalQueryFixture(
-    absl::string_view connection_arg, absl::string_view query_sql,
+    absl::string_view connection_arg,
+    absl::string_view query_sql,
     ::googlesql::TypeFactory* type_factory) {
   const std::string data_dir = EmulatorDataDir();
   if (data_dir.empty()) {
@@ -316,10 +326,12 @@ absl::StatusOr<ExternalQueryFixtureResult> LoadExternalQueryFixture(
   const fs::path conn_dir =
       fs::path(data_dir) / "external" / "connections" / conn_id;
   if (!fs::exists(conn_dir)) {
-    return absl::NotFoundError(absl::StrCat(
-        "EXTERNAL_QUERY connection fixture directory not found: ",
-        conn_dir.string(),
-        " (create $data_dir/external/connections/", conn_id, "/)"));
+    return absl::NotFoundError(
+        absl::StrCat("EXTERNAL_QUERY connection fixture directory not found: ",
+                     conn_dir.string(),
+                     " (create $data_dir/external/connections/",
+                     conn_id,
+                     "/)"));
   }
 
   absl::StatusOr<fs::path> manifest_path = FindManifest(conn_dir);
@@ -342,10 +354,9 @@ absl::StatusOr<ExternalQueryFixtureResult> LoadExternalQueryFixture(
     result_file = LookupResultFileFromYamlManifest(*manifest_path, query_sql);
   }
   if (!result_file.ok()) {
-    return absl::NotFoundError(absl::StrCat(
-        result_file.status().message(),
-        " — add an entry to ",
-        manifest_path->string()));
+    return absl::NotFoundError(absl::StrCat(result_file.status().message(),
+                                            " — add an entry to ",
+                                            manifest_path->string()));
   }
 
   absl::StatusOr<fs::path> result_path =

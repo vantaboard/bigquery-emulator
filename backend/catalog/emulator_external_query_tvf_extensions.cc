@@ -37,7 +37,8 @@ using ::googlesql::TVFSignature;
 using ::googlesql::TypeFactory;
 using ::googlesql::Value;
 
-std::vector<std::unique_ptr<const TableValuedFunction>>* EmulatorExternalQueryTvfs() {
+std::vector<std::unique_ptr<const TableValuedFunction>>*
+EmulatorExternalQueryTvfs() {
   static auto* tvfs =
       new std::vector<std::unique_ptr<const TableValuedFunction>>();
   return tvfs;
@@ -95,8 +96,8 @@ absl::StatusOr<const ::googlesql::Type*> TypeForSchemaColumn(
 absl::StatusOr<std::string> ExtractStringLiteral(
     const TVFInputArgumentType& arg, absl::string_view label) {
   if (!arg.is_scalar()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("EXTERNAL_QUERY requires a constant ", label, " argument"));
+    return absl::InvalidArgumentError(absl::StrCat(
+        "EXTERNAL_QUERY requires a constant ", label, " argument"));
   }
   absl::StatusOr<InputArgumentType> input_type = arg.GetScalarArgType();
   if (!input_type.ok()) {
@@ -105,7 +106,8 @@ absl::StatusOr<std::string> ExtractStringLiteral(
   const Value* lit = input_type->literal_value();
   if (lit == nullptr || lit->type_kind() != ::googlesql::TYPE_STRING) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "EXTERNAL_QUERY requires a constant STRING ", label,
+        "EXTERNAL_QUERY requires a constant STRING ",
+        label,
         " argument (fixture mode does not infer schema without a manifest "
         "entry)"));
   }
@@ -147,7 +149,8 @@ absl::StatusOr<std::shared_ptr<TVFSignature>> ExternalQuerySchema(
 }
 
 TVFComputeResultTypeCallback MakeComputeCallback() {
-  return [](Catalog* catalog, TypeFactory* type_factory,
+  return [](Catalog* catalog,
+            TypeFactory* type_factory,
             const FunctionSignature& signature,
             const std::vector<TVFInputArgumentType>& args,
             const AnalyzerOptions& options)
@@ -169,12 +172,13 @@ void EnsureEmulatorExternalQueryTvfsCreated() {
     options.set_compute_result_type_callback(MakeComputeCallback());
     const FunctionArgumentType string_arg =
         FunctionArgumentType(ExternalQueryTypeFactory()->get_string());
-    EmulatorExternalQueryTvfs()->push_back(std::make_unique<TableValuedFunction>(
-        std::vector<std::string>{"EXTERNAL_QUERY"},
-        ::googlesql::Function::kGoogleSQLFunctionGroupName,
-        std::vector<FunctionSignature>{FunctionSignature(
-            relation_result, {string_arg, string_arg}, context_id)},
-        std::move(options)));
+    EmulatorExternalQueryTvfs()->push_back(
+        std::make_unique<TableValuedFunction>(
+            std::vector<std::string>{"EXTERNAL_QUERY"},
+            ::googlesql::Function::kGoogleSQLFunctionGroupName,
+            std::vector<FunctionSignature>{FunctionSignature(
+                relation_result, {string_arg, string_arg}, context_id)},
+            std::move(options)));
   });
 }
 

@@ -29,7 +29,8 @@ struct ExternalQueryFixtureResult {
 // Resolve fixture rows for EXTERNAL_QUERY(connection, query). Reads
 // $BIGQUERY_EMULATOR_DATA_DIR/external/connections/<conn_id>/.
 absl::StatusOr<ExternalQueryFixtureResult> LoadExternalQueryFixture(
-    absl::string_view connection_arg, absl::string_view query_sql,
+    absl::string_view connection_arg,
+    absl::string_view query_sql,
     ::googlesql::TypeFactory* type_factory);
 
 }  // namespace semantic

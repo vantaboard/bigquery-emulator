@@ -1,5 +1,3 @@
-#include "backend/catalog/python_udf_registry_internal.h"
-
 #include <regex>
 #include <string>
 #include <vector>
@@ -11,6 +9,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "backend/catalog/python_udf_registry_internal.h"
 #include "googlesql/public/type.pb.h"
 
 namespace bigquery_emulator {

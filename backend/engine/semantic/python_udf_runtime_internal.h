@@ -16,9 +16,8 @@ namespace backend {
 namespace engine {
 namespace semantic {
 
-absl::Status PreflightPythonPackages(
-    absl::string_view python_path,
-    const std::vector<std::string>& packages);
+absl::Status PreflightPythonPackages(absl::string_view python_path,
+                                     const std::vector<std::string>& packages);
 
 absl::StatusOr<std::string> BuildPythonUdfRequestJson(
     absl::string_view fn_name,

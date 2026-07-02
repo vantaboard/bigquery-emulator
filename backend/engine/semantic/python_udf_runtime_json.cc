@@ -245,7 +245,6 @@ absl::StatusOr<Value> PopPythonValueToGooglesql(
   }
 }
 
-
 }  // namespace semantic
 }  // namespace engine
 }  // namespace backend

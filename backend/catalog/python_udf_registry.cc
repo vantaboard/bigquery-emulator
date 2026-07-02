@@ -17,11 +17,11 @@
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "backend/catalog/python_udf_registry_internal.h"
 #include "googlesql/public/function_signature.h"
 #include "googlesql/public/type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
-#include "backend/catalog/python_udf_registry_internal.h"
 
 namespace bigquery_emulator {
 namespace backend {
