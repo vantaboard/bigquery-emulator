@@ -68,9 +68,9 @@ or a full resource name; only the final segment selects the fixture directory.
 
 ## Missing fixtures
 
-When no manifest or query entry exists, analysis/execution returns `NOT_FOUND`
-with a message naming `$data_dir/external/connections/<id>/` so operators know
-where to add snapshots.
+When no manifest or query entry exists, analysis returns HTTP **400**
+(`invalidQuery`) with a message naming `$data_dir/external/connections/<id>/`
+so operators know where to add snapshots.
 
 ## Connection API
 

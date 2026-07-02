@@ -1,4 +1,4 @@
-# external_query_missing_fixture: missing manifest entry surfaces NOT_FOUND.
+# external_query_missing_fixture: missing manifest entry surfaces invalidQuery (400).
 name: external_query_missing_fixture
 description: |
   EXTERNAL_QUERY against a connection with no manifest entry returns an
