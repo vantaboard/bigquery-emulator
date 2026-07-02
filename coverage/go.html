@@ -48066,7 +48066,7 @@ func summarizeByFile(findings []tidyFinding, failedFiles map[string]struct{}) []
         for _, s := range byFile </span><span class="cov7" title="5">{
                 out = append(out, *s)
         }</span>
-        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov6" title="4">{ return out[i].File &lt; out[j].File }</span>)
+        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov5" title="3">{ return out[i].File &lt; out[j].File }</span>)
         <span class="cov3" title="2">return out</span>
 }
 
