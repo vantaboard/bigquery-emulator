@@ -312,6 +312,11 @@ func TestTimestampStringToMicrosVariants(t *testing.T) {
 			input: "2025-12-01 10:49:40+00:00",
 			want:  "1764586180000000",
 		},
+		{
+			name:  "epoch_micros_digits",
+			input: "421326000000000",
+			want:  "421326000000000",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

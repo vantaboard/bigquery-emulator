@@ -1,6 +1,7 @@
 package bqtypes
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -186,6 +187,14 @@ func arrayElementFieldSchema(field *enginepb.FieldSchema) *enginepb.FieldSchema 
 // returns the BigQuery REST query-result encoding: decimal microseconds
 // since 1970-01-01 UTC.
 func TimestampStringToMicros(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", errors.New("empty timestamp")
+	}
+	// Storage Read and some engine paths already emit epoch micros as decimal digits.
+	if isDecimalIntString(s) {
+		return s, nil
+	}
 	t, err := parseTimestampWireString(s)
 	if err != nil {
 		return "", err
@@ -215,4 +224,16 @@ func parseTimestampWireString(s string) (time.Time, error) {
 		lastErr = err
 	}
 	return time.Time{}, lastErr
+}
+
+func isDecimalIntString(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
