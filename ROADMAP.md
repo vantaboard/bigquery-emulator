@@ -637,7 +637,10 @@ public-facing policy.
   and evaluate at call time on the semantic executor via a sandboxed
   `python3` subprocess (`python_udf_runtime.cc`; pinned by
   `conformance/fixtures/udf/python_scalar_add.yaml`). See
-  [Python UDFs](#python-udfs). Non-scalar JS / Python UDFs remain unsupported.
+  [Python UDFs](#python-udfs). Non-scalar JS UDFs remain unsupported;
+  non-scalar Python UDF shapes are sharpened rejects (bq dry-run rejects
+  `CREATE AGGREGATE FUNCTION ... LANGUAGE python` and
+  `CREATE TABLE FUNCTION ... LANGUAGE python`).
 - ✅ Job stats: `numDmlAffectedRows` populated for DML shapes the
   local DML executor lands (INSERT, UPDATE, DELETE, TRUNCATE, all MERGE
   shapes, `THEN RETURN`). The
@@ -974,7 +977,10 @@ from bqutils `known_failing/` to `passing/`.
   (sandboxed `python3` subprocess; `BIGQUERY_EMULATOR_PYTHON` override)
 - ✅ Scalar Python UDF conformance pinned by
   `conformance/fixtures/udf/python_scalar_add.yaml`
-- ⏳ Table-valued / aggregate Python UDF shapes remain unsupported
+- ✅ Non-scalar Python UDF shapes sharpened to match production BigQuery
+  (bq dry-run rejects aggregate + table-valued `LANGUAGE python` forms;
+  pinned by `conformance/fixtures/udf/python_udaf_rejected.yaml` and
+  `python_tvf_rejected.yaml`)
 - ⏳ Arbitrary `packages` pip installs remain unsupported (pre-installed
   stdlib + `lxml` when present on the host interpreter)
 

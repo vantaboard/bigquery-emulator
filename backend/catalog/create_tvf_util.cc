@@ -5,6 +5,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/match.h"
 #include "googlesql/public/sql_tvf.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -15,6 +16,9 @@ namespace catalog {
 absl::StatusOr<std::unique_ptr<const ::googlesql::TableValuedFunction>>
 MakeTvfFromCreateTableFunction(
     const ::googlesql::ResolvedCreateTableFunctionStmt& create_tvf_stmt) {
+  if (absl::EqualsIgnoreCase(create_tvf_stmt.language(), "python")) {
+    return absl::InvalidArgumentError("Language \"python\" is unsupported");
+  }
   std::unique_ptr<::googlesql::SQLTableValuedFunction> tvf;
   absl::Status created =
       ::googlesql::SQLTableValuedFunction::Create(&create_tvf_stmt, &tvf);

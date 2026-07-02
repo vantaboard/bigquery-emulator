@@ -4,16 +4,16 @@ overview: Extend the landed scalar Python UDF runtime to aggregate (UDAF) and ta
 todos:
   - id: verify-bq-surface
     content: Verify with bq dry-run exactly which non-scalar LANGUAGE python forms production BigQuery accepts (aggregate? TVF?) before building either
-    status: pending
+    status: completed
   - id: python-udaf
     content: Register + evaluate aggregate Python UDFs (batch rows to the subprocess, one result per group) if the surface is real
-    status: pending
+    status: cancelled
   - id: python-tvf
     content: Register + evaluate table-valued Python UDFs (rows-out protocol) if the surface is real
-    status: pending
+    status: cancelled
   - id: fixtures-docs
     content: Conformance fixtures + ENGINE_POLICY / ROADMAP row updates (or sharpened rejects if bq rejects the forms)
-    status: pending
+    status: completed
 isProject: false
 ---
 

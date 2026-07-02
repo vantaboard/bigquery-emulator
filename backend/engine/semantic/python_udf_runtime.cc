@@ -396,7 +396,7 @@ absl::StatusOr<Value> EvalPythonUdfCall(
   if (definition.is_aggregate) {
     return MakeSemanticError(
         SemanticErrorReason::kNotImplemented,
-        "Python aggregate UDF call-time evaluation is not implemented");
+        "CREATE AGGREGATE FUNCTION with language python is not supported");
   }
   if (definition.arg_names.size() != arg_values.size()) {
     return absl::InvalidArgumentError(

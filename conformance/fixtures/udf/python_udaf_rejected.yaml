@@ -1,0 +1,25 @@
+# Non-scalar Python UDF: CREATE AGGREGATE FUNCTION ... LANGUAGE python is rejected.
+#
+# bq dry-run (project bigquery-emulator, dataset testing, 2026-07-01):
+#   Error in query string: CREATE AGGREGATE FUNCTION with language python is not
+#   supported
+name: udf_python_udaf_rejected
+description: |
+  Pins analyzer-time rejection for CREATE AGGREGATE FUNCTION ... LANGUAGE python.
+  Production BigQuery rejects this form; the emulator surfaces the same envelope.
+project_id: proj-udf-python-udaf-rejected
+query: |-
+  CREATE AGGREGATE FUNCTION weighted_avg(x FLOAT64, w FLOAT64)
+  RETURNS FLOAT64
+  LANGUAGE python
+  OPTIONS (entry_point='weighted_avg')
+  AS R"""
+  def weighted_avg(x, w):
+    return sum(x * w) / sum(w)
+  """;
+expected:
+  route: control_op
+  route_strict: false
+  error:
+    code: 400
+    message_contains: CREATE AGGREGATE FUNCTION with language python is not supported

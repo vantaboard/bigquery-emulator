@@ -157,7 +157,7 @@ absl::StatusOr<PythonUdfDefinition> BuildDefinitionFromCreateFunction(
   }
   if (create_function_stmt.is_aggregate()) {
     return absl::InvalidArgumentError(
-        "python_udf_registry: Python aggregate UDFs are not supported");
+        "CREATE AGGREGATE FUNCTION with language python is not supported");
   }
   PythonUdfDefinition def;
   def.python_body = create_function_stmt.code();
@@ -357,6 +357,10 @@ std::vector<std::string> ParsePackagesFromDdl(absl::string_view ddl) {
 absl::StatusOr<PythonUdfDefinition> ParsePythonUdfFromDdlImpl(
     absl::string_view ddl, absl::string_view fn_name) {
   const std::string upper = absl::AsciiStrToUpper(ddl);
+  if (upper.find("CREATE AGGREGATE FUNCTION") != std::string::npos) {
+    return absl::InvalidArgumentError(
+        "CREATE AGGREGATE FUNCTION with language python is not supported");
+  }
   const size_t lang_pos = upper.find("LANGUAGE PYTHON");
   if (lang_pos == std::string::npos) {
     return absl::InvalidArgumentError(

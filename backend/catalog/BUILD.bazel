@@ -164,6 +164,7 @@ cc_library(
     deps = [
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/resolved_ast",
     ] + GOOGLESQL_SQL_TVF_DEPS,
@@ -321,6 +322,15 @@ cc_library(
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/public:simple_catalog",
         "@googlesql//googlesql/public:type",
+    ],
+)
+
+cc_test(
+    name = "python_udf_registry_test",
+    srcs = ["python_udf_registry_test.cc"],
+    deps = [
+        ":python_udf_registry",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

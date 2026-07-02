@@ -1,0 +1,24 @@
+# Non-scalar Python UDF: CREATE TABLE FUNCTION ... LANGUAGE python is rejected.
+#
+# bq dry-run (project bigquery-emulator, dataset testing, 2026-07-01):
+#   Error in query string: Language "python" is unsupported
+name: udf_python_tvf_rejected
+description: |
+  Pins analyzer-time rejection for CREATE TABLE FUNCTION ... LANGUAGE python.
+  Production BigQuery rejects this form; the emulator surfaces the same envelope.
+project_id: proj-udf-python-tvf-rejected
+query: |-
+  CREATE TABLE FUNCTION generate_rows(n INT64)
+  RETURNS TABLE<row_num INT64, label STRING>
+  LANGUAGE python
+  AS R"""
+  def generate_rows(n):
+    for i in range(n):
+      yield (i, f'row_{i}')
+  """;
+expected:
+  route: control_op
+  route_strict: false
+  error:
+    code: 400
+    message_contains: Language "python" is unsupported
