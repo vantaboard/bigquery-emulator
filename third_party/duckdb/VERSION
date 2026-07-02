@@ -5,7 +5,7 @@ Version:        v1.5.3
 Released:       2026-05-20
 Strategy:       prebuilt libduckdb tarball (Bazel http_archive)
 Source URL:     https://github.com/duckdb/duckdb/releases/tag/v1.5.3
-Architectures:  linux/amd64 (only registered architecture today)
+Architectures:  linux/amd64, linux/arm64 (both registered in MODULE.bazel)
 
 Tarball SHA-256
 ---------------

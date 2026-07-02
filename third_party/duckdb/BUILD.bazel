@@ -7,13 +7,10 @@
 # arch-agnostic target instead of reaching into `@duckdb_linux_amd64`
 # directly.
 #
-# `select()` keeps the door open for arm64: when the linux/arm64
-# Bazel build of `emulator_main` lands, register a second
-# `@duckdb_linux_arm64` http_archive in `MODULE.bazel` and add a
-# matching `@platforms//cpu:aarch64` arm to the select below. Today
-# the only supported configuration is linux/amd64; the
-# `//conditions:default` arm fails the build with a clear message
-# rather than silently linking the wrong arch.
+# `select()` on `@platforms//cpu` picks the prebuilt `libduckdb.so` for
+# the target CPU. The engine binary still only ships for linux/amd64
+# today (GoogleSQL toolchain); arm64 DuckDB is wired for the in-flight
+# native arm64 engine lane.
 #
 # The prebuilt v1.5.3 tarball pin lives in
 # `third_party/duckdb/VERSION`.
@@ -26,15 +23,17 @@ cc_library(
     name = "duckdb",
     deps = select({
         "@platforms//cpu:x86_64": ["@duckdb_linux_amd64//:duckdb"],
+        "@platforms//cpu:aarch64": ["@duckdb_linux_arm64//:duckdb"],
         "//conditions:default": [":_unsupported_arch"],
     }),
 )
 
-# Sentinel that fails the build with a clear message on any architecture
-# we have not registered a prebuilt for. The `cc_binary` for
-# `emulator_main` is intentionally scoped to linux/amd64 in this
-# revision.
+# Sentinel that fails the build with a clear message on any CPU we have
+# not registered a prebuilt DuckDB zip for.
 cc_library(
     name = "_unsupported_arch",
-    target_compatible_with = ["@platforms//cpu:x86_64"],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//cpu:aarch64",
+    ],
 )

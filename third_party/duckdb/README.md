@@ -7,11 +7,11 @@ the upstream `libduckdb-linux-amd64.zip` archive lives in
 `@duckdb_linux_amd64`) plus the two BUILD files in this directory:
 
 - [`BUILD.bazel`](./BUILD.bazel) exposes the public
-  `//third_party/duckdb:duckdb` target with an architecture
-  `select()` so non-amd64 builds fail with a clear message.
-- [`duckdb.BUILD.bazel`](./duckdb.BUILD.bazel) is injected into the
+  `//third_party/duckdb:duckdb` target with a `@platforms//cpu` `select()`
+  across the amd64 and arm64 prebuilt zips.
+- [`duckdb.BUILD.bazel`](./duckdb.BUILD.bazel) is injected into each
   extracted tarball as its top-level BUILD file and exposes
-  `@duckdb_linux_amd64//:duckdb` (an `hdrs` + `cc_import(libduckdb.so)`
+  `@duckdb_linux_{amd64,arm64}//:duckdb` (an `hdrs` + `cc_import(libduckdb.so)`
   pair).
 
 DuckDB powers two parts of the engine:

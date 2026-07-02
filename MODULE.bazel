@@ -153,12 +153,9 @@ single_version_override(
 # C++ tree on every clean build. The pin/SHA-256 lives in
 # `third_party/duckdb/VERSION`.
 #
-# Today we register only the linux/amd64 artifact: the GoogleSQL
-# hermetic LLVM toolchain only cross-builds cleanly to amd64, so no
-# engine binary ships for arm64. When the arm64 Bazel build lands,
-# copy this block, swap in the arm64 zip URL + SHA-256, and
-# `select()` between the two in
-# `//binaries/emulator_main:emulator_main`'s `deps` list.
+# Per-arch prebuilt zips; `//third_party/duckdb:duckdb` selects between
+# them via `@platforms//cpu`. The engine still only ships for linux/amd64
+# today (GoogleSQL toolchain — see docs/dev/googlesql-prebuilt/arm64-feasibility.md).
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
@@ -170,6 +167,16 @@ http_archive(
     urls = [
         "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-amd64.zip",
         "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-amd64.zip",
+    ],
+)
+
+http_archive(
+    name = "duckdb_linux_arm64",
+    build_file = "//third_party/duckdb:duckdb.BUILD.bazel",
+    sha256 = "162806d591c0431d031d9bdf43dbecc5f00755da01a2064df68f9a69a6f50a10",
+    urls = [
+        "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-arm64.zip",
+        "https://github.com/duckdb/duckdb/releases/download/v1.5.3/libduckdb-linux-arm64.zip",
     ],
 )
 
