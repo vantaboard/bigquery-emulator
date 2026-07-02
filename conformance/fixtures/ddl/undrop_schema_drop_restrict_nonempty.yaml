@@ -1,0 +1,17 @@
+# undrop_schema_drop_restrict_nonempty: DROP SCHEMA RESTRICT on non-empty ds.
+name: ddl_undrop_schema_drop_restrict_nonempty
+description: |
+  DROP SCHEMA without CASCADE on a dataset that still has tables returns
+  HTTP 400 (dataset is not empty).
+project_id: proj-undrop-restrict
+dataset_id: ds_restrict
+setup:
+  - dataset: ds_restrict
+  - sql: CREATE TABLE ds_restrict.items (id INT64)
+query: DROP SCHEMA ds_restrict
+expected:
+  route: control_op
+  route_strict: false
+  error:
+    code: 400
+    message_contains: "not empty"

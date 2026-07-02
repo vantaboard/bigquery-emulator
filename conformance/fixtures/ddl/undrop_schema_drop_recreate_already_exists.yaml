@@ -1,0 +1,19 @@
+# undrop_schema_drop_recreate_already_exists: undrop after recreate fails.
+name: ddl_undrop_schema_drop_recreate_already_exists
+description: |
+  DROP SCHEMA CASCADE, recreate the same dataset id, then UNDROP SCHEMA
+  returns HTTP 409 (dataset already exists).
+project_id: proj-undrop-recreate
+dataset_id: ds_recreate
+setup:
+  - dataset: ds_recreate
+  - sql: CREATE TABLE ds_recreate.items (id INT64)
+  - sql: DROP SCHEMA ds_recreate CASCADE
+  - dataset: ds_recreate
+query: UNDROP SCHEMA ds_recreate
+expected:
+  route: control_op
+  route_strict: false
+  error:
+    code: 409
+    message_contains: "already exists"

@@ -1,0 +1,19 @@
+# undrop_schema_double_undrop: second UNDROP after restore is already-exists.
+name: ddl_undrop_schema_double_undrop
+description: |
+  DROP SCHEMA CASCADE, UNDROP SCHEMA, then a second UNDROP SCHEMA returns
+  HTTP 409 because the dataset is already live (tombstone was consumed).
+project_id: proj-undrop-double
+dataset_id: ds_double
+setup:
+  - dataset: ds_double
+  - sql: CREATE TABLE ds_double.items (id INT64)
+  - sql: DROP SCHEMA ds_double CASCADE
+  - sql: UNDROP SCHEMA ds_double
+query: UNDROP SCHEMA ds_double
+expected:
+  route: control_op
+  route_strict: false
+  error:
+    code: 409
+    message_contains: "already exists"
