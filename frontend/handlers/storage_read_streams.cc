@@ -22,6 +22,60 @@ using internal::ProjectSchemaForResponse;
 using internal::SchemasEqualByShape;
 using internal::ValueToCellForStorageRead;
 
+namespace {
+
+::grpc::Status StreamRowsToWriter(
+    backend::storage::RowIterator* iter,
+    const backend::schema::TableSchema& row_schema,
+    int batch_size,
+    ::grpc::ServerWriter<v1::ReadRowsResponse>* writer) {
+  v1::ReadRowsResponse page;
+  int64_t in_page = 0;
+  backend::storage::Row row;
+  while (true) {
+    auto has_or = iter->Next(&row);
+    if (!has_or.ok()) {
+      return AbslToGrpcStatus(has_or.status());
+    }
+    if (!*has_or) break;
+    if (row.cells.size() != row_schema.columns.size()) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::INTERNAL,
+          absl::StrCat("StorageRead.ReadRows: row cell count ",
+                       row.cells.size(),
+                       " does not match schema column count ",
+                       row_schema.columns.size()));
+    }
+    auto* proto_row = page.add_rows();
+    for (size_t i = 0; i < row.cells.size(); ++i) {
+      ValueToCellForStorageRead(
+          row.cells[i], row_schema.columns[i].type, proto_row->add_cells());
+    }
+    ++in_page;
+    if (in_page >= batch_size) {
+      page.set_row_count(in_page);
+      if (!writer->Write(page)) {
+        return ::grpc::Status(
+            ::grpc::StatusCode::ABORTED,
+            "StorageRead.ReadRows: client cancelled mid-stream");
+      }
+      page.Clear();
+      in_page = 0;
+    }
+  }
+  if (in_page > 0) {
+    page.set_row_count(in_page);
+    if (!writer->Write(page)) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::ABORTED,
+          "StorageRead.ReadRows: client cancelled mid-stream");
+    }
+  }
+  return ::grpc::Status::OK;
+}
+
+}  // namespace
+
 ::grpc::Status StorageReadService::ReadRows(
     ::grpc::ServerContext* /*context*/,
     const v1::ReadRowsRequest* request,
@@ -110,49 +164,7 @@ using internal::ValueToCellForStorageRead;
     row_schema = ProjectSchemaForResponse(session_schema, selected_fields);
   }
 
-  v1::ReadRowsResponse page;
-  int64_t in_page = 0;
-  backend::storage::Row row;
-  while (true) {
-    auto has_or = iter->Next(&row);
-    if (!has_or.ok()) {
-      return AbslToGrpcStatus(has_or.status());
-    }
-    if (!*has_or) break;
-    if (row.cells.size() != row_schema.columns.size()) {
-      return ::grpc::Status(
-          ::grpc::StatusCode::INTERNAL,
-          absl::StrCat("StorageRead.ReadRows: row cell count ",
-                       row.cells.size(),
-                       " does not match schema column count ",
-                       row_schema.columns.size()));
-    }
-    auto* proto_row = page.add_rows();
-    for (size_t i = 0; i < row.cells.size(); ++i) {
-      ValueToCellForStorageRead(
-          row.cells[i], row_schema.columns[i].type, proto_row->add_cells());
-    }
-    ++in_page;
-    if (in_page >= kReadRowsBatchSize) {
-      page.set_row_count(in_page);
-      if (!writer->Write(page)) {
-        return ::grpc::Status(
-            ::grpc::StatusCode::ABORTED,
-            "StorageRead.ReadRows: client cancelled mid-stream");
-      }
-      page.Clear();
-      in_page = 0;
-    }
-  }
-  if (in_page > 0) {
-    page.set_row_count(in_page);
-    if (!writer->Write(page)) {
-      return ::grpc::Status(
-          ::grpc::StatusCode::ABORTED,
-          "StorageRead.ReadRows: client cancelled mid-stream");
-    }
-  }
-  return ::grpc::Status::OK;
+  return StreamRowsToWriter(iter.get(), row_schema, kReadRowsBatchSize, writer);
 }
 
 ::grpc::Status StorageReadService::SplitReadStream(
