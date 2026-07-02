@@ -57,7 +57,11 @@ func (s *Store) load() error {
 		Connections []*connectionpb.Connection `json:"connections"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return err
+		corruptPath := s.path + ".corrupt"
+		if renameErr := os.Rename(s.path, corruptPath); renameErr != nil {
+			return err
+		}
+		return nil
 	}
 	for _, c := range envelope.Connections {
 		if c == nil || c.Name == "" {

@@ -28,7 +28,7 @@ func RegisterGRPC(srv grpc.ServiceRegistrar, deps handlers.Dependencies) {
 	}
 	st, err := OpenStore(deps.ExternalSources)
 	if err != nil {
-		st = &Store{byName: map[string]*connectionpb.Connection{}}
+		return
 	}
 	connectionpb.RegisterConnectionServiceServer(srv, &Server{store: st, cfg: deps.ExternalSources})
 }

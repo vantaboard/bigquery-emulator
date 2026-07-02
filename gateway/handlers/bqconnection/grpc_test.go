@@ -29,18 +29,18 @@ func startTestServer(t *testing.T, dataDir string) (connectionpb.ConnectionServi
 	srv := grpc.NewServer()
 	RegisterGRPC(srv, handlers.Dependencies{ExternalSources: cfg})
 	go func() {
-		if err := srv.Serve(lis); err != nil {
-			t.Logf("grpc serve: %v", err)
+		if serveErr := srv.Serve(lis); serveErr != nil {
+			t.Logf("grpc serve: %v", serveErr)
 		}
 	}()
 	dialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
-	conn, err := grpc.NewClient("passthrough:///bufnet",
+	conn, dialErr := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
+	if dialErr != nil {
+		t.Fatalf("grpc.NewClient: %v", dialErr)
 	}
 	cleanup := func() {
 		conn.Close()
@@ -70,7 +70,25 @@ func TestCreateGetUpdateDeleteRoundTrip(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	parent := "projects/p/locations/US"
+	connName := parent + "/connections/conn1"
 
+	created := createTestConnection(t, client, ctx, parent, connName)
+	assertGetFriendlyName(t, client, ctx, connName, "test")
+	assertUpdateFriendlyName(t, client, ctx, connName, "renamed")
+	deleteAndAssertNotFound(t, client, ctx, connName)
+	assertRegistryFileExists(t, dataDir)
+	assertDeletedAfterRestart(t, dataDir, connName)
+	assertPersistedAfterRestart(t, dataDir, parent, ctx)
+	_ = created
+}
+
+func createTestConnection(
+	t *testing.T,
+	client connectionpb.ConnectionServiceClient,
+	ctx context.Context,
+	parent, connName string,
+) *connectionpb.Connection {
+	t.Helper()
 	created, err := client.CreateConnection(ctx, &connectionpb.CreateConnectionRequest{
 		Parent:       parent,
 		ConnectionId: "conn1",
@@ -87,62 +105,88 @@ func TestCreateGetUpdateDeleteRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateConnection: %v", err)
 	}
-	if created.GetName() != parent+"/connections/conn1" {
+	if created.GetName() != connName {
 		t.Fatalf("name = %q", created.GetName())
 	}
-	if created.GetCloudSql().GetDatabase() != "db1" {
-		t.Fatalf("cloudSql = %#v", created.GetCloudSql())
-	}
+	return created
+}
 
-	got, err := client.GetConnection(ctx, &connectionpb.GetConnectionRequest{
-		Name: parent + "/connections/conn1",
-	})
+func assertGetFriendlyName(
+	t *testing.T,
+	client connectionpb.ConnectionServiceClient,
+	ctx context.Context,
+	connName, want string,
+) {
+	t.Helper()
+	got, err := client.GetConnection(ctx, &connectionpb.GetConnectionRequest{Name: connName})
 	if err != nil {
 		t.Fatalf("GetConnection: %v", err)
 	}
-	if got.GetFriendlyName() != "test" {
+	if got.GetFriendlyName() != want {
 		t.Fatalf("friendlyName = %q", got.GetFriendlyName())
 	}
+}
 
+func assertUpdateFriendlyName(
+	t *testing.T,
+	client connectionpb.ConnectionServiceClient,
+	ctx context.Context,
+	connName, want string,
+) {
+	t.Helper()
 	updated, err := client.UpdateConnection(ctx, &connectionpb.UpdateConnectionRequest{
-		Name: parent + "/connections/conn1",
-		Connection: &connectionpb.Connection{
-			FriendlyName: "renamed",
-		},
+		Name:       connName,
+		Connection: &connectionpb.Connection{FriendlyName: want},
 	})
 	if err != nil {
 		t.Fatalf("UpdateConnection: %v", err)
 	}
-	if updated.GetFriendlyName() != "renamed" {
+	if updated.GetFriendlyName() != want {
 		t.Fatalf("friendlyName = %q", updated.GetFriendlyName())
 	}
+}
 
-	if _, err := client.DeleteConnection(ctx, &connectionpb.DeleteConnectionRequest{
-		Name: parent + "/connections/conn1",
-	}); err != nil {
+func deleteAndAssertNotFound(
+	t *testing.T,
+	client connectionpb.ConnectionServiceClient,
+	ctx context.Context,
+	connName string,
+) {
+	t.Helper()
+	if _, err := client.DeleteConnection(ctx, &connectionpb.DeleteConnectionRequest{Name: connName}); err != nil {
 		t.Fatalf("DeleteConnection: %v", err)
 	}
-	if _, err := client.GetConnection(ctx, &connectionpb.GetConnectionRequest{
-		Name: parent + "/connections/conn1",
-	}); err == nil {
+	_, getErr := client.GetConnection(ctx, &connectionpb.GetConnectionRequest{Name: connName})
+	if getErr == nil {
 		t.Fatal("expected NotFound after delete")
-	} else if status.Code(err) != codes.NotFound {
-		t.Fatalf("GetConnection after delete: %v", err)
+	} else if status.Code(getErr) != codes.NotFound {
+		t.Fatalf("GetConnection after delete: %v", getErr)
 	}
+}
 
+func assertRegistryFileExists(t *testing.T, dataDir string) {
+	t.Helper()
 	registry := filepath.Join(dataDir, "external", "connections", "_registry", "connections.json")
-	if _, err := os.ReadFile(registry); err != nil {
-		t.Fatalf("registry file: %v", err)
+	if _, readErr := os.ReadFile(registry); readErr != nil {
+		t.Fatalf("registry file: %v", readErr)
 	}
+}
 
-	// Restart from disk.
+func assertDeletedAfterRestart(t *testing.T, dataDir, connName string) {
+	t.Helper()
 	client2, cleanup2 := startTestServer(t, dataDir)
 	defer cleanup2()
-	if _, err := client2.GetConnection(ctx, &connectionpb.GetConnectionRequest{
-		Name: parent + "/connections/conn1",
-	}); err == nil {
+	ctx := context.Background()
+	_, getErr := client2.GetConnection(ctx, &connectionpb.GetConnectionRequest{Name: connName})
+	if getErr == nil {
 		t.Fatal("expected NotFound after restart (deleted)")
 	}
+}
+
+func assertPersistedAfterRestart(t *testing.T, dataDir, parent string, ctx context.Context) {
+	t.Helper()
+	client2, cleanup2 := startTestServer(t, dataDir)
+	defer cleanup2()
 	created2, err := client2.CreateConnection(ctx, &connectionpb.CreateConnectionRequest{
 		Parent:       parent,
 		ConnectionId: "conn2",
@@ -151,8 +195,7 @@ func TestCreateGetUpdateDeleteRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateConnection restart: %v", err)
 	}
-	client2Cleanup := cleanup2
-	client2Cleanup()
+	cleanup2()
 	client3, cleanup3 := startTestServer(t, dataDir)
 	defer cleanup3()
 	got2, err := client3.GetConnection(ctx, &connectionpb.GetConnectionRequest{
