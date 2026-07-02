@@ -328,6 +328,14 @@ jobs:
             VERSION=${{ inputs.ref || github.ref_name }}
             ENGINE_SOURCE=prebuilt
 
+      - name: Restore bazel lockfile drift
+        # The engine-build step above lets Bazel rewrite
+        # MODULE.bazel.lock in place (registry metadata reordering, not
+        # a semantic change). goreleaser hard-fails on a dirty worktree
+        # (https://goreleaser.com/errors/dirty), so restore the
+        # committed lockfile before releasing.
+        run: git checkout -- MODULE.bazel.lock
+
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@v7
         with:
