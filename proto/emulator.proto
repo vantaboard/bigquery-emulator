@@ -114,13 +114,20 @@ message RegisterDatasetResponse {}
 message DropDatasetRequest {
   DatasetRef dataset = 1;
   bool delete_contents = 2;
+  // JSON object snapshot of gateway REST-only dataset metadata (labels,
+  // friendlyName, ...) captured at delete time for undelete round-trip.
+  string rest_metadata_json = 3;
 }
 message DropDatasetResponse {}
 
 message UndeleteDatasetRequest {
   DatasetRef dataset = 1;
 }
-message UndeleteDatasetResponse {}
+message UndeleteDatasetResponse {
+  // Restored gateway REST-only metadata JSON object from the dataset
+  // tombstone sidecar (`restMetadata` in `_dataset.meta.json`).
+  string rest_metadata_json = 1;
+}
 
 message ListDatasetsRequest {
   string project_id = 1;

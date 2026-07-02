@@ -314,7 +314,7 @@ func DatasetDelete(deps Dependencies) http.HandlerFunc {
 				ProjectId: projectID,
 				DatasetId: datasetID,
 			},
-			DeleteContents:    deleteContents,
+			DeleteContents:   deleteContents,
 			RestMetadataJson: deps.Metadata.RestMetadataJSON(projectID, datasetID),
 		})
 		if grpcToHTTPError(w, err) {

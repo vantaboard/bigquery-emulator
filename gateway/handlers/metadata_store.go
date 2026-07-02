@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -106,6 +107,39 @@ func (s *MetadataStore) DeleteTable(projectID, datasetID, tableID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.tables, tableKey(projectID, datasetID, tableID))
+}
+
+func (s *MetadataStore) RestMetadataJSON(projectID, datasetID string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	ds, ok := s.datasets[datasetKey(projectID, datasetID)]
+	s.mu.RUnlock()
+	if !ok {
+		return ""
+	}
+	stored := stripEngineOwnedDatasetFields(ds)
+	raw, err := json.Marshal(stored)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// RestoreDatasetRestMetadataJSON overlays gateway REST metadata from an
+// engine tombstone snapshot (`UndeleteDatasetResponse.rest_metadata_json`).
+func (s *MetadataStore) RestoreDatasetRestMetadataJSON(
+	projectID, datasetID, restMetadataJSON string,
+) {
+	if s == nil || restMetadataJSON == "" {
+		return
+	}
+	var ds bqtypes.Dataset
+	if err := json.Unmarshal([]byte(restMetadataJSON), &ds); err != nil {
+		return
+	}
+	s.PutDataset(projectID, datasetID, ds)
 }
 
 // PutDataset records the round-trippable metadata fields for a dataset.

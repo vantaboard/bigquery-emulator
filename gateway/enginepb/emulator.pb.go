@@ -369,8 +369,11 @@ type DropDatasetRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Dataset        *DatasetRef            `protobuf:"bytes,1,opt,name=dataset,proto3" json:"dataset,omitempty"`
 	DeleteContents bool                   `protobuf:"varint,2,opt,name=delete_contents,json=deleteContents,proto3" json:"delete_contents,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// JSON object snapshot of gateway REST-only dataset metadata (labels,
+	// friendlyName, ...) captured at delete time for undelete round-trip.
+	RestMetadataJson string `protobuf:"bytes,3,opt,name=rest_metadata_json,json=restMetadataJson,proto3" json:"rest_metadata_json,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DropDatasetRequest) Reset() {
@@ -415,6 +418,13 @@ func (x *DropDatasetRequest) GetDeleteContents() bool {
 		return x.DeleteContents
 	}
 	return false
+}
+
+func (x *DropDatasetRequest) GetRestMetadataJson() string {
+	if x != nil {
+		return x.RestMetadataJson
+	}
+	return ""
 }
 
 type DropDatasetResponse struct {
@@ -498,9 +508,12 @@ func (x *UndeleteDatasetRequest) GetDataset() *DatasetRef {
 }
 
 type UndeleteDatasetResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Restored gateway REST-only metadata JSON object from the dataset
+	// tombstone sidecar (`restMetadata` in `_dataset.meta.json`).
+	RestMetadataJson string `protobuf:"bytes,1,opt,name=rest_metadata_json,json=restMetadataJson,proto3" json:"rest_metadata_json,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UndeleteDatasetResponse) Reset() {
@@ -531,6 +544,13 @@ func (x *UndeleteDatasetResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use UndeleteDatasetResponse.ProtoReflect.Descriptor instead.
 func (*UndeleteDatasetResponse) Descriptor() ([]byte, []int) {
 	return file_emulator_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UndeleteDatasetResponse) GetRestMetadataJson() string {
+	if x != nil {
+		return x.RestMetadataJson
+	}
+	return ""
 }
 
 type ListDatasetsRequest struct {
@@ -3875,14 +3895,16 @@ const file_emulator_proto_rawDesc = "" +
 	"\x16RegisterDatasetRequest\x12:\n" +
 	"\adataset\x18\x01 \x01(\v2 .bigquery_emulator.v1.DatasetRefR\adataset\x12\x1a\n" +
 	"\blocation\x18\x02 \x01(\tR\blocation\"\x19\n" +
-	"\x17RegisterDatasetResponse\"y\n" +
+	"\x17RegisterDatasetResponse\"\xa7\x01\n" +
 	"\x12DropDatasetRequest\x12:\n" +
 	"\adataset\x18\x01 \x01(\v2 .bigquery_emulator.v1.DatasetRefR\adataset\x12'\n" +
-	"\x0fdelete_contents\x18\x02 \x01(\bR\x0edeleteContents\"\x15\n" +
+	"\x0fdelete_contents\x18\x02 \x01(\bR\x0edeleteContents\x12,\n" +
+	"\x12rest_metadata_json\x18\x03 \x01(\tR\x10restMetadataJson\"\x15\n" +
 	"\x13DropDatasetResponse\"T\n" +
 	"\x16UndeleteDatasetRequest\x12:\n" +
-	"\adataset\x18\x01 \x01(\v2 .bigquery_emulator.v1.DatasetRefR\adataset\"\x19\n" +
-	"\x17UndeleteDatasetResponse\"4\n" +
+	"\adataset\x18\x01 \x01(\v2 .bigquery_emulator.v1.DatasetRefR\adataset\"G\n" +
+	"\x17UndeleteDatasetResponse\x12,\n" +
+	"\x12rest_metadata_json\x18\x01 \x01(\tR\x10restMetadataJson\"4\n" +
 	"\x13ListDatasetsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\"T\n" +
