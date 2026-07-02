@@ -18,8 +18,9 @@ namespace bigquery_emulator {
 namespace frontend {
 
 using internal::AbslToGrpcStatus;
+using internal::ProjectSchemaForResponse;
 using internal::SchemasEqualByShape;
-using internal::ValueToCell;
+using internal::ValueToCellForStorageRead;
 
 ::grpc::Status StorageReadService::ReadRows(
     ::grpc::ServerContext* /*context*/,
@@ -104,6 +105,11 @@ using internal::ValueToCell;
   }
   std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
 
+  backend::schema::TableSchema row_schema = session_schema;
+  if (!selected_fields.empty()) {
+    row_schema = ProjectSchemaForResponse(session_schema, selected_fields);
+  }
+
   v1::ReadRowsResponse page;
   int64_t in_page = 0;
   backend::storage::Row row;
@@ -113,9 +119,18 @@ using internal::ValueToCell;
       return AbslToGrpcStatus(has_or.status());
     }
     if (!*has_or) break;
+    if (row.cells.size() != row_schema.columns.size()) {
+      return ::grpc::Status(
+          ::grpc::StatusCode::INTERNAL,
+          absl::StrCat("StorageRead.ReadRows: row cell count ",
+                       row.cells.size(),
+                       " does not match schema column count ",
+                       row_schema.columns.size()));
+    }
     auto* proto_row = page.add_rows();
-    for (const auto& cell : row.cells) {
-      ValueToCell(cell, proto_row->add_cells());
+    for (size_t i = 0; i < row.cells.size(); ++i) {
+      ValueToCellForStorageRead(
+          row.cells[i], row_schema.columns[i].type, proto_row->add_cells());
     }
     ++in_page;
     if (in_page >= kReadRowsBatchSize) {

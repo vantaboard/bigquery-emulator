@@ -4,12 +4,70 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {
 namespace internal {
+
+namespace {
+
+std::string NormalizeTimestampOffsetSuffix(std::string text) {
+  if (text.size() >= 3) {
+    const size_t n = text.size();
+    const char sign = text[n - 3];
+    const char d0 = text[n - 2];
+    const char d1 = text[n - 1];
+    if ((sign == '+' || sign == '-') && absl::ascii_isdigit(d0) &&
+        absl::ascii_isdigit(d1) && text[n - 3] == sign) {
+      if (text.find(':') == std::string::npos &&
+          text.find('T') == std::string::npos) {
+        return text;
+      }
+      absl::StrAppend(&text, ":00");
+    }
+  }
+  return text;
+}
+
+bool IsAllDigits(absl::string_view s) {
+  if (s.empty()) return false;
+  for (char c : s) {
+    if (!absl::ascii_isdigit(static_cast<unsigned char>(c))) return false;
+  }
+  return true;
+}
+
+absl::StatusOr<absl::Time> ParseTimestampWireString(absl::string_view body) {
+  std::string text(body);
+  if (absl::EndsWith(text, " UTC")) {
+    text.resize(text.size() - 4);
+  }
+  text = NormalizeTimestampOffsetSuffix(std::move(text));
+  absl::Time t;
+  std::string err;
+  if (absl::ParseTime(absl::RFC3339_full, text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S%Ez", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d %H:%M:%E*S", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%dT%H:%M:%E*S", text, &t, &err) ||
+      absl::ParseTime("%Y-%m-%d", text, &t, &err)) {
+    return t;
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("StorageRead: invalid TIMESTAMP value '", body, "'"));
+}
+
+}  // namespace
 
 // SchemasEqualByShape compares two `TableSchema` snapshots column-by-
 // column, looking only at the bits the handler cares about for drift
@@ -59,6 +117,43 @@ backend::schema::TableSchema ProjectSchemaForResponse(
     }
   }
   return out;
+}
+
+absl::StatusOr<std::string> TimestampValueToMicrosString(
+    const backend::storage::Value& value) {
+  using Kind = backend::storage::Value::Kind;
+  if (value.kind() == Kind::kNull) {
+    return absl::InvalidArgumentError("StorageRead: TIMESTAMP cell is NULL");
+  }
+  if (value.kind() == Kind::kInt64) {
+    return absl::StrCat(value.int64_value());
+  }
+  if (value.kind() != Kind::kString) {
+    return absl::InvalidArgumentError(
+        "StorageRead: TIMESTAMP cell has unsupported kind");
+  }
+  const absl::string_view text = value.string_value();
+  if (IsAllDigits(text)) {
+    return std::string(text);
+  }
+  auto parsed = ParseTimestampWireString(text);
+  if (!parsed.ok()) return parsed.status();
+  return absl::StrCat(absl::ToUnixMicros(*parsed));
+}
+
+void ValueToCellForStorageRead(const backend::storage::Value& value,
+                               backend::schema::ColumnType column_type,
+                               v1::Cell* out) {
+  if (column_type == backend::schema::ColumnType::kTimestamp &&
+      value.kind() != backend::storage::Value::Kind::kNull) {
+    auto micros = TimestampValueToMicrosString(value);
+    if (micros.ok()) {
+      out->Clear();
+      out->set_string_value(*micros);
+      return;
+    }
+  }
+  ValueToCell(value, out);
 }
 
 }  // namespace internal

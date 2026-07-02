@@ -481,6 +481,7 @@ TEST_F(StorageReadGrpcTest, ReadRowsSchemaDriftIsFailedPrecondition) {
   EXPECT_EQ(status.error_code(), ::grpc::StatusCode::FAILED_PRECONDITION)
       << status.error_message();
 }
+
 }  // namespace
 }  // namespace frontend
 }  // namespace bigquery_emulator

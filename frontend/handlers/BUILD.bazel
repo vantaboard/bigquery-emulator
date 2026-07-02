@@ -181,7 +181,11 @@ cc_library(
         ":handler_common",
         "//backend/schema",
         "//backend/storage",
+        "//proto:emulator_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -231,6 +235,7 @@ cc_test(
     srcs = [
         "storage_read_create_session_test.cc",
         "storage_read_grpc_test.cc",
+        "storage_read_internal_test.cc",
         "storage_read_test_fixture.h",
     ],
     deps = [

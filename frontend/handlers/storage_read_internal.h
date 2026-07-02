@@ -5,9 +5,12 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "backend/schema/schema.h"
+#include "backend/storage/storage.h"
 #include "frontend/handlers/handler_common.h"
+#include "proto/emulator.pb.h"
 
 namespace bigquery_emulator {
 namespace frontend {
@@ -29,6 +32,17 @@ std::size_t FindColumnByName(const backend::schema::TableSchema& schema,
 backend::schema::TableSchema ProjectSchemaForResponse(
     const backend::schema::TableSchema& schema,
     const std::vector<std::string>& field_names);
+
+// Parses a TIMESTAMP storage cell (wire string or micros digits) into
+// the decimal microsecond string Storage Read clients expect.
+absl::StatusOr<std::string> TimestampValueToMicrosString(
+    const backend::storage::Value& value);
+
+// Marshals a storage cell onto a proto Cell, encoding TIMESTAMP
+// columns as epoch micros to match BigQuery Storage Read semantics.
+void ValueToCellForStorageRead(const backend::storage::Value& value,
+                               backend::schema::ColumnType column_type,
+                               v1::Cell* out);
 
 }  // namespace internal
 }  // namespace frontend
