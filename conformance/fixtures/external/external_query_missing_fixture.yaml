@@ -1,0 +1,18 @@
+# external_query_missing_fixture: missing manifest entry surfaces NOT_FOUND.
+name: external_query_missing_fixture
+description: |
+  EXTERNAL_QUERY against a connection with no manifest entry returns an
+  actionable error naming the fixture path to add.
+project_id: proj-external-query-missing
+setup:
+  - connection_fixture:
+      connection_id: empty_conn
+      source_dir: conformance/fixtures/external/connections/_seeds/empty_conn
+query: |
+  SELECT * FROM EXTERNAL_QUERY('us.empty_conn', 'SELECT 1')
+expected:
+  route: semantic_executor
+  route_strict: false
+  error:
+    code: 400
+    message_contains: "external/connections/empty_conn"

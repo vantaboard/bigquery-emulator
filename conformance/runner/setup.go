@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
+	"github.com/vantaboard/bigquery-emulator/gateway/external/connectionfixture"
 )
 
 // RunSetupSteps executes every setup step against the gateway base URL.
 // Exported for sub-lanes (differential replay, production recorders).
-func RunSetupSteps(ctx context.Context, base string, steps []SetupStep, defaultDataset string) error {
+func RunSetupSteps(ctx context.Context, base string, dataDir string, steps []SetupStep, defaultDataset string) error {
 	for i, step := range steps {
-		if err := runSetupStep(ctx, base, step, defaultDataset); err != nil {
+		if err := runSetupStep(ctx, base, dataDir, step, defaultDataset); err != nil {
 			return fmt.Errorf("setup[%d]: %w", i, err)
 		}
 	}
@@ -29,7 +32,7 @@ func (s SetupStep) ValidateExported() error {
 // runSetupStep dispatches one setup step to the matching helper.
 // Errors bubble up unchanged; the caller wraps them with the step
 // index for the diff message.
-func runSetupStep(ctx context.Context, base string, step SetupStep, defaultDataset string) error {
+func runSetupStep(ctx context.Context, base string, dataDir string, step SetupStep, defaultDataset string) error {
 	switch {
 	case step.Dataset != "":
 		return setupDataset(ctx, base, step.Dataset)
@@ -43,9 +46,30 @@ func runSetupStep(ctx context.Context, base string, step SetupStep, defaultDatas
 		return setupRowAccessPolicy(ctx, base, step.RowAccessPolicy)
 	case step.ColumnGovernance != nil:
 		return setupColumnGovernance(ctx, base, step.ColumnGovernance)
+	case step.ConnectionFixture != nil:
+		return setupConnectionFixture(dataDir, step.ConnectionFixture)
 	default:
 		return errors.New("empty setup step (validated at load time)")
 	}
+}
+
+func setupConnectionFixture(dataDir string, cf *ConnectionFixtureSetup) error {
+	if dataDir == "" {
+		return errors.New("connection_fixture requires a spawned emulator data_dir")
+	}
+	src := cf.SourceDir
+	if !filepath.IsAbs(src) {
+		src = filepath.Join(repoRoot(), src)
+	}
+	return connectionfixture.CopyTree(dataDir, cf.ConnectionID, src)
+}
+
+func repoRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return cwd
 }
 
 // setupDataset issues a `datasets.insert` for the synthesized

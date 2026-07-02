@@ -1,0 +1,10 @@
+{
+  "schema": [
+    {"name": "id", "type": "INT64"},
+    {"name": "name", "type": "STRING"}
+  ],
+  "rows": [
+    {"id": 1, "name": "ada"},
+    {"id": 2, "name": "linus"}
+  ]
+}

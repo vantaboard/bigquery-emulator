@@ -161,7 +161,7 @@ func executeSessionStep(
 
 	switch kind {
 	case stepKindSetup:
-		if err := RunSetupSteps(ctx, base, []SetupStep{step.asSetupStep()}, defaultDataset); err != nil {
+		if err := RunSetupSteps(ctx, base, env.DataDir(), []SetupStep{step.asSetupStep()}, defaultDataset); err != nil {
 			return fmt.Errorf("%s: %w", indexPrefix, err)
 		}
 	case stepKindREST:

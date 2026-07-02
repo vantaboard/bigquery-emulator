@@ -1,0 +1,4 @@
+# EXTERNAL_QUERY fixture: committed snapshot for connection us.my_conn.
+queries:
+  - query: "SELECT id, name FROM users ORDER BY id"
+    result: users.json

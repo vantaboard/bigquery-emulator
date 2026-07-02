@@ -143,7 +143,7 @@ func runCase(ctx context.Context, opts Options, profile runner.Profile, c *Corpu
 	defer func() { _ = env.Close() }()
 
 	base := env.BaseURL + "/bigquery/v2/projects/" + c.ProjectID
-	if setupErr := runner.RunSetupSteps(ctx, base, c.Setup, c.DefaultDataset); setupErr != nil {
+	if setupErr := runner.RunSetupSteps(ctx, base, env.DataDir(), c.Setup, c.DefaultDataset); setupErr != nil {
 		res.Message = setupErr.Error()
 		res.Divergence = ClassifyDivergence(ClassifyInput{RunnerMessage: res.Message})
 		return finishMaybeKnown(res, started, c.KnownFailing)

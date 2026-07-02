@@ -1,0 +1,18 @@
+# external_query_fixture: fixture-backed EXTERNAL_QUERY returns snapshot rows.
+name: external_query_fixture
+description: |
+  Seed a connection fixture manifest under $data_dir and assert
+  SELECT * FROM EXTERNAL_QUERY('us.my_conn', ...) returns committed rows.
+project_id: proj-external-query
+setup:
+  - connection_fixture:
+      connection_id: my_conn
+      source_dir: conformance/fixtures/external/connections/_seeds/my_conn
+query: |
+  SELECT id, name FROM EXTERNAL_QUERY('us.my_conn', 'SELECT id, name FROM users ORDER BY id')
+  ORDER BY id
+expected:
+  route: semantic_executor
+  rows:
+    - {id: "1", name: ada}
+    - {id: "2", name: linus}

@@ -235,7 +235,7 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 	}()
 
 	base := env.BaseURL + "/bigquery/v2/projects/" + fx.ProjectID
-	if stepErr := RunSetupSteps(ctx, base, fx.Setup, fx.DefaultDataset); stepErr != nil {
+	if stepErr := RunSetupSteps(ctx, base, env.dataDir, fx.Setup, fx.DefaultDataset); stepErr != nil {
 		result.Message = stepErr.Error()
 		return markDuration(result, started)
 	}

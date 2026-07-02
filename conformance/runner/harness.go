@@ -69,6 +69,14 @@ type EmulatorEnv struct {
 	spawn *spawnState
 }
 
+// DataDir returns the scratch --data_dir for a spawned emulator (empty when --connect).
+func (e *EmulatorEnv) DataDir() string {
+	if e == nil {
+		return ""
+	}
+	return e.dataDir
+}
+
 // Close terminates the subprocess (if any), closes the gRPC channel,
 // and shuts down the HTTP gateway. Safe to call more than once.
 func (e *EmulatorEnv) Close() error {
@@ -229,7 +237,13 @@ func startSpawned(ctx context.Context, opts HarnessOptions, p Profile) (*Emulato
 		return nil, err
 	}
 
-	srv = httptest.NewServer(gateway.NewServer(gateway.Options{}, handlers.BuildDependencies(client), client))
+	srv = httptest.NewServer(
+		gateway.NewServer(
+			gateway.Options{},
+			handlers.BuildDependenciesWith(client, handlers.DepsOptions{DataDir: dataDir}),
+			client,
+		),
+	)
 	return &EmulatorEnv{
 		BaseURL:    srv.URL,
 		httpServer: srv,

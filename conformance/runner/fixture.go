@@ -123,6 +123,9 @@ type SetupStep struct {
 	// ColumnGovernance sets column-level masking metadata via the
 	// engine catalog RPC (through the gateway's tables.patch hook).
 	ColumnGovernance *ColumnGovernanceSetup `yaml:"column_governance,omitempty"`
+
+	// ConnectionFixture seeds EXTERNAL_QUERY snapshots under data_dir.
+	ConnectionFixture *ConnectionFixtureSetup `yaml:"connection_fixture,omitempty"`
 }
 
 // RowsSetup describes a `tabledata.insertAll` setup step. Each entry
@@ -162,6 +165,13 @@ type ExternalTableSetup struct {
 // omit the schema on a view insert).
 type ViewTableSetup struct {
 	Query string `yaml:"query"`
+}
+
+// ConnectionFixtureSetup copies committed connection snapshots into the
+// emulator data_dir before EXTERNAL_QUERY runs.
+type ConnectionFixtureSetup struct {
+	ConnectionID string `yaml:"connection_id"`
+	SourceDir    string `yaml:"source_dir"`
 }
 
 func (t *TableSetup) validate() error {
@@ -600,10 +610,16 @@ func (s SetupStep) validate() error {
 			return errors.New("column_governance requires dataset, table, column, mask_kind")
 		}
 	}
+	if s.ConnectionFixture != nil {
+		count++
+		if s.ConnectionFixture.ConnectionID == "" || s.ConnectionFixture.SourceDir == "" {
+			return errors.New("connection_fixture requires connection_id and source_dir")
+		}
+	}
 	switch count {
 	case 0:
 		return errors.New(
-			"setup step must set exactly one of dataset, table, rows, sql, row_access_policy, column_governance",
+			"setup step must set exactly one of dataset, table, rows, sql, row_access_policy, column_governance, connection_fixture",
 		)
 	case 1:
 		return nil
