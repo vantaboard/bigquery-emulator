@@ -72,7 +72,8 @@ absl::Status DuckDBStorage::CreateDataset(const DatasetId& id,
 }
 
 absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
-                                        bool delete_contents) {
+                                        bool delete_contents,
+                                        absl::string_view rest_metadata_json) {
   absl::MutexLock lock(&mu_);
   const fs::path ds_dir = DatasetDir(id);
   std::error_code ec;
@@ -110,7 +111,8 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
                      " (use delete_contents=true to drop with tables)"));
   }
   const std::int64_t deleted_ms = absl::ToUnixMillis(absl::Now());
-  absl::Status moved = internal::MoveDatasetToTombstone(*this, id, deleted_ms);
+  absl::Status moved = internal::MoveDatasetToTombstone(
+      *this, id, deleted_ms, rest_metadata_json);
   if (!moved.ok()) return moved;
   const std::string schema_name = DuckDBSchemaName(id);
   return internal::RunSql(impl_.get(),

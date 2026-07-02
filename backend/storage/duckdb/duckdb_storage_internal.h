@@ -69,6 +69,16 @@ absl::StatusOr<std::string> RenderViewTableMetaJson(
 
 std::string RenderDatasetMetaJson(absl::string_view location);
 
+// Merges a gateway REST metadata JSON object into the dataset sidecar.
+// `rest_metadata_json` must be a JSON object (e.g. `{"labels":{"k":"v"}}`).
+std::string MergeRestMetadataIntoDatasetMetaJson(
+    absl::string_view existing_json, absl::string_view rest_metadata_json);
+
+// Returns the embedded `restMetadata` object JSON, or empty when absent.
+std::string ExtractRestMetadataFromDatasetMetaJson(absl::string_view json);
+
+std::string JsonEscape(absl::string_view s);
+
 absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json);
 
 // Reads view/catalog metadata from a table sidecar. `table_type` is

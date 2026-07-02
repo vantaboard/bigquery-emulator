@@ -294,8 +294,10 @@ class Storage {
   // ------------------------------------------------------------------
   [[nodiscard]] virtual absl::Status CreateDataset(
       const DatasetId& id, absl::string_view location) = 0;
-  [[nodiscard]] virtual absl::Status DropDataset(const DatasetId& id,
-                                                 bool delete_contents) = 0;
+  [[nodiscard]] virtual absl::Status DropDataset(
+      const DatasetId& id,
+      bool delete_contents,
+      absl::string_view rest_metadata_json = {}) = 0;
   [[nodiscard]] virtual absl::Status RestoreDataset(
       const DatasetId& id, std::int64_t deleted_ms = 0) {
     (void)id;

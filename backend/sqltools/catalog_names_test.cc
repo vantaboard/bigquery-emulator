@@ -38,7 +38,9 @@ class FakeCatalogStorage : public storage::Storage {
                              absl::string_view) override {
     return absl::UnimplementedError("FakeCatalogStorage::CreateDataset");
   }
-  absl::Status DropDataset(const storage::DatasetId&, bool) override {
+  absl::Status DropDataset(const storage::DatasetId&,
+                           bool,
+                           absl::string_view = {}) override {
     return absl::UnimplementedError("FakeCatalogStorage::DropDataset");
   }
   absl::Status CreateTable(const storage::TableId&,

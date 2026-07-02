@@ -75,12 +75,14 @@ absl::StatusOr<std::string> ResolveParquetSnapshotAt(
     std::int64_t as_of_ms,
     std::int64_t now_ms);
 
-// Soft-deletes table artifacts into `.tombstones/{table_id}/{deleted_ms}/`.
+// Soft-deletes table artifacts into
+// `.tombstones/{project.dataset}/{table_id}/{deleted_ms}/`.
 absl::Status MoveTableToTombstone(const DuckDBStorage& storage,
                                   const TableId& id,
                                   std::int64_t deleted_ms);
 
-// Restores a soft-deleted table from `.tombstones/{table_id}/{deleted_ms}/`.
+// Restores a soft-deleted table from
+// `.tombstones/{project.dataset}/{table_id}/{deleted_ms}/`.
 // When `deleted_ms` is zero, picks the newest tombstone for `id`.
 absl::Status RestoreTableFromTombstone(const DuckDBStorage& storage,
                                        const TableId& id,
@@ -88,14 +90,15 @@ absl::Status RestoreTableFromTombstone(const DuckDBStorage& storage,
 
 // Soft-deletes a dataset (metadata + member tables) into
 // `.tombstones/__dataset__/{project.dataset}/{deleted_ms}/`.
-absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
+absl::Status MoveDatasetToTombstone(DuckDBStorage& storage,
                                     const DatasetId& id,
-                                    std::int64_t deleted_ms);
+                                    std::int64_t deleted_ms,
+                                    absl::string_view rest_metadata_json = {});
 
 // Restores a soft-deleted dataset and its tables from the dataset
 // tombstone. When `deleted_ms` is zero, picks the newest tombstone
 // within the 7-day retention window.
-absl::Status RestoreDatasetFromTombstone(const DuckDBStorage& storage,
+absl::Status RestoreDatasetFromTombstone(DuckDBStorage& storage,
                                          const DatasetId& id,
                                          std::int64_t deleted_ms);
 

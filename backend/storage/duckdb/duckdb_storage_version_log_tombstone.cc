@@ -41,7 +41,9 @@ namespace {
 absl::StatusOr<std::int64_t> LatestTombstoneMs(const DuckDBStorage& storage,
                                                const TableId& id) {
   const fs::path root =
-      fs::path(storage.data_dir()) / ".tombstones" / id.table_id;
+      fs::path(storage.data_dir()) / ".tombstones" /
+      DatasetTombstoneKey(DatasetId{id.project_id, id.dataset_id}) /
+      id.table_id;
   std::error_code ec;
   if (!fs::exists(root, ec)) {
     return absl::NotFoundError(absl::StrCat("no tombstones for table ",
@@ -317,9 +319,10 @@ absl::Status RestoreTableFromTombstone(const DuckDBStorage& storage,
   return absl::OkStatus();
 }
 
-absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
+absl::Status MoveDatasetToTombstone(DuckDBStorage& storage,
                                     const DatasetId& id,
-                                    std::int64_t deleted_ms) {
+                                    std::int64_t deleted_ms,
+                                    absl::string_view rest_metadata_json) {
   const fs::path ds_dir =
       fs::path(storage.data_dir()) / id.project_id / id.dataset_id;
   std::error_code ec;
@@ -343,10 +346,19 @@ absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
         ec);
   }
 
+  absl::Status snap =
+      storage.SnapshotDatasetRegistryForTombstoneLocked(id, tombstone_dir);
+  if (!snap.ok()) return snap;
+
   auto meta_or = ReadFile(dataset_meta);
   if (!meta_or.ok()) return meta_or.status();
+  std::string tomb_meta = *meta_or;
+  if (!rest_metadata_json.empty()) {
+    tomb_meta =
+        MergeRestMetadataIntoDatasetMetaJson(tomb_meta, rest_metadata_json);
+  }
   const auto write_meta = WriteFileAtomic(
-      fs::path(tombstone_dir) / std::string(kDatasetMetaFile), *meta_or);
+      fs::path(tombstone_dir) / std::string(kDatasetMetaFile), tomb_meta);
   if (!write_meta.ok()) return write_meta;
 
   const std::vector<std::string> table_ids = ListTableIdsInDatasetDir(ds_dir);
@@ -361,6 +373,9 @@ absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
     if (!moved.ok()) return moved;
   }
 
+  absl::Status purged = storage.PurgeDatasetRegistryRowsLocked(id);
+  if (!purged.ok()) return purged;
+
   fs::remove_all(ds_dir, ec);
   if (ec) {
     return FilesystemStatus(
@@ -369,7 +384,7 @@ absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
   return absl::OkStatus();
 }
 
-absl::Status RestoreDatasetFromTombstone(const DuckDBStorage& storage,
+absl::Status RestoreDatasetFromTombstone(DuckDBStorage& storage,
                                          const DatasetId& id,
                                          std::int64_t deleted_ms) {
   const fs::path live_dir =
@@ -424,6 +439,10 @@ absl::Status RestoreDatasetFromTombstone(const DuckDBStorage& storage,
     absl::Status restored = RestoreTableFromTombstone(storage, tid, chosen);
     if (!restored.ok()) return restored;
   }
+
+  absl::Status registry_restored =
+      storage.RestoreDatasetRegistryFromTombstoneLocked(id, tombstone_dir);
+  if (!registry_restored.ok()) return registry_restored;
 
   fs::remove_all(tombstone_dir, ec);
   if (ec) {

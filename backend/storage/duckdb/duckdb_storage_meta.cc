@@ -134,6 +134,89 @@ std::string RenderDatasetMetaJson(absl::string_view location) {
   return absl::StrCat("{\n  \"location\": \"", escaped, "\"\n}\n");
 }
 
+std::string JsonEscape(absl::string_view s) {
+  return absl::StrReplaceAll(s,
+                             {{"\\", "\\\\"},
+                              {"\"", "\\\""},
+                              {"\n", "\\n"},
+                              {"\r", "\\r"},
+                              {"\t", "\\t"}});
+}
+
+std::string MergeRestMetadataIntoDatasetMetaJson(
+    absl::string_view existing_json, absl::string_view rest_metadata_json) {
+  if (rest_metadata_json.empty()) {
+    return std::string(existing_json);
+  }
+  std::string trimmed = std::string(rest_metadata_json);
+  while (!trimmed.empty() &&
+         (trimmed.front() == ' ' || trimmed.front() == '\n')) {
+    trimmed.erase(trimmed.begin());
+  }
+  while (!trimmed.empty() &&
+         (trimmed.back() == ' ' || trimmed.back() == '\n')) {
+    trimmed.pop_back();
+  }
+  if (trimmed.empty()) {
+    return std::string(existing_json);
+  }
+  std::string out = std::string(existing_json);
+  while (!out.empty() && (out.back() == '\n' || out.back() == ' ')) {
+    out.pop_back();
+  }
+  if (!out.empty() && out.back() == '}') {
+    out.pop_back();
+  }
+  absl::StrAppend(&out, ",\n  \"restMetadata\": ", trimmed, "\n}\n");
+  return out;
+}
+
+std::string ExtractRestMetadataFromDatasetMetaJson(absl::string_view json) {
+  const std::string needle = "\"restMetadata\"";
+  const auto key_pos = json.find(needle);
+  if (key_pos == std::string_view::npos) {
+    return {};
+  }
+  const auto colon = json.find(':', key_pos + needle.size());
+  if (colon == std::string_view::npos) {
+    return {};
+  }
+  size_t pos = colon + 1;
+  while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\n')) {
+    ++pos;
+  }
+  if (pos >= json.size() || json[pos] != '{') {
+    return {};
+  }
+  size_t depth = 0;
+  bool in_string = false;
+  const size_t start = pos;
+  for (; pos < json.size(); ++pos) {
+    const char c = json[pos];
+    if (in_string) {
+      if (c == '\\' && pos + 1 < json.size()) {
+        ++pos;
+        continue;
+      }
+      if (c == '"') in_string = false;
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+      continue;
+    }
+    if (c == '{') {
+      ++depth;
+    } else if (c == '}') {
+      --depth;
+      if (depth == 0) {
+        return std::string(json.substr(start, pos - start + 1));
+      }
+    }
+  }
+  return {};
+}
+
 absl::StatusOr<schema::TableSchema> ParseTableMetaJson(absl::string_view json) {
   // Locate the `"schema":` key. We don't want to drag a full JSON
   // parser in just to skip three lines of metadata; the file is

@@ -69,7 +69,8 @@ class FakeStorage : public storage::Storage {
     return absl::UnimplementedError("FakeStorage::CreateDataset");
   }
   absl::Status DropDataset(const storage::DatasetId& /*id*/,
-                           bool /*delete_contents*/) override {
+                           bool /*delete_contents*/,
+                           absl::string_view = {}) override {
     return absl::UnimplementedError("FakeStorage::DropDataset");
   }
   absl::Status CreateTable(const storage::TableId& /*id*/,

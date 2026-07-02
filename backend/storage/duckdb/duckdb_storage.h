@@ -31,7 +31,7 @@
 // the C++ level so dataset / table directory mutations stay in
 // lockstep with catalog rows.
 
-#include <memory>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -81,7 +81,9 @@ class DuckDBStorage : public Storage {
   // ------------------------------------------------------------------
   absl::Status CreateDataset(const DatasetId& id,
                              absl::string_view location) override;
-  absl::Status DropDataset(const DatasetId& id, bool delete_contents) override;
+  absl::Status DropDataset(const DatasetId& id,
+                           bool delete_contents,
+                           absl::string_view rest_metadata_json = {}) override;
   absl::Status RestoreDataset(const DatasetId& id,
                               std::int64_t deleted_ms = 0) override;
   absl::StatusOr<std::vector<DatasetId>> ListDatasets(
@@ -143,6 +145,18 @@ class DuckDBStorage : public Storage {
   // Ensures catalog metadata tables (e.g. `__bqemu_routines`) exist.
   // Called from `Open` and idempotently before routine CRUD.
   absl::Status InitCatalogTables();
+
+  absl::StatusOr<std::string> GetDatasetRestMetadataJson(
+      const DatasetId& id) const;
+
+  // Dataset tombstone helpers (caller must hold mu_).
+  absl::Status SnapshotDatasetRegistryForTombstoneLocked(
+      const DatasetId& id, const std::filesystem::path& tombstone_dir);
+  absl::Status RestoreDatasetRegistryFromTombstoneLocked(
+      const DatasetId& id, const std::filesystem::path& tombstone_dir);
+  absl::Status PurgeDatasetRegistryRowsLocked(const DatasetId& id);
+  absl::StatusOr<std::string> GetDatasetRestMetadataJsonLocked(
+      const DatasetId& id) const;
 
   // Pimpl: keeps the DuckDB C handles out of this header so the
   // engine-agnostic Storage signatures stay enforceable from the

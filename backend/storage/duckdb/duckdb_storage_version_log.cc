@@ -278,8 +278,9 @@ std::string TableVersionsIndexPath(const DuckDBStorage& storage,
 std::string TableTombstoneDir(const DuckDBStorage& storage,
                               const TableId& id,
                               std::int64_t deleted_ms) {
-  return (fs::path(storage.data_dir()) / ".tombstones" / id.table_id /
-          absl::StrCat(deleted_ms))
+  return (fs::path(storage.data_dir()) / ".tombstones" /
+          DatasetTombstoneKey(DatasetId{id.project_id, id.dataset_id}) /
+          id.table_id / absl::StrCat(deleted_ms))
       .string();
 }
 
