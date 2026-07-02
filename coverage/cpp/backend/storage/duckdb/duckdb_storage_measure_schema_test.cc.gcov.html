@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -60,44 +60,45 @@
               <td>
 <pre class="sourceHeading">            Line data    Source code</pre>
 <pre class="source">
-<span id="L1"><span class="lineNum">       1</span>              : #include &quot;backend/schema/schema.h&quot;</span>
-<span id="L2"><span class="lineNum">       2</span>              : #include &quot;backend/storage/duckdb/duckdb_storage.h&quot;</span>
-<span id="L3"><span class="lineNum">       3</span>              : #include &quot;backend/storage/duckdb/duckdb_storage_test_fixture.h&quot;</span>
-<span id="L4"><span class="lineNum">       4</span>              : #include &quot;gtest/gtest.h&quot;</span>
-<span id="L5"><span class="lineNum">       5</span>              : </span>
-<span id="L6"><span class="lineNum">       6</span>              : namespace bigquery_emulator {</span>
-<span id="L7"><span class="lineNum">       7</span>              : namespace backend {</span>
-<span id="L8"><span class="lineNum">       8</span>              : namespace storage {</span>
-<span id="L9"><span class="lineNum">       9</span>              : namespace duckdb {</span>
-<span id="L10"><span class="lineNum">      10</span>              : namespace {</span>
-<span id="L11"><span class="lineNum">      11</span>              : </span>
-<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_F(DuckDBStorageTest, RoundTripsColumnDescription) {</span></span>
-<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">           1 :   auto opened = DuckDBStorage::Open(data_dir_.string());</span></span>
-<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(opened.ok()) &lt;&lt; opened.status();</span></span>
-<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">           1 :   auto&amp; store = **opened;</span></span>
-<span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.CreateDataset({&quot;proj&quot;, &quot;ds&quot;}, &quot;US&quot;).ok());</span></span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">           1 :   schema::TableSchema schema;</span></span>
-<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :   schema::ColumnSchema measure;</span></span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           1 :   measure.name = &quot;total_sales&quot;;</span></span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :   measure.type = schema::ColumnType::kInt64;</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :   measure.description = &quot;bqemu_measure:SUM(amount):store_id&quot;;</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :   schema.columns.push_back(measure);</span></span>
-<span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.CreateTable({&quot;proj&quot;, &quot;ds&quot;, &quot;sales&quot;}, schema).ok());</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :   absl::StatusOr&lt;schema::TableSchema&gt; roundtrip =</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :       store.GetSchema({&quot;proj&quot;, &quot;ds&quot;, &quot;sales&quot;});</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(roundtrip.ok()) &lt;&lt; roundtrip.status();</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :   ASSERT_EQ(roundtrip-&gt;columns.size(), 1u);</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :   EXPECT_EQ(roundtrip-&gt;columns[0].description,</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :             &quot;bqemu_measure:SUM(amount):store_id&quot;);</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span>              : }  // namespace</span>
-<span id="L35"><span class="lineNum">      35</span>              : }  // namespace duckdb</span>
-<span id="L36"><span class="lineNum">      36</span>              : }  // namespace storage</span>
-<span id="L37"><span class="lineNum">      37</span>              : }  // namespace backend</span>
-<span id="L38"><span class="lineNum">      38</span>              : }  // namespace bigquery_emulator</span>
+<span id="L1"><span class="lineNum">       1</span>              : #include &quot;absl/status/statusor.h&quot;</span>
+<span id="L2"><span class="lineNum">       2</span>              : #include &quot;backend/schema/schema.h&quot;</span>
+<span id="L3"><span class="lineNum">       3</span>              : #include &quot;backend/storage/duckdb/duckdb_storage.h&quot;</span>
+<span id="L4"><span class="lineNum">       4</span>              : #include &quot;backend/storage/duckdb/duckdb_storage_test_fixture.h&quot;</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &quot;gtest/gtest.h&quot;</span>
+<span id="L6"><span class="lineNum">       6</span>              : </span>
+<span id="L7"><span class="lineNum">       7</span>              : namespace bigquery_emulator {</span>
+<span id="L8"><span class="lineNum">       8</span>              : namespace backend {</span>
+<span id="L9"><span class="lineNum">       9</span>              : namespace storage {</span>
+<span id="L10"><span class="lineNum">      10</span>              : namespace duckdb {</span>
+<span id="L11"><span class="lineNum">      11</span>              : namespace {</span>
+<span id="L12"><span class="lineNum">      12</span>              : </span>
+<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_F(DuckDBStorageTest, RoundTripsColumnDescription) {</span></span>
+<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">           1 :   auto opened = DuckDBStorage::Open(data_dir_.string());</span></span>
+<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(opened.ok()) &lt;&lt; opened.status();</span></span>
+<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">           1 :   auto&amp; store = **opened;</span></span>
+<span id="L17"><span class="lineNum">      17</span>              : </span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.CreateDataset({&quot;proj&quot;, &quot;ds&quot;}, &quot;US&quot;).ok());</span></span>
+<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :   schema::TableSchema schema;</span></span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           1 :   schema::ColumnSchema measure;</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :   measure.name = &quot;total_sales&quot;;</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :   measure.type = schema::ColumnType::kInt64;</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :   measure.description = &quot;bqemu_measure:SUM(amount):store_id&quot;;</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :   schema.columns.push_back(measure);</span></span>
+<span id="L25"><span class="lineNum">      25</span>              : </span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(store.CreateTable({&quot;proj&quot;, &quot;ds&quot;, &quot;sales&quot;}, schema).ok());</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :   absl::StatusOr&lt;schema::TableSchema&gt; roundtrip =</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :       store.GetSchema({&quot;proj&quot;, &quot;ds&quot;, &quot;sales&quot;});</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(roundtrip.ok()) &lt;&lt; roundtrip.status();</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :   ASSERT_EQ(roundtrip-&gt;columns.size(), 1u);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :   EXPECT_EQ(roundtrip-&gt;columns[0].description,</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :             &quot;bqemu_measure:SUM(amount):store_id&quot;);</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L34"><span class="lineNum">      34</span>              : </span>
+<span id="L35"><span class="lineNum">      35</span>              : }  // namespace</span>
+<span id="L36"><span class="lineNum">      36</span>              : }  // namespace duckdb</span>
+<span id="L37"><span class="lineNum">      37</span>              : }  // namespace storage</span>
+<span id="L38"><span class="lineNum">      38</span>              : }  // namespace backend</span>
+<span id="L39"><span class="lineNum">      39</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

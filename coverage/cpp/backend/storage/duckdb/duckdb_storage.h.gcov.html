@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
@@ -93,7 +93,7 @@
 <span id="L31"><span class="lineNum">      31</span>              : // the C++ level so dataset / table directory mutations stay in</span>
 <span id="L32"><span class="lineNum">      32</span>              : // lockstep with catalog rows.</span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span>              : #include &lt;memory&gt;</span>
+<span id="L34"><span class="lineNum">      34</span>              : #include &lt;filesystem&gt;</span>
 <span id="L35"><span class="lineNum">      35</span>              : #include &lt;optional&gt;</span>
 <span id="L36"><span class="lineNum">      36</span>              : #include &lt;string&gt;</span>
 <span id="L37"><span class="lineNum">      37</span>              : #include &lt;vector&gt;</span>
@@ -143,109 +143,131 @@
 <span id="L81"><span class="lineNum">      81</span>              :   // ------------------------------------------------------------------</span>
 <span id="L82"><span class="lineNum">      82</span>              :   absl::Status CreateDataset(const DatasetId&amp; id,</span>
 <span id="L83"><span class="lineNum">      83</span>              :                              absl::string_view location) override;</span>
-<span id="L84"><span class="lineNum">      84</span>              :   absl::Status DropDataset(const DatasetId&amp; id, bool delete_contents) override;</span>
-<span id="L85"><span class="lineNum">      85</span>              :   absl::StatusOr&lt;std::vector&lt;DatasetId&gt;&gt; ListDatasets(</span>
-<span id="L86"><span class="lineNum">      86</span>              :       absl::string_view project_id) const override;</span>
-<span id="L87"><span class="lineNum">      87</span>              : </span>
-<span id="L88"><span class="lineNum">      88</span>              :   absl::Status CreateTable(const TableId&amp; id,</span>
-<span id="L89"><span class="lineNum">      89</span>              :                            const schema::TableSchema&amp; schema) override;</span>
-<span id="L90"><span class="lineNum">      90</span>              :   absl::Status DropTable(const TableId&amp; id) override;</span>
-<span id="L91"><span class="lineNum">      91</span>              :   absl::Status RestoreTable(const TableId&amp; id,</span>
-<span id="L92"><span class="lineNum">      92</span>              :                             std::int64_t deleted_ms = 0) override;</span>
-<span id="L93"><span class="lineNum">      93</span>              :   absl::StatusOr&lt;std::vector&lt;TableId&gt;&gt; ListTables(</span>
-<span id="L94"><span class="lineNum">      94</span>              :       const DatasetId&amp; dataset_id) const override;</span>
-<span id="L95"><span class="lineNum">      95</span>              : </span>
-<span id="L96"><span class="lineNum">      96</span>              :   absl::StatusOr&lt;schema::TableSchema&gt; GetSchema(</span>
-<span id="L97"><span class="lineNum">      97</span>              :       const TableId&amp; id) const override;</span>
-<span id="L98"><span class="lineNum">      98</span>              : </span>
-<span id="L99"><span class="lineNum">      99</span>              :   // The core skeleton returns UNIMPLEMENTED for these two. The DDL</span>
-<span id="L100"><span class="lineNum">     100</span>              :   // plan (`duckdb-storage-ddl_p1e2f3a4`) lowers them onto Parquet</span>
-<span id="L101"><span class="lineNum">     101</span>              :   // I/O via DuckDB's `read_parquet` + INSERT statements.</span>
-<span id="L102"><span class="lineNum">     102</span>              :   absl::Status AppendRows(const TableId&amp; id,</span>
-<span id="L103"><span class="lineNum">     103</span>              :                           absl::Span&lt;const Row&gt; rows) override;</span>
-<span id="L104"><span class="lineNum">     104</span>              :   absl::Status OverwriteRows(const TableId&amp; id,</span>
-<span id="L105"><span class="lineNum">     105</span>              :                              absl::Span&lt;const Row&gt; rows) override;</span>
-<span id="L106"><span class="lineNum">     106</span>              :   absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt; ScanRows(</span>
-<span id="L107"><span class="lineNum">     107</span>              :       const TableId&amp; id) const override;</span>
-<span id="L108"><span class="lineNum">     108</span>              :   absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt; CreateReadStream(</span>
-<span id="L109"><span class="lineNum">     109</span>              :       const TableId&amp; id, const ReadFilter&amp; filter) const override;</span>
-<span id="L110"><span class="lineNum">     110</span>              :   absl::StatusOr&lt;std::int64_t&gt; CountRows(const TableId&amp; id) const override;</span>
-<span id="L111"><span class="lineNum">     111</span>              : </span>
-<span id="L112"><span class="lineNum">     112</span>              :   std::optional&lt;std::string&gt; ParquetSnapshotPath(</span>
-<span id="L113"><span class="lineNum">     113</span>              :       const TableId&amp; id) const override;</span>
-<span id="L114"><span class="lineNum">     114</span>              :   absl::StatusOr&lt;std::optional&lt;std::string&gt;&gt; ParquetSnapshotPathAt(</span>
-<span id="L115"><span class="lineNum">     115</span>              :       const TableId&amp; id, std::int64_t as_of_ms) const override;</span>
-<span id="L116"><span class="lineNum">     116</span>              : </span>
-<span id="L117"><span class="lineNum">     117</span>              :   absl::Status UpsertRoutine(const RoutineRecord&amp; record) override;</span>
-<span id="L118"><span class="lineNum">     118</span>              :   absl::Status DeleteRoutine(const RoutineId&amp; id) override;</span>
-<span id="L119"><span class="lineNum">     119</span>              :   absl::StatusOr&lt;RoutineRecord&gt; GetRoutine(const RoutineId&amp; id) const override;</span>
-<span id="L120"><span class="lineNum">     120</span>              :   absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt; ListRoutines(</span>
-<span id="L121"><span class="lineNum">     121</span>              :       const DatasetId&amp; dataset_id) const override;</span>
-<span id="L122"><span class="lineNum">     122</span>              :   absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt; ListAllRoutines() const override;</span>
-<span id="L123"><span class="lineNum">     123</span>              : </span>
-<span id="L124"><span class="lineNum">     124</span>              :   absl::StatusOr&lt;TableGovernance&gt; GetTableGovernance(</span>
-<span id="L125"><span class="lineNum">     125</span>              :       const TableId&amp; id) const override;</span>
-<span id="L126"><span class="lineNum">     126</span>              :   absl::Status UpsertRowAccessPolicy(</span>
-<span id="L127"><span class="lineNum">     127</span>              :       const TableId&amp; id, const RowAccessPolicyRecord&amp; policy) override;</span>
-<span id="L128"><span class="lineNum">     128</span>              :   absl::Status DeleteRowAccessPolicy(const TableId&amp; id,</span>
-<span id="L129"><span class="lineNum">     129</span>              :                                      absl::string_view policy_id) override;</span>
-<span id="L130"><span class="lineNum">     130</span>              :   absl::Status SetColumnGovernance(</span>
-<span id="L131"><span class="lineNum">     131</span>              :       const TableId&amp; id,</span>
-<span id="L132"><span class="lineNum">     132</span>              :       absl::string_view column_name,</span>
-<span id="L133"><span class="lineNum">     133</span>              :       const ColumnGovernanceRecord&amp; column) override;</span>
-<span id="L134"><span class="lineNum">     134</span>              : </span>
-<span id="L135"><span class="lineNum">     135</span>              :   // Ensures catalog metadata tables (e.g. `__bqemu_routines`) exist.</span>
-<span id="L136"><span class="lineNum">     136</span>              :   // Called from `Open` and idempotently before routine CRUD.</span>
-<span id="L137"><span class="lineNum">     137</span>              :   absl::Status InitCatalogTables();</span>
-<span id="L138"><span class="lineNum">     138</span>              : </span>
-<span id="L139"><span class="lineNum">     139</span>              :   // Pimpl: keeps the DuckDB C handles out of this header so the</span>
-<span id="L140"><span class="lineNum">     140</span>              :   // engine-agnostic Storage signatures stay enforceable from the</span>
-<span id="L141"><span class="lineNum">     141</span>              :   // include graph alone (callers cannot accidentally reach into</span>
-<span id="L142"><span class="lineNum">     142</span>              :   // `duckdb_database` / `duckdb_connection`). Public so the</span>
-<span id="L143"><span class="lineNum">     143</span>              :   // translation unit's helper functions can take an `Impl*` directly</span>
-<span id="L144"><span class="lineNum">     144</span>              :   // — the struct itself is only ever defined inside duckdb_storage.cc.</span>
-<span id="L145"><span class="lineNum">     145</span>              :   struct Impl;</span>
-<span id="L146"><span class="lineNum">     146</span>              : </span>
-<span id="L147"><span class="lineNum">     147</span>              :  private:</span>
-<span id="L148"><span class="lineNum">     148</span>              :   DuckDBStorage(std::string data_dir, std::unique_ptr&lt;Impl&gt; impl);</span>
-<span id="L149"><span class="lineNum">     149</span>              : </span>
-<span id="L150"><span class="lineNum">     150</span>              :   // Filesystem layout helpers. All take ids by string_view and emit</span>
-<span id="L151"><span class="lineNum">     151</span>              :   // absolute paths under `data_dir_`.</span>
-<span id="L152"><span class="lineNum">     152</span>              :   std::string DatasetDir(absl::string_view project_id,</span>
-<span id="L153"><span class="lineNum">     153</span>              :                          absl::string_view dataset_id) const;</span>
-<span id="L154"><span class="lineNum">     154</span>              :   std::string DatasetDir(const DatasetId&amp; id) const;</span>
-<span id="L155"><span class="lineNum">     155</span>              :   std::string DatasetMetaPath(const DatasetId&amp; id) const;</span>
-<span id="L156"><span class="lineNum">     156</span>              :   std::string TableMetaPath(const TableId&amp; id) const;</span>
-<span id="L157"><span class="lineNum">     157</span>              :   std::string TableParquetPath(const TableId&amp; id) const;</span>
-<span id="L158"><span class="lineNum">     158</span>              : </span>
-<span id="L159"><span class="lineNum">     159</span>              :   std::string TableGovernancePath(const TableId&amp; id) const;</span>
+<span id="L84"><span class="lineNum">      84</span>              :   absl::Status DropDataset(const DatasetId&amp; id,</span>
+<span id="L85"><span class="lineNum">      85</span>              :                            bool delete_contents,</span>
+<span id="L86"><span class="lineNum">      86</span>              :                            absl::string_view rest_metadata_json = {}) override;</span>
+<span id="L87"><span class="lineNum">      87</span>              :   absl::Status RestoreDataset(const DatasetId&amp; id,</span>
+<span id="L88"><span class="lineNum">      88</span>              :                               std::int64_t deleted_ms = 0) override;</span>
+<span id="L89"><span class="lineNum">      89</span>              :   absl::StatusOr&lt;std::vector&lt;DatasetId&gt;&gt; ListDatasets(</span>
+<span id="L90"><span class="lineNum">      90</span>              :       absl::string_view project_id) const override;</span>
+<span id="L91"><span class="lineNum">      91</span>              : </span>
+<span id="L92"><span class="lineNum">      92</span>              :   absl::Status CreateTable(const TableId&amp; id,</span>
+<span id="L93"><span class="lineNum">      93</span>              :                            const schema::TableSchema&amp; schema) override;</span>
+<span id="L94"><span class="lineNum">      94</span>              :   absl::Status DropTable(const TableId&amp; id) override;</span>
+<span id="L95"><span class="lineNum">      95</span>              :   absl::Status RestoreTable(const TableId&amp; id,</span>
+<span id="L96"><span class="lineNum">      96</span>              :                             std::int64_t deleted_ms = 0) override;</span>
+<span id="L97"><span class="lineNum">      97</span>              :   absl::StatusOr&lt;std::vector&lt;TableId&gt;&gt; ListTables(</span>
+<span id="L98"><span class="lineNum">      98</span>              :       const DatasetId&amp; dataset_id) const override;</span>
+<span id="L99"><span class="lineNum">      99</span>              : </span>
+<span id="L100"><span class="lineNum">     100</span>              :   absl::StatusOr&lt;schema::TableSchema&gt; GetSchema(</span>
+<span id="L101"><span class="lineNum">     101</span>              :       const TableId&amp; id) const override;</span>
+<span id="L102"><span class="lineNum">     102</span>              : </span>
+<span id="L103"><span class="lineNum">     103</span>              :   // The core skeleton returns UNIMPLEMENTED for these two. The DDL</span>
+<span id="L104"><span class="lineNum">     104</span>              :   // plan (`duckdb-storage-ddl_p1e2f3a4`) lowers them onto Parquet</span>
+<span id="L105"><span class="lineNum">     105</span>              :   // I/O via DuckDB's `read_parquet` + INSERT statements.</span>
+<span id="L106"><span class="lineNum">     106</span>              :   absl::Status AppendRows(const TableId&amp; id,</span>
+<span id="L107"><span class="lineNum">     107</span>              :                           absl::Span&lt;const Row&gt; rows) override;</span>
+<span id="L108"><span class="lineNum">     108</span>              :   absl::Status OverwriteRows(const TableId&amp; id,</span>
+<span id="L109"><span class="lineNum">     109</span>              :                              absl::Span&lt;const Row&gt; rows) override;</span>
+<span id="L110"><span class="lineNum">     110</span>              :   absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt; ScanRows(</span>
+<span id="L111"><span class="lineNum">     111</span>              :       const TableId&amp; id) const override;</span>
+<span id="L112"><span class="lineNum">     112</span>              :   absl::StatusOr&lt;std::unique_ptr&lt;RowIterator&gt;&gt; CreateReadStream(</span>
+<span id="L113"><span class="lineNum">     113</span>              :       const TableId&amp; id, const ReadFilter&amp; filter) const override;</span>
+<span id="L114"><span class="lineNum">     114</span>              :   absl::StatusOr&lt;std::int64_t&gt; CountRows(const TableId&amp; id) const override;</span>
+<span id="L115"><span class="lineNum">     115</span>              : </span>
+<span id="L116"><span class="lineNum">     116</span>              :   std::optional&lt;std::string&gt; ParquetSnapshotPath(</span>
+<span id="L117"><span class="lineNum">     117</span>              :       const TableId&amp; id) const override;</span>
+<span id="L118"><span class="lineNum">     118</span>              :   absl::StatusOr&lt;std::optional&lt;std::string&gt;&gt; ParquetSnapshotPathAt(</span>
+<span id="L119"><span class="lineNum">     119</span>              :       const TableId&amp; id, std::int64_t as_of_ms) const override;</span>
+<span id="L120"><span class="lineNum">     120</span>              : </span>
+<span id="L121"><span class="lineNum">     121</span>              :   absl::Status UpsertRoutine(const RoutineRecord&amp; record) override;</span>
+<span id="L122"><span class="lineNum">     122</span>              :   absl::Status DeleteRoutine(const RoutineId&amp; id) override;</span>
+<span id="L123"><span class="lineNum">     123</span>              :   absl::StatusOr&lt;RoutineRecord&gt; GetRoutine(const RoutineId&amp; id) const override;</span>
+<span id="L124"><span class="lineNum">     124</span>              :   absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt; ListRoutines(</span>
+<span id="L125"><span class="lineNum">     125</span>              :       const DatasetId&amp; dataset_id) const override;</span>
+<span id="L126"><span class="lineNum">     126</span>              :   absl::StatusOr&lt;std::vector&lt;RoutineRecord&gt;&gt; ListAllRoutines() const override;</span>
+<span id="L127"><span class="lineNum">     127</span>              : </span>
+<span id="L128"><span class="lineNum">     128</span>              :   absl::Status UpsertView(const ViewRecord&amp; record) override;</span>
+<span id="L129"><span class="lineNum">     129</span>              :   absl::Status DeleteView(const ViewId&amp; id) override;</span>
+<span id="L130"><span class="lineNum">     130</span>              :   absl::StatusOr&lt;std::vector&lt;ViewRecord&gt;&gt; ListAllViews() const override;</span>
+<span id="L131"><span class="lineNum">     131</span>              :   absl::StatusOr&lt;TableResourceInfo&gt; GetTableResourceInfo(</span>
+<span id="L132"><span class="lineNum">     132</span>              :       const TableId&amp; id) const override;</span>
+<span id="L133"><span class="lineNum">     133</span>              : </span>
+<span id="L134"><span class="lineNum">     134</span>              :   absl::StatusOr&lt;TableGovernance&gt; GetTableGovernance(</span>
+<span id="L135"><span class="lineNum">     135</span>              :       const TableId&amp; id) const override;</span>
+<span id="L136"><span class="lineNum">     136</span>              :   absl::Status UpsertRowAccessPolicy(</span>
+<span id="L137"><span class="lineNum">     137</span>              :       const TableId&amp; id, const RowAccessPolicyRecord&amp; policy) override;</span>
+<span id="L138"><span class="lineNum">     138</span>              :   absl::Status DeleteRowAccessPolicy(const TableId&amp; id,</span>
+<span id="L139"><span class="lineNum">     139</span>              :                                      absl::string_view policy_id) override;</span>
+<span id="L140"><span class="lineNum">     140</span>              :   absl::Status SetColumnGovernance(</span>
+<span id="L141"><span class="lineNum">     141</span>              :       const TableId&amp; id,</span>
+<span id="L142"><span class="lineNum">     142</span>              :       absl::string_view column_name,</span>
+<span id="L143"><span class="lineNum">     143</span>              :       const ColumnGovernanceRecord&amp; column) override;</span>
+<span id="L144"><span class="lineNum">     144</span>              : </span>
+<span id="L145"><span class="lineNum">     145</span>              :   // Ensures catalog metadata tables (e.g. `__bqemu_routines`) exist.</span>
+<span id="L146"><span class="lineNum">     146</span>              :   // Called from `Open` and idempotently before routine CRUD.</span>
+<span id="L147"><span class="lineNum">     147</span>              :   absl::Status InitCatalogTables();</span>
+<span id="L148"><span class="lineNum">     148</span>              : </span>
+<span id="L149"><span class="lineNum">     149</span>              :   absl::StatusOr&lt;std::string&gt; GetDatasetRestMetadataJson(</span>
+<span id="L150"><span class="lineNum">     150</span>              :       const DatasetId&amp; id) const;</span>
+<span id="L151"><span class="lineNum">     151</span>              : </span>
+<span id="L152"><span class="lineNum">     152</span>              :   // Dataset tombstone helpers (caller must hold mu_).</span>
+<span id="L153"><span class="lineNum">     153</span>              :   absl::Status SnapshotDatasetRegistryForTombstoneLocked(</span>
+<span id="L154"><span class="lineNum">     154</span>              :       const DatasetId&amp; id, const std::filesystem::path&amp; tombstone_dir);</span>
+<span id="L155"><span class="lineNum">     155</span>              :   absl::Status RestoreDatasetRegistryFromTombstoneLocked(</span>
+<span id="L156"><span class="lineNum">     156</span>              :       const DatasetId&amp; id, const std::filesystem::path&amp; tombstone_dir);</span>
+<span id="L157"><span class="lineNum">     157</span>              :   absl::Status PurgeDatasetRegistryRowsLocked(const DatasetId&amp; id);</span>
+<span id="L158"><span class="lineNum">     158</span>              :   absl::StatusOr&lt;std::string&gt; GetDatasetRestMetadataJsonLocked(</span>
+<span id="L159"><span class="lineNum">     159</span>              :       const DatasetId&amp; id) const;</span>
 <span id="L160"><span class="lineNum">     160</span>              : </span>
-<span id="L161"><span class="lineNum">     161</span>              :   absl::Status PutTableGovernance(const TableId&amp; id,</span>
-<span id="L162"><span class="lineNum">     162</span>              :                                   const TableGovernance&amp; gov);</span>
-<span id="L163"><span class="lineNum">     163</span>              : </span>
-<span id="L164"><span class="lineNum">     164</span>              :   // Stable DuckDB schema name for a (project, dataset) pair. We can't</span>
-<span id="L165"><span class="lineNum">     165</span>              :   // just use the dataset_id because two projects may share a dataset</span>
-<span id="L166"><span class="lineNum">     166</span>              :   // id; collapse them into one safe identifier so DuckDB stays happy.</span>
-<span id="L167"><span class="lineNum">     167</span>              :   static std::string DuckDBSchemaName(absl::string_view project_id,</span>
-<span id="L168"><span class="lineNum">     168</span>              :                                       absl::string_view dataset_id);</span>
-<span id="L169"><span class="lineNum">     169</span>              :   static std::string DuckDBSchemaName(const DatasetId&amp; id);</span>
-<span id="L170"><span class="lineNum">     170</span>              : </span>
-<span id="L171"><span class="lineNum">     171</span>              :   std::string data_dir_;</span>
-<span id="L172"><span class="lineNum">     172</span>              :   mutable absl::Mutex mu_;</span>
-<span id="L173"><span class="lineNum">     173</span>              :   // The pointer is set once at construction and never reassigned; the</span>
-<span id="L174"><span class="lineNum">     174</span>              :   // *contents* of the connection are guarded by `mu_` because DuckDB</span>
-<span id="L175"><span class="lineNum">     175</span>              :   // is thread-safe per-connection but the dataset/table directory</span>
-<span id="L176"><span class="lineNum">     176</span>              :   // mutations need to stay coherent with the DuckDB catalog rows we</span>
-<span id="L177"><span class="lineNum">     177</span>              :   // emit alongside them.</span>
-<span id="L178"><span class="lineNum">     178</span>              :   std::unique_ptr&lt;Impl&gt; impl_{};</span>
-<span id="L179"><span class="lineNum">     179</span>              : };</span>
+<span id="L161"><span class="lineNum">     161</span>              :   // Pimpl: keeps the DuckDB C handles out of this header so the</span>
+<span id="L162"><span class="lineNum">     162</span>              :   // engine-agnostic Storage signatures stay enforceable from the</span>
+<span id="L163"><span class="lineNum">     163</span>              :   // include graph alone (callers cannot accidentally reach into</span>
+<span id="L164"><span class="lineNum">     164</span>              :   // `duckdb_database` / `duckdb_connection`). Public so the</span>
+<span id="L165"><span class="lineNum">     165</span>              :   // translation unit's helper functions can take an `Impl*` directly</span>
+<span id="L166"><span class="lineNum">     166</span>              :   // — the struct itself is only ever defined inside duckdb_storage.cc.</span>
+<span id="L167"><span class="lineNum">     167</span>              :   struct Impl;</span>
+<span id="L168"><span class="lineNum">     168</span>              : </span>
+<span id="L169"><span class="lineNum">     169</span>              :  private:</span>
+<span id="L170"><span class="lineNum">     170</span>              :   DuckDBStorage(std::string data_dir, std::unique_ptr&lt;Impl&gt; impl);</span>
+<span id="L171"><span class="lineNum">     171</span>              : </span>
+<span id="L172"><span class="lineNum">     172</span>              :   // Filesystem layout helpers. All take ids by string_view and emit</span>
+<span id="L173"><span class="lineNum">     173</span>              :   // absolute paths under `data_dir_`.</span>
+<span id="L174"><span class="lineNum">     174</span>              :   std::string DatasetDir(absl::string_view project_id,</span>
+<span id="L175"><span class="lineNum">     175</span>              :                          absl::string_view dataset_id) const;</span>
+<span id="L176"><span class="lineNum">     176</span>              :   std::string DatasetDir(const DatasetId&amp; id) const;</span>
+<span id="L177"><span class="lineNum">     177</span>              :   std::string DatasetMetaPath(const DatasetId&amp; id) const;</span>
+<span id="L178"><span class="lineNum">     178</span>              :   std::string TableMetaPath(const TableId&amp; id) const;</span>
+<span id="L179"><span class="lineNum">     179</span>              :   std::string TableParquetPath(const TableId&amp; id) const;</span>
 <span id="L180"><span class="lineNum">     180</span>              : </span>
-<span id="L181"><span class="lineNum">     181</span>              : }  // namespace duckdb</span>
-<span id="L182"><span class="lineNum">     182</span>              : }  // namespace storage</span>
-<span id="L183"><span class="lineNum">     183</span>              : }  // namespace backend</span>
-<span id="L184"><span class="lineNum">     184</span>              : }  // namespace bigquery_emulator</span>
+<span id="L181"><span class="lineNum">     181</span>              :   std::string TableGovernancePath(const TableId&amp; id) const;</span>
+<span id="L182"><span class="lineNum">     182</span>              : </span>
+<span id="L183"><span class="lineNum">     183</span>              :   absl::Status PutTableGovernance(const TableId&amp; id,</span>
+<span id="L184"><span class="lineNum">     184</span>              :                                   const TableGovernance&amp; gov);</span>
 <span id="L185"><span class="lineNum">     185</span>              : </span>
-<span id="L186"><span class="lineNum">     186</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_STORAGE_DUCKDB_DUCKDB_STORAGE_H_</span>
+<span id="L186"><span class="lineNum">     186</span>              :   // Stable DuckDB schema name for a (project, dataset) pair. We can't</span>
+<span id="L187"><span class="lineNum">     187</span>              :   // just use the dataset_id because two projects may share a dataset</span>
+<span id="L188"><span class="lineNum">     188</span>              :   // id; collapse them into one safe identifier so DuckDB stays happy.</span>
+<span id="L189"><span class="lineNum">     189</span>              :   static std::string DuckDBSchemaName(absl::string_view project_id,</span>
+<span id="L190"><span class="lineNum">     190</span>              :                                       absl::string_view dataset_id);</span>
+<span id="L191"><span class="lineNum">     191</span>              :   static std::string DuckDBSchemaName(const DatasetId&amp; id);</span>
+<span id="L192"><span class="lineNum">     192</span>              : </span>
+<span id="L193"><span class="lineNum">     193</span>              :   std::string data_dir_;</span>
+<span id="L194"><span class="lineNum">     194</span>              :   mutable absl::Mutex mu_;</span>
+<span id="L195"><span class="lineNum">     195</span>              :   // The pointer is set once at construction and never reassigned; the</span>
+<span id="L196"><span class="lineNum">     196</span>              :   // *contents* of the connection are guarded by `mu_` because DuckDB</span>
+<span id="L197"><span class="lineNum">     197</span>              :   // is thread-safe per-connection but the dataset/table directory</span>
+<span id="L198"><span class="lineNum">     198</span>              :   // mutations need to stay coherent with the DuckDB catalog rows we</span>
+<span id="L199"><span class="lineNum">     199</span>              :   // emit alongside them.</span>
+<span id="L200"><span class="lineNum">     200</span>              :   std::unique_ptr&lt;Impl&gt; impl_{};</span>
+<span id="L201"><span class="lineNum">     201</span>              : };</span>
+<span id="L202"><span class="lineNum">     202</span>              : </span>
+<span id="L203"><span class="lineNum">     203</span>              : }  // namespace duckdb</span>
+<span id="L204"><span class="lineNum">     204</span>              : }  // namespace storage</span>
+<span id="L205"><span class="lineNum">     205</span>              : }  // namespace backend</span>
+<span id="L206"><span class="lineNum">     206</span>              : }  // namespace bigquery_emulator</span>
+<span id="L207"><span class="lineNum">     207</span>              : </span>
+<span id="L208"><span class="lineNum">     208</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_STORAGE_DUCKDB_DUCKDB_STORAGE_H_</span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -62,37 +62,41 @@
 <pre class="source">
 <span id="L1"><span class="lineNum">       1</span>              : #include &quot;backend/storage/duckdb/duckdb_storage_test_fixture.h&quot;</span>
 <span id="L2"><span class="lineNum">       2</span>              : </span>
-<span id="L3"><span class="lineNum">       3</span>              : #include &quot;backend/storage/duckdb/duckdb_storage.h&quot;</span>
+<span id="L3"><span class="lineNum">       3</span>              : #include &lt;cstdint&gt;</span>
 <span id="L4"><span class="lineNum">       4</span>              : </span>
-<span id="L5"><span class="lineNum">       5</span>              : namespace bigquery_emulator {</span>
-<span id="L6"><span class="lineNum">       6</span>              : namespace backend {</span>
-<span id="L7"><span class="lineNum">       7</span>              : namespace storage {</span>
-<span id="L8"><span class="lineNum">       8</span>              : namespace duckdb {</span>
-<span id="L9"><span class="lineNum">       9</span>              : </span>
-<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC tlaBgGNC">          17 : schema::TableSchema PeopleSchema() {</span></span>
-<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">          17 :   schema::TableSchema s;</span></span>
-<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">          17 :   schema::ColumnSchema id;</span></span>
-<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">          17 :   id.name = &quot;id&quot;;</span></span>
-<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          17 :   id.type = schema::ColumnType::kInt64;</span></span>
-<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          17 :   id.mode = schema::ColumnMode::kRequired;</span></span>
-<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">          17 :   schema::ColumnSchema name;</span></span>
-<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">          17 :   name.name = &quot;name&quot;;</span></span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          17 :   name.type = schema::ColumnType::kString;</span></span>
-<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">          17 :   name.mode = schema::ColumnMode::kNullable;</span></span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">          17 :   s.columns = {id, name};</span></span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          17 :   return s;</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          17 : }</span></span>
-<span id="L23"><span class="lineNum">      23</span>              : </span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">         157 : Row MakePerson(int64_t id, absl::string_view name) {</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">         157 :   Row r;</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">         157 :   r.cells = {Value::Int64(id), Value::String(std::string(name))};</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">         157 :   return r;</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         157 : }</span></span>
-<span id="L29"><span class="lineNum">      29</span>              : </span>
-<span id="L30"><span class="lineNum">      30</span>              : }  // namespace duckdb</span>
-<span id="L31"><span class="lineNum">      31</span>              : }  // namespace storage</span>
-<span id="L32"><span class="lineNum">      32</span>              : }  // namespace backend</span>
-<span id="L33"><span class="lineNum">      33</span>              : }  // namespace bigquery_emulator</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
+<span id="L6"><span class="lineNum">       6</span>              : #include &quot;backend/schema/schema.h&quot;</span>
+<span id="L7"><span class="lineNum">       7</span>              : #include &quot;backend/storage/storage.h&quot;</span>
+<span id="L8"><span class="lineNum">       8</span>              : </span>
+<span id="L9"><span class="lineNum">       9</span>              : namespace bigquery_emulator {</span>
+<span id="L10"><span class="lineNum">      10</span>              : namespace backend {</span>
+<span id="L11"><span class="lineNum">      11</span>              : namespace storage {</span>
+<span id="L12"><span class="lineNum">      12</span>              : namespace duckdb {</span>
+<span id="L13"><span class="lineNum">      13</span>              : </span>
+<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC tlaBgGNC">          19 : schema::TableSchema PeopleSchema() {</span></span>
+<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          19 :   schema::TableSchema s;</span></span>
+<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">          19 :   schema::ColumnSchema id;</span></span>
+<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">          19 :   id.name = &quot;id&quot;;</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          19 :   id.type = schema::ColumnType::kInt64;</span></span>
+<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">          19 :   id.mode = schema::ColumnMode::kRequired;</span></span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">          19 :   schema::ColumnSchema name;</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          19 :   name.name = &quot;name&quot;;</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          19 :   name.type = schema::ColumnType::kString;</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          19 :   name.mode = schema::ColumnMode::kNullable;</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          19 :   s.columns = {id, name};</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          19 :   return s;</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          19 : }</span></span>
+<span id="L27"><span class="lineNum">      27</span>              : </span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         158 : Row MakePerson(int64_t id, absl::string_view name) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">         158 :   Row r;</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         158 :   r.cells = {Value::Int64(id), Value::String(std::string(name))};</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         158 :   return r;</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         158 : }</span></span>
+<span id="L33"><span class="lineNum">      33</span>              : </span>
+<span id="L34"><span class="lineNum">      34</span>              : }  // namespace duckdb</span>
+<span id="L35"><span class="lineNum">      35</span>              : }  // namespace storage</span>
+<span id="L36"><span class="lineNum">      36</span>              : }  // namespace backend</span>
+<span id="L37"><span class="lineNum">      37</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

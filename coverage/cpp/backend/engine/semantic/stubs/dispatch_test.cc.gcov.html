@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">29</td>
-            <td class="headerCovTableEntry">29</td>
+            <td class="headerCovTableEntry">26</td>
+            <td class="headerCovTableEntry">26</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -92,50 +92,47 @@
 <span id="L30"><span class="lineNum">      30</span>              :   // hands that name verbatim to this Dispatch table. A regression</span>
 <span id="L31"><span class="lineNum">      31</span>              :   // that renames the key on either side breaks the round-trip</span>
 <span id="L32"><span class="lineNum">      32</span>              :   // silently; pinning the key here forces an explicit update.</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.new_keyset&quot;,</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :                     {Value::String(&quot;AEAD_AES_GCM_256&quot;)},</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :                     /*return_type=*/nullptr);</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(r-&gt;ok()) &lt;&lt; r-&gt;status();</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().type_kind(), ::googlesql::TYPE_BYTES);</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L40"><span class="lineNum">      40</span>              : </span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, KeysKeysetLengthIsDispatched) {</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.keyset_length&quot;,</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :                     {Value::Bytes(&quot;anything&quot;)},</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :                     /*return_type=*/nullptr);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(r-&gt;ok()) &lt;&lt; r-&gt;status();</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().type_kind(), ::googlesql::TYPE_INT64);</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().int64_value(), 1);</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, UnknownNameReturnsNullopt) {</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;not.a.stub.family&quot;, {}, /*return_type=*/nullptr);</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(r.has_value());</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L55"><span class="lineNum">      55</span>              : </span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, InvalidArgsBubbleUpAsStatus) {</span></span>
-<span id="L57"><span class="lineNum">      57</span>              :   // When the stub fires but the caller passed the wrong type, the</span>
-<span id="L58"><span class="lineNum">      58</span>              :   // dispatch returns `optional&lt;StatusOr&lt;Value&gt;&gt;` with a non-OK</span>
-<span id="L59"><span class="lineNum">      59</span>              :   // status. The caller treats it as &quot;stub fired, evaluation</span>
-<span id="L60"><span class="lineNum">      60</span>              :   // failed&quot; and surfaces the status verbatim -- it does NOT fall</span>
-<span id="L61"><span class="lineNum">      61</span>              :   // through to its own NOT_IMPLEMENTED branch (which would mask a</span>
-<span id="L62"><span class="lineNum">      62</span>              :   // real argument-shape failure as a missing-function error).</span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.new_keyset&quot;,</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 :                     {Value::Int64(7)},</span></span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           1 :                     /*return_type=*/nullptr);</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;status().code(), absl::StatusCode::kInvalidArgument);</span></span>
-<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           1 :   EXPECT_THAT(std::string(r-&gt;status().message()), HasSubstr(&quot;STRING&quot;));</span></span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L70"><span class="lineNum">      70</span>              : </span>
-<span id="L71"><span class="lineNum">      71</span>              : }  // namespace</span>
-<span id="L72"><span class="lineNum">      72</span>              : }  // namespace stubs</span>
-<span id="L73"><span class="lineNum">      73</span>              : }  // namespace semantic</span>
-<span id="L74"><span class="lineNum">      74</span>              : }  // namespace engine</span>
-<span id="L75"><span class="lineNum">      75</span>              : }  // namespace backend</span>
-<span id="L76"><span class="lineNum">      76</span>              : }  // namespace bigquery_emulator</span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :   Value key_type = Value::String(&quot;AEAD_AES_GCM_256&quot;);</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.new_keyset&quot;, {key_type}, /*return_type=*/nullptr);</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(r-&gt;ok()) &lt;&lt; r-&gt;status();</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().type_kind(), ::googlesql::TYPE_BYTES);</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L39"><span class="lineNum">      39</span>              : </span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, KeysKeysetLengthIsDispatched) {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :   Value keyset = Value::Bytes(&quot;anything&quot;);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.keyset_length&quot;, {keyset}, /*return_type=*/nullptr);</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(r-&gt;ok()) &lt;&lt; r-&gt;status();</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().type_kind(), ::googlesql::TYPE_INT64);</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;value().int64_value(), 1);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L48"><span class="lineNum">      48</span>              : </span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, UnknownNameReturnsNullopt) {</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;not.a.stub.family&quot;, {}, /*return_type=*/nullptr);</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(r.has_value());</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L53"><span class="lineNum">      53</span>              : </span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 : TEST(StubDispatchTest, InvalidArgsBubbleUpAsStatus) {</span></span>
+<span id="L55"><span class="lineNum">      55</span>              :   // When the stub fires but the caller passed the wrong type, the</span>
+<span id="L56"><span class="lineNum">      56</span>              :   // dispatch returns `optional&lt;StatusOr&lt;Value&gt;&gt;` with a non-OK</span>
+<span id="L57"><span class="lineNum">      57</span>              :   // status. The caller treats it as &quot;stub fired, evaluation</span>
+<span id="L58"><span class="lineNum">      58</span>              :   // failed&quot; and surfaces the status verbatim -- it does NOT fall</span>
+<span id="L59"><span class="lineNum">      59</span>              :   // through to its own NOT_IMPLEMENTED branch (which would mask a</span>
+<span id="L60"><span class="lineNum">      60</span>              :   // real argument-shape failure as a missing-function error).</span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           1 :   Value wrong_type = Value::Int64(7);</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           1 :   auto r = Dispatch(&quot;keys.new_keyset&quot;, {wrong_type}, /*return_type=*/nullptr);</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(r.has_value());</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 :   EXPECT_EQ(r-&gt;status().code(), absl::StatusCode::kInvalidArgument);</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           1 :   EXPECT_THAT(std::string(r-&gt;status().message()), HasSubstr(&quot;STRING&quot;));</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L67"><span class="lineNum">      67</span>              : </span>
+<span id="L68"><span class="lineNum">      68</span>              : }  // namespace</span>
+<span id="L69"><span class="lineNum">      69</span>              : }  // namespace stubs</span>
+<span id="L70"><span class="lineNum">      70</span>              : }  // namespace semantic</span>
+<span id="L71"><span class="lineNum">      71</span>              : }  // namespace engine</span>
+<span id="L72"><span class="lineNum">      72</span>              : }  // namespace backend</span>
+<span id="L73"><span class="lineNum">      73</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

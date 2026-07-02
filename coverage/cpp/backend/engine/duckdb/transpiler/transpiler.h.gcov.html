@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -436,8 +436,8 @@
 <span id="L374"><span class="lineNum">     374</span>              :   // index `i` is the 0-based DuckDB placeholder slot (slot `i` is</span>
 <span id="L375"><span class="lineNum">     375</span>              :   // `$&lt;i+1&gt;`). Named parameter lookups go through</span>
 <span id="L376"><span class="lineNum">     376</span>              :   // `name_to_slot_` for dedup; positional ones always append.</span>
-<span id="L377"><span class="lineNum">     377</span>              :   std::vector&lt;ParameterRef&gt; parameter_order_;</span>
-<span id="L378"><span class="lineNum">     378</span>              :   absl::flat_hash_map&lt;std::string, int&gt; name_to_slot_;</span>
+<span id="L377"><span class="lineNum">     377</span>              :   std::vector&lt;ParameterRef&gt; parameter_order_{};</span>
+<span id="L378"><span class="lineNum">     378</span>              :   absl::flat_hash_map&lt;std::string, int&gt; name_to_slot_{};</span>
 <span id="L379"><span class="lineNum">     379</span>              : </span>
 <span id="L380"><span class="lineNum">     380</span>              :   // Stack of `WITH RECURSIVE` CTE contexts. `EmitWithScan` pushes</span>
 <span id="L381"><span class="lineNum">     381</span>              :   // one entry per recursive CTE before lowering its body; the</span>
@@ -451,38 +451,47 @@
 <span id="L389"><span class="lineNum">     389</span>              :     std::string cte_name;</span>
 <span id="L390"><span class="lineNum">     390</span>              :     std::vector&lt;std::string&gt; column_names;</span>
 <span id="L391"><span class="lineNum">     391</span>              :   };</span>
-<span id="L392"><span class="lineNum">     392</span>              :   std::vector&lt;RecursiveCteContext&gt; recursive_cte_stack_;</span>
+<span id="L392"><span class="lineNum">     392</span>              :   std::vector&lt;RecursiveCteContext&gt; recursive_cte_stack_{};</span>
 <span id="L393"><span class="lineNum">     393</span>              : </span>
 <span id="L394"><span class="lineNum">     394</span>              :   // Set when the immediately-wrapped scan emit is a JOIN that projects</span>
 <span id="L395"><span class="lineNum">     395</span>              :   // analyzer columns under `__bq_j_&lt;column_id&gt;` aliases.</span>
 <span id="L396"><span class="lineNum">     396</span>              :   bool join_output_uses_id_aliases_ = false;</span>
-<span id="L397"><span class="lineNum">     397</span>              : </span>
-<span id="L398"><span class="lineNum">     398</span>              :   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST</span>
-<span id="L399"><span class="lineNum">     399</span>              :   // ordinality or an explicit row_number() stamp).</span>
-<span id="L400"><span class="lineNum">     400</span>              :   bool input_has_rn_column_ = false;</span>
-<span id="L401"><span class="lineNum">     401</span>              :   // Set when the final query needs ORDER BY using `__bq_input_rn` /</span>
-<span id="L402"><span class="lineNum">     402</span>              :   // analytic output order (window queries only).</span>
-<span id="L403"><span class="lineNum">     403</span>              :   bool input_rn_ordering_ = false;</span>
-<span id="L404"><span class="lineNum">     404</span>              :   // Final ORDER BY keys derived from the first analytic group's</span>
-<span id="L405"><span class="lineNum">     405</span>              :   // PARTITION BY / ORDER BY spec (BigQuery result ordering).</span>
-<span id="L406"><span class="lineNum">     406</span>              :   std::vector&lt;std::string&gt; output_order_items_;</span>
-<span id="L407"><span class="lineNum">     407</span>              :   // True when the user-visible SELECT list includes `__bq_input_rn`.</span>
-<span id="L408"><span class="lineNum">     408</span>              :   bool output_includes_input_rn_ = false;</span>
-<span id="L409"><span class="lineNum">     409</span>              :   // Suppresses appending `__bq_input_rn` to ProjectScan output when</span>
-<span id="L410"><span class="lineNum">     410</span>              :   // lowering the inner scan of a subquery expression (IN/SCALAR/...).</span>
-<span id="L411"><span class="lineNum">     411</span>              :   bool suppress_rn_in_project_ = false;</span>
-<span id="L412"><span class="lineNum">     412</span>              :   // User-visible output column names from `ResolvedQueryStmt`; used to</span>
-<span id="L413"><span class="lineNum">     413</span>              :   // decide whether PARTITION BY keys belong in the final ORDER BY.</span>
-<span id="L414"><span class="lineNum">     414</span>              :   std::vector&lt;std::string&gt; query_output_column_names_;</span>
-<span id="L415"><span class="lineNum">     415</span>              : };</span>
-<span id="L416"><span class="lineNum">     416</span>              : </span>
-<span id="L417"><span class="lineNum">     417</span>              : }  // namespace transpiler</span>
-<span id="L418"><span class="lineNum">     418</span>              : }  // namespace duckdb</span>
-<span id="L419"><span class="lineNum">     419</span>              : }  // namespace engine</span>
-<span id="L420"><span class="lineNum">     420</span>              : }  // namespace backend</span>
-<span id="L421"><span class="lineNum">     421</span>              : }  // namespace bigquery_emulator</span>
-<span id="L422"><span class="lineNum">     422</span>              : </span>
-<span id="L423"><span class="lineNum">     423</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
+<span id="L397"><span class="lineNum">     397</span>              :   // Sticky for the current query: any JOIN in the scan tree used id</span>
+<span id="L398"><span class="lineNum">     398</span>              :   // aliases, so analytic-captured ORDER BY keys must remap by column_id.</span>
+<span id="L399"><span class="lineNum">     399</span>              :   bool join_id_aliases_in_query_ = false;</span>
+<span id="L400"><span class="lineNum">     400</span>              :   // True while the active scan subtree still exposes join output as</span>
+<span id="L401"><span class="lineNum">     401</span>              :   // __bq_j_&lt;column_id&gt; (cleared when a computed ProjectScan renames).</span>
+<span id="L402"><span class="lineNum">     402</span>              :   bool join_output_columns_use_id_aliases_ = false;</span>
+<span id="L403"><span class="lineNum">     403</span>              : </span>
+<span id="L404"><span class="lineNum">     404</span>              :   // Set when the transpiled scan tree exposes `__bq_input_rn` (UNNEST</span>
+<span id="L405"><span class="lineNum">     405</span>              :   // ordinality or an explicit row_number() stamp).</span>
+<span id="L406"><span class="lineNum">     406</span>              :   bool input_has_rn_column_ = false;</span>
+<span id="L407"><span class="lineNum">     407</span>              :   // Set when the final query needs ORDER BY using `__bq_input_rn` /</span>
+<span id="L408"><span class="lineNum">     408</span>              :   // analytic output order (window queries only).</span>
+<span id="L409"><span class="lineNum">     409</span>              :   bool input_rn_ordering_ = false;</span>
+<span id="L410"><span class="lineNum">     410</span>              :   // Final ORDER BY keys derived from the first analytic group's</span>
+<span id="L411"><span class="lineNum">     411</span>              :   // PARTITION BY / ORDER BY spec (BigQuery result ordering).</span>
+<span id="L412"><span class="lineNum">     412</span>              :   std::vector&lt;std::string&gt; output_order_items_{};</span>
+<span id="L413"><span class="lineNum">     413</span>              :   // Parallel `ResolvedColumn::column_id()` for each output_order_items_</span>
+<span id="L414"><span class="lineNum">     414</span>              :   // entry; -1 when the key is not a simple column ref (expr / rn).</span>
+<span id="L415"><span class="lineNum">     415</span>              :   std::vector&lt;int&gt; output_order_column_ids_{};</span>
+<span id="L416"><span class="lineNum">     416</span>              :   // True when the user-visible SELECT list includes `__bq_input_rn`.</span>
+<span id="L417"><span class="lineNum">     417</span>              :   bool output_includes_input_rn_ = false;</span>
+<span id="L418"><span class="lineNum">     418</span>              :   // Suppresses appending `__bq_input_rn` to ProjectScan output when</span>
+<span id="L419"><span class="lineNum">     419</span>              :   // lowering the inner scan of a subquery expression (IN/SCALAR/...).</span>
+<span id="L420"><span class="lineNum">     420</span>              :   bool suppress_rn_in_project_ = false;</span>
+<span id="L421"><span class="lineNum">     421</span>              :   // User-visible output column names from `ResolvedQueryStmt`; used to</span>
+<span id="L422"><span class="lineNum">     422</span>              :   // decide whether PARTITION BY keys belong in the final ORDER BY.</span>
+<span id="L423"><span class="lineNum">     423</span>              :   std::vector&lt;std::string&gt; query_output_column_names_{};</span>
+<span id="L424"><span class="lineNum">     424</span>              : };</span>
+<span id="L425"><span class="lineNum">     425</span>              : </span>
+<span id="L426"><span class="lineNum">     426</span>              : }  // namespace transpiler</span>
+<span id="L427"><span class="lineNum">     427</span>              : }  // namespace duckdb</span>
+<span id="L428"><span class="lineNum">     428</span>              : }  // namespace engine</span>
+<span id="L429"><span class="lineNum">     429</span>              : }  // namespace backend</span>
+<span id="L430"><span class="lineNum">     430</span>              : }  // namespace bigquery_emulator</span>
+<span id="L431"><span class="lineNum">     431</span>              : </span>
+<span id="L432"><span class="lineNum">     432</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_H_</span>
         </pre>
               </td>
             </tr>

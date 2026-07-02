@@ -167,7 +167,7 @@
 				
 				<option value="file55">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/types.go (24.8%)</option>
 				
-				<option value="file56">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire.go (63.1%)</option>
+				<option value="file56">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire.go (60.9%)</option>
 				
 				<option value="file57">github.com/vantaboard/bigquery-emulator/gateway/bqtypes/wire_compat.go (36.7%)</option>
 				
@@ -3515,8 +3515,8 @@ func scanDataDirRoot(dataDir string) (hasCatalog bool, legacyDB []string, readEr
         if err != nil </span><span class="cov0" title="0">{
                 return false, nil, fmt.Sprintf("WARN: cannot read --data-dir %q: %v", dataDir, err)
         }</span>
-        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="14">{
-                if e.IsDir() </span><span class="cov7" title="12">{
+        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="13">{
+                if e.IsDir() </span><span class="cov7" title="11">{
                         continue</span>
                 }
                 <span class="cov2" title="2">name := e.Name()
@@ -7235,7 +7235,7 @@ func multisetsEqual(a, b map[string]int) bool <span class="cov4" title="3">{
         if len(a) != len(b) </span><span class="cov1" title="1">{
                 return false
         }</span>
-        <span class="cov3" title="2">for k, v := range a </span><span class="cov5" title="4">{
+        <span class="cov3" title="2">for k, v := range a </span><span class="cov4" title="3">{
                 if b[k] != v </span><span class="cov1" title="1">{
                         return false
                 }</span>
@@ -12217,44 +12217,44 @@ import (
 // all marshal consistently.
 //
 // A nil input cell is treated as NULL.
-func ValueToCell(c *enginepb.Cell) Cell <span class="cov10" title="51">{
-        if c == nil </span><span class="cov1" title="1">{
+func ValueToC</span><span class="cov1" title="1">ell(c *enginepb.Cell) Cell {
+        if c == nil {
+                </span>return Cell{V: nil}
+        <span class="cov9" title="50">}
+</span>        switch v := c.GetValue().(type) <span class="cov9" title="35">{
+        case *enginepb.Cell_StringValu</span>e:
+                return Cell{V: v.StringValue}<span class="cov4" title="5">
+        case *enginepb.Cell_</span>NullValue:
                 return Cell{V: nil}
-        }</span>
-        <span class="cov9" title="50">switch v := c.GetValue().(type) </span>{
-        case *enginepb.Cell_StringValue:<span class="cov9" title="35">
-                return Cell{V: v.StringValue}</span>
-        case *enginepb.Cell_NullValue:<span class="cov4" title="5">
-                return Cell{V: nil}</span>
-        case *enginepb.Cell_Array:<span class="cov4" title="5">
+        case *enginepb.Cell_Array:
                 elements := v.Array.GetElements()
-                out := make([]Cell, 0, len(elements))
-                for _, el := range elements </span><span class="cov6" title="9">{
-                        out = append(out, ValueToCell(el))
-                }</span>
-                <span class="cov4" title="5">return Cell{V: out}</span>
-        case *enginepb.Cell_StructValue:<span class="cov4" title="5">
+                out := make([]Cell, 0, len(e</span><span class="cov6" title="9">lements))
+                for _, el := range elements {
+                        </span>out = append(out, ValueToCell(el))
+                <span class="cov4" title="5">}
+</span>                return Cell{V: out}
+        case *enginepb.Cell_StructValue:
                 fields := v.StructValue.GetFields()
-                out := make([]Cell, 0, len(fields))
-                for _, f := range fields </span><span class="cov6" title="11">{
-                        out = append(out, ValueToCell(f))
-                }</span>
-                <span class="cov4" title="5">return Cell{V: Row{F: out}}</span>
-        default:<span class="cov0" title="0">
-                return Cell{V: nil}</span>
+                out := make([]Cell, 0, le</span><span class="cov6" title="11">n(fields))
+                for _, f := range fields {
+                        </span>out = append(out, ValueToCell(f))
+                <span class="cov4" title="5">}
+</span>                return <span class="cov0" title="0">Cell{V: Row{F: out}}
+        default:
+</span>                return Cell{V: nil}
         }
 }
 
 // CellsToRow lowers a flat slice of engine cells into the top-level
 // `f`/`v` Row shape BigQuery REST clients expect. Top-level rows are
 // always Row-shaped; a STRUCT column nested inside the row becomes a
-// Cell whose `v` is itself a Row (handled by ValueToCell).
-func CellsToRow(cells []*enginepb.Cell) Row <span class="cov2" title="2">{
-        out := Row{F: make([]Cell, 0, len(cells))}
-        for _, c := range cells </span><span class="cov4" title="4">{
-                out.F = append(out.F, ValueToCell(c))
-        }</span>
-        <span class="cov2" title="2">return out</span>
+// Cell whose `v` is itself a Row (handled b<span class="cov2" title="2">y ValueToCell).
+func CellsToRow(cells []*enginepb.Cell) Row {
+        out := Row{F: make([]Cel</span><span class="cov4" title="4">l, 0, len(cells))}
+        for _, c := range cells {
+                </span>out.F = append(out.F, ValueToCell(c))
+        <span class="cov2" title="2">}
+</span>        return out
 }
 
 // WireFormatOptions controls optional REST wire-shape adjustments for
@@ -12271,144 +12271,144 @@ type WireFormatOptions struct {
 func CellsToRowForSchema(
         cells []*enginepb.Cell,
         schema *enginepb.TableSchema,
-        opts ...WireFormatOptions,
-) Row <span class="cov1" title="1">{
-        var format WireFormatOptions
-        if len(opts) &gt; 0 </span><span class="cov0" title="0">{
-                format = opts[0]
-        }</span>
-        <span class="cov1" title="1">fields := []*enginepb.FieldSchema(nil)
-        if schema != nil </span><span class="cov1" title="1">{
-                fields = schema.GetFields()
-        }</span>
-        <span class="cov1" title="1">out := Row{F: make([]Cell, 0, len(cells))}
-        for i, c := range cells </span><span class="cov1" title="1">{
-                var field *enginepb.FieldSchema
-                if i &lt; len(fields) </span><span class="cov1" title="1">{
-                        field = fields[i]
-                }</span>
-                <span class="cov1" title="1">out.F = append(out.F, encodeCellForField(ValueToCell(c), field, format))</span>
-        }
-        <span class="cov1" title="1">return out</span>
+        opts <span class="cov1" title="1">...WireFormatOptions,
+) Row {
+        var format WireFo</span><span class="cov0" title="0">rmatOptions
+        if len(opts) &gt; 0 {
+                </span>format = opts[0]
+        <span class="cov1" title="1">}
+        fields := []*engi</span><span class="cov1" title="1">nepb.FieldSchema(nil)
+        if schema != nil {
+                </span>fields = schema.GetFields()
+        <span class="cov1" title="1">}
+        out := Row{F: make([]Cel</span><span class="cov1" title="1">l, 0, len(cells))}
+        for i, c := range cells {
+                var field *enginepb</span><span class="cov1" title="1">.FieldSchema
+                if i &lt; len(fields) {
+                        </span>field = fields[i]
+                <span class="cov1" title="1">}
+</span>                out.F = append(out.F, encodeCellForField(ValueToCell(c), field, format))
+        <span class="cov1" title="1">}
+</span>        return out
 }
 
-func encodeCellForField(cell Cell, field *enginepb.FieldSchema, format WireFormatOptions) Cell <span class="cov1" title="1">{
-        if cell.V == nil || field == nil </span><span class="cov0" title="0">{
-                return cell
-        }</span>
-        <span class="cov1" title="1">fieldType := field.GetType()
-        if strings.HasPrefix(fieldType, "ARRAY&lt;") </span><span class="cov0" title="0">{
-                elements, ok := cell.V.([]Cell)
-                if !ok </span><span class="cov0" title="0">{
-                        return cell
-                }</span>
-                <span class="cov0" title="0">elemField := arrayElementFieldSchema(field)
-                out := make([]Cell, len(elements))
-                for i, el := range elements </span><span class="cov0" title="0">{
-                        out[i] = encodeCellForField(el, elemField, format)
-                }</span>
-                <span class="cov0" title="0">return Cell{V: out}</span>
-        }
-        <span class="cov1" title="1">switch fieldType </span>{
-        case "TIMESTAMP":<span class="cov1" title="1">
-                s, ok := cell.V.(string)
-                if !ok </span><span class="cov0" title="0">{
-                        return cell
-                }</span>
-                <span class="cov1" title="1">if strings.TrimSpace(s) == "" </span><span class="cov0" title="0">{
-                        return Cell{V: nil}
-                }</span>
-                <span class="cov1" title="1">if micros, err := TimestampStringToMicros(s); err == nil </span><span class="cov1" title="1">{
-                        if format.UseInt64Timestamp </span><span class="cov0" title="0">{
-                                if n, parseErr := strconv.ParseInt(micros, 10, 64); parseErr == nil </span><span class="cov0" title="0">{
-                                        return Cell{V: n}
-                                }</span>
-                        }
-                        <span class="cov1" title="1">return Cell{V: micros}</span>
-                }
-                <span class="cov0" title="0">return cell</span>
-        case "STRUCT", "RECORD":<span class="cov0" title="0">
-                row, ok := cell.V.(Row)
-                if !ok </span><span class="cov0" title="0">{
-                        return cell
-                }</span>
-                <span class="cov0" title="0">subFields := field.GetFields()
-                out := make([]Cell, len(row.F))
-                for i, subCell := range row.F </span><span class="cov0" title="0">{
-                        var subField *enginepb.FieldSchema
-                        if i &lt; len(subFields) </span><span class="cov0" title="0">{
-                                subField = subFields[i]
-                        }</span>
-                        <span class="cov0" title="0">out[i] = encodeCellForField(subCell, subField, format)</span>
-                }
-                <span class="cov0" title="0">return Cell{V: Row{F: out}}</span>
-        default:<span class="cov0" title="0">
-                return cell</span>
+func encodeCellForField(cell Cell,</span><span class="cov0" title="0"> field *enginepb.FieldSchema, format WireFormatOptions) Cell {
+        if cell.V == nil || field == nil {
+                </span>return cell
+        <span class="cov1" title="1">}
+        fieldType := field.GetType()
+</span>        if strings.HasPrefix(fieldType, "ARRAY&lt;") {
+                element</span><span class="cov0" title="0">s, ok := cell.V.([]Cell)
+                if !ok {
+                        </span>return cell
+                <span class="cov0" title="0">}
+                elemField := arrayElementFieldSchema(field)
+                out := make([]Cell, len(elem</span><span class="cov0" title="0">ents))
+                for i, el := range elements {
+                        </span>out[i] = encodeCellForField(el, elemField, format)
+                <span class="cov0" title="0">}
+</span>                return Cell{V: out}
+        <span class="cov1" title="1">}
+</span>        switch fieldType <span class="cov1" title="1">{
+        case "TIMESTAMP":
+                s, ok :</span><span class="cov0" title="0">= cell.V.(string)
+                if !ok {
+                        </span>return cell
+                <span class="cov1" title="1">}
+</span>                if strings.TrimSpace(s) == "" {
+                        </span>return Cell{V: nil}
+                <span class="cov1" title="1">}
+</span>                if micros, err := TimestampSt</span><span class="cov0" title="0">ringToMicros(s); err == nil {
+                        if format.UseInt64Timestamp {
+</span>                                if n, parseErr := strconv.ParseInt(micros, 10, 64); parseErr == nil {
+                                        </span>return Cell{V: n}
+                                }
+                        <span class="cov1" title="1">}
+</span>                        return Cell{V: micros}
+                <span class="cov0" title="0">}
+</span>                return cell
+        case "STRUCT", "RECORD":
+                row, ok</span><span class="cov0" title="0"> := cell.V.(Row)
+                if !ok {
+                        </span>return cell
+                <span class="cov0" title="0">}
+                subFields := field.GetFields()
+                out := make([]Cell, len(row.F)</span><span class="cov0" title="0">)
+                for i, subCell := range row.F {
+                        var subField *enginepb</span><span class="cov0" title="0">.FieldSchema
+                        if i &lt; len(subFields) {
+                                </span>subField = subFields[i]
+                        <span class="cov0" title="0">}
+</span>                        out[i] = encodeCellForField(subCell, subField, format)
+                <span class="cov0" title="0">}
+</span>                return <span class="cov0" title="0">Cell{V: Row{F: out}}
+        default:
+</span>                return cell
         }
 }
 
-func arrayElementFieldSchema(field *enginepb.FieldSchema) *enginepb.FieldSchema <span class="cov0" title="0">{
+func arrayElementFieldSchema(field *enginepb.FieldSchema) *enginepb.FieldSchema {
         t := field.GetType()
-        if !strings.HasPrefix(t, "ARRAY&lt;") </span><span class="cov0" title="0">{
-                return field
-        }</span>
-        <span class="cov0" title="0">inner := strings.TrimSuffix(strings.TrimPrefix(t, "ARRAY&lt;"), "&gt;")
-        return &amp;enginepb.FieldSchema{Type: inner}</span>
+</span>        if !strings.HasPrefix(t, "ARRAY&lt;") {
+                </span>return field
+        <span class="cov0" title="0">}
+        inner := strings.TrimSuffix(strings.TrimP</span>refix(t, "ARRAY&lt;"), "&gt;")
+        return &amp;enginepb.FieldSchema{Type: inner}
 }
 
 // TimestampStringToMicros parses an engine TIMESTAMP wire string and
 // returns the BigQuery REST query-result encoding: decimal microseconds
 // since 1970-01-01 UTC.
-func TimestampStringToMicros(s string) (string, error) <span class="cov5" title="8">{
-        s = strings.TrimSpace(s)
-        if s == "" </span><span class="cov0" title="0">{
-                return "", errors.New("empty timestamp")
-        }</span>
+func TimestampStringToMicros(s string) (string, error) {
+        s = strings.Tr</span><span class="cov0" title="0">imSpace(s)
+        if s == "" {
+                </span>return "", errors.New("empty timestamp")
+        <span class="cov5" title="7">}
         // Storage Read and some engine paths already emit epoch micros as decimal digits.
-        <span class="cov5" title="8">if isDecimalIntString(s) </span><span class="cov1" title="1">{
-                return s, nil
-        }</span>
-        <span class="cov5" title="7">t, err := parseTimestampWireString(s)
-        if err != nil </span><span class="cov0" title="0">{
+        if isDecimalIntString(s) {
+</span>                return s, nil
+        }
+        t, err := parseTimestampWireString(s)
+        if err != nil {
                 return "", err
-        }</span>
-        <span class="cov5" title="7">utc := t.UTC()
+        }
+        utc := t.UTC()
         micros := utc.Unix()*1_000_000 + int64(utc.Nanosecond()/1000)
-        return strconv.FormatInt(micros, 10), nil</span>
+        return strconv.FormatInt(micros, 10), nil
 }
 
-func parseTimestampWireString(s string) (time.Time, error) <span class="cov5" title="7">{
+func parseTimestampWireString(s string) (time.Time, error) {
         s = strings.TrimSpace(s)
         s = strings.Replace(s, "T", " ", 1)
-        s = strings.Replace(s, "+00:00", "+00", 1)
+        s = strings.Replace(s, "+00:00"</span><span class="cov5" title="7">, "+00", 1)
         s = strings.Replace(s, "Z", "+00", 1)
-        layouts := []string{
+        layouts := []st</span><span class="cov5" title="7">ring{
                 "2006-01-02 15:04:05.999999-07",
-                "2006-01-02 15:04:05-07",
-                "2006-01-02 15:04:05.999999",
+                "</span>2006-01-02 15:04:05-07",
+                <span class="cov0" title="0">"2006-01-02 1</span>5:04:05.999999",
                 "2006-01-02 15:04:05",
-        }
-        var lastErr error
-        for _, layout := range layouts </span><span class="cov5" title="7">{
+        <span class="cov0" title="0">}
+</span>        var lastErr error
+        for _, layout := range layouts {
                 t, err := time.Parse(layout, s)
-                if err == nil </span><span class="cov5" title="7">{
+                if err == nil {
                         return t, nil
-                }</span>
-                <span class="cov0" title="0">lastErr = err</span>
+                }
+                lastErr = err
         }
-        <span class="cov0" title="0">return time.Time{}, lastErr</span>
+        return time.Time{}, lastErr
 }
 
-func isDecimalIntString(s string) bool <span class="cov5" title="8">{
-        if s == "" </span><span class="cov0" title="0">{
+func isDecimalIntString(s string) bool {
+        if s == "" {
                 return false
-        }</span>
-        <span class="cov5" title="8">for _, r := range s </span><span class="cov9" title="50">{
-                if r &lt; '0' || r &gt; '9' </span><span class="cov5" title="7">{
-                        return false
-                }</span>
         }
-        <span class="cov1" title="1">return true</span>
+        for _, r := range s {
+                if r &lt; '0' || r &gt; '9' {
+                        return false
+                }
+        }
+        return true
 }
 </pre>
 		
@@ -43627,7 +43627,7 @@ func PublicDataRefsFullySeeded(text string) bool <span class="cov5" title="10">{
         for _, t := range SeededPublicTables </span><span class="cov10" title="70">{
                 seeded[t] = struct{}{}
         }</span>
-        <span class="cov5" title="10">for ref := range refs </span><span class="cov5" title="10">{
+        <span class="cov5" title="10">for ref := range refs </span><span class="cov6" title="11">{
                 if _, ok := seeded[ref]; !ok </span><span class="cov2" title="2">{
                         return false
                 }</span>
@@ -48066,7 +48066,7 @@ func summarizeByFile(findings []tidyFinding, failedFiles map[string]struct{}) []
         for _, s := range byFile </span><span class="cov7" title="5">{
                 out = append(out, *s)
         }</span>
-        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov5" title="3">{ return out[i].File &lt; out[j].File }</span>)
+        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov6" title="4">{ return out[i].File &lt; out[j].File }</span>)
         <span class="cov3" title="2">return out</span>
 }
 

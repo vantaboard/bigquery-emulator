@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">25.4&nbsp;%</td>
-            <td class="headerCovTableEntry">118</td>
+            <td class="headerCovTableEntryLo">25.9&nbsp;%</td>
+            <td class="headerCovTableEntry">116</td>
             <td class="headerCovTableEntry">30</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-20 05:07:15</td>
+            <td class="headerValue">2026-07-02 15:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">41.7&nbsp;%</td>
@@ -94,17 +94,17 @@
 <span id="L32"><span class="lineNum">      32</span>              : // Double-quote escape a DuckDB identifier. DuckDB doubles embedded</span>
 <span id="L33"><span class="lineNum">      33</span>              : // `&quot;` characters; we do the same so column / table names with quotes</span>
 <span id="L34"><span class="lineNum">      34</span>              : // or hyphens round-trip safely through the emitted SQL.</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        1208 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        1208 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        1208 : }</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        2843 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        2843 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        2843 : }</span></span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span>              : // Single-quote escape a DuckDB string literal. DuckDB doubles embedded</span>
 <span id="L40"><span class="lineNum">      40</span>              : // `'` characters; we do the same so BQ string literals with embedded</span>
 <span id="L41"><span class="lineNum">      41</span>              : // apostrophes round-trip safely. Used for both ResolvedLiteral</span>
 <span id="L42"><span class="lineNum">      42</span>              : // strings and for STRUCT field-name keys in `{'k': v}` literals.</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          55 : inline std::string QuoteString(absl::string_view text) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          55 :   return absl::StrCat(&quot;'&quot;, absl::StrReplaceAll(text, {{&quot;'&quot;, &quot;''&quot;}}), &quot;'&quot;);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          55 : }</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          65 : inline std::string QuoteString(absl::string_view text) {</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          65 :   return absl::StrCat(&quot;'&quot;, absl::StrReplaceAll(text, {{&quot;'&quot;, &quot;''&quot;}}), &quot;'&quot;);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          65 : }</span></span>
 <span id="L46"><span class="lineNum">      46</span>              : </span>
 <span id="L47"><span class="lineNum">      47</span>              : inline std::string ResolveFunctionName(const ::googlesql::Function* fn) {</span>
 <span id="L48"><span class="lineNum">      48</span>              :   if (fn == nullptr) return &quot;&quot;;</span>
@@ -385,123 +385,155 @@
 <span id="L323"><span class="lineNum">     323</span> <span class="tlaUNC">           0 :   return item.substr(0, end + 1);</span></span>
 <span id="L324"><span class="lineNum">     324</span> <span class="tlaUNC">           0 : }</span></span>
 <span id="L325"><span class="lineNum">     325</span>              : </span>
-<span id="L326"><span class="lineNum">     326</span>              : inline bool OutputListContainsColumn(</span>
-<span id="L327"><span class="lineNum">     327</span>              :     absl::string_view quoted_col, const ::googlesql::ResolvedQueryStmt* node) {</span>
-<span id="L328"><span class="lineNum">     328</span>              :   if (node == nullptr) return false;</span>
-<span id="L329"><span class="lineNum">     329</span>              :   for (int i = 0; i &lt; node-&gt;output_column_list_size(); ++i) {</span>
-<span id="L330"><span class="lineNum">     330</span>              :     const ::googlesql::ResolvedOutputColumn* out = node-&gt;output_column_list(i);</span>
-<span id="L331"><span class="lineNum">     331</span>              :     if (out == nullptr) continue;</span>
-<span id="L332"><span class="lineNum">     332</span>              :     if (quoted_col == QuoteIdent(out-&gt;column().name())) return true;</span>
-<span id="L333"><span class="lineNum">     333</span>              :   }</span>
-<span id="L334"><span class="lineNum">     334</span>              :   return false;</span>
-<span id="L335"><span class="lineNum">     335</span>              : }</span>
-<span id="L336"><span class="lineNum">     336</span>              : </span>
-<span id="L337"><span class="lineNum">     337</span>              : inline std::vector&lt;std::string&gt; ExtraOrderColumnsForWrap(</span>
-<span id="L338"><span class="lineNum">     338</span>              :     const std::vector&lt;std::string&gt;&amp; order_items,</span>
-<span id="L339"><span class="lineNum">     339</span>              :     const ::googlesql::ResolvedQueryStmt* node) {</span>
-<span id="L340"><span class="lineNum">     340</span>              :   std::vector&lt;std::string&gt; extra;</span>
-<span id="L341"><span class="lineNum">     341</span>              :   for (const std::string&amp; item : order_items) {</span>
-<span id="L342"><span class="lineNum">     342</span>              :     const std::string col = OrderItemLeadingColumn(item);</span>
-<span id="L343"><span class="lineNum">     343</span>              :     if (col.empty() || col == QuoteIdent(kBqInputRnCol)) continue;</span>
-<span id="L344"><span class="lineNum">     344</span>              :     if (OutputListContainsColumn(col, node)) continue;</span>
-<span id="L345"><span class="lineNum">     345</span>              :     if (std::find(extra.begin(), extra.end(), col) == extra.end()) {</span>
-<span id="L346"><span class="lineNum">     346</span>              :       extra.push_back(col);</span>
-<span id="L347"><span class="lineNum">     347</span>              :     }</span>
-<span id="L348"><span class="lineNum">     348</span>              :   }</span>
-<span id="L349"><span class="lineNum">     349</span>              :   return extra;</span>
-<span id="L350"><span class="lineNum">     350</span>              : }</span>
-<span id="L351"><span class="lineNum">     351</span>              : </span>
-<span id="L352"><span class="lineNum">     352</span>              : inline std::vector&lt;std::string&gt; FilterOutputOrderItems(</span>
-<span id="L353"><span class="lineNum">     353</span>              :     const std::vector&lt;std::string&gt;&amp; items,</span>
-<span id="L354"><span class="lineNum">     354</span> <span class="tlaUNC">           0 :     const ::googlesql::ResolvedQueryStmt* node) {</span></span>
-<span id="L355"><span class="lineNum">     355</span> <span class="tlaUNC">           0 :   if (node == nullptr) return {};</span></span>
-<span id="L356"><span class="lineNum">     356</span> <span class="tlaUNC">           0 :   std::vector&lt;std::string&gt; filtered;</span></span>
-<span id="L357"><span class="lineNum">     357</span> <span class="tlaUNC">           0 :   filtered.reserve(items.size());</span></span>
-<span id="L358"><span class="lineNum">     358</span> <span class="tlaUNC">           0 :   for (const std::string&amp; item : items) {</span></span>
-<span id="L359"><span class="lineNum">     359</span> <span class="tlaUNC">           0 :     if (item.empty() || item[0] != '&quot;') continue;</span></span>
-<span id="L360"><span class="lineNum">     360</span> <span class="tlaUNC">           0 :     const size_t end = item.find('&quot;', 1);</span></span>
-<span id="L361"><span class="lineNum">     361</span> <span class="tlaUNC">           0 :     if (end == std::string::npos) continue;</span></span>
-<span id="L362"><span class="lineNum">     362</span> <span class="tlaUNC">           0 :     const std::string quoted_col = item.substr(0, end + 1);</span></span>
-<span id="L363"><span class="lineNum">     363</span> <span class="tlaUNC">           0 :     for (int i = 0; i &lt; node-&gt;output_column_list_size(); ++i) {</span></span>
-<span id="L364"><span class="lineNum">     364</span> <span class="tlaUNC">           0 :       const ::googlesql::ResolvedOutputColumn* out =</span></span>
-<span id="L365"><span class="lineNum">     365</span> <span class="tlaUNC">           0 :           node-&gt;output_column_list(i);</span></span>
-<span id="L366"><span class="lineNum">     366</span> <span class="tlaUNC">           0 :       if (out == nullptr) continue;</span></span>
-<span id="L367"><span class="lineNum">     367</span> <span class="tlaUNC">           0 :       if (quoted_col == QuoteIdent(out-&gt;column().name())) {</span></span>
-<span id="L368"><span class="lineNum">     368</span> <span class="tlaUNC">           0 :         filtered.push_back(item);</span></span>
-<span id="L369"><span class="lineNum">     369</span> <span class="tlaUNC">           0 :         break;</span></span>
-<span id="L370"><span class="lineNum">     370</span> <span class="tlaUNC">           0 :       }</span></span>
-<span id="L371"><span class="lineNum">     371</span> <span class="tlaUNC">           0 :     }</span></span>
-<span id="L372"><span class="lineNum">     372</span> <span class="tlaUNC">           0 :   }</span></span>
-<span id="L373"><span class="lineNum">     373</span> <span class="tlaUNC">           0 :   return filtered;</span></span>
-<span id="L374"><span class="lineNum">     374</span> <span class="tlaUNC">           0 : }</span></span>
-<span id="L375"><span class="lineNum">     375</span>              : </span>
-<span id="L376"><span class="lineNum">     376</span>              : // `CASE val WHEN w1 THEN t1 ... ELSE e END` for analyzer `$case_with_value`.</span>
-<span id="L377"><span class="lineNum">     377</span> <span class="tlaUNC">           0 : inline std::string EmitCaseWithValue(const std::vector&lt;std::string&gt;&amp; args) {</span></span>
-<span id="L378"><span class="lineNum">     378</span> <span class="tlaUNC">           0 :   if (args.size() &lt; 2 || (args.size() % 2) != 0) return &quot;&quot;;</span></span>
-<span id="L379"><span class="lineNum">     379</span> <span class="tlaUNC">           0 :   std::string sql = absl::StrCat(&quot;CASE &quot;, args[0], &quot; &quot;);</span></span>
-<span id="L380"><span class="lineNum">     380</span> <span class="tlaUNC">           0 :   for (size_t i = 1; i + 1 &lt; args.size(); i += 2) {</span></span>
-<span id="L381"><span class="lineNum">     381</span> <span class="tlaUNC">           0 :     absl::StrAppend(&amp;sql, &quot;WHEN &quot;, args[i], &quot; THEN &quot;, args[i + 1], &quot; &quot;);</span></span>
-<span id="L382"><span class="lineNum">     382</span> <span class="tlaUNC">           0 :   }</span></span>
-<span id="L383"><span class="lineNum">     383</span> <span class="tlaUNC">           0 :   absl::StrAppend(&amp;sql, &quot;ELSE &quot;, args.back(), &quot; END&quot;);</span></span>
-<span id="L384"><span class="lineNum">     384</span> <span class="tlaUNC">           0 :   return sql;</span></span>
-<span id="L385"><span class="lineNum">     385</span> <span class="tlaUNC">           0 : }</span></span>
-<span id="L386"><span class="lineNum">     386</span>              : </span>
-<span id="L387"><span class="lineNum">     387</span>              : // `CASE WHEN c1 THEN t1 ... ELSE e END` for analyzer `$case_no_value`.</span>
-<span id="L388"><span class="lineNum">     388</span> <span class="tlaUNC">           0 : inline std::string EmitCaseNoValue(const std::vector&lt;std::string&gt;&amp; args) {</span></span>
-<span id="L389"><span class="lineNum">     389</span> <span class="tlaUNC">           0 :   if (args.size() &lt; 1 || (args.size() % 2) == 0) return &quot;&quot;;</span></span>
-<span id="L390"><span class="lineNum">     390</span> <span class="tlaUNC">           0 :   std::string sql = &quot;CASE &quot;;</span></span>
-<span id="L391"><span class="lineNum">     391</span> <span class="tlaUNC">           0 :   for (size_t i = 0; i + 1 &lt; args.size(); i += 2) {</span></span>
-<span id="L392"><span class="lineNum">     392</span> <span class="tlaUNC">           0 :     absl::StrAppend(&amp;sql, &quot;WHEN &quot;, args[i], &quot; THEN &quot;, args[i + 1], &quot; &quot;);</span></span>
-<span id="L393"><span class="lineNum">     393</span> <span class="tlaUNC">           0 :   }</span></span>
-<span id="L394"><span class="lineNum">     394</span> <span class="tlaUNC">           0 :   absl::StrAppend(&amp;sql, &quot;ELSE &quot;, args.back(), &quot; END&quot;);</span></span>
-<span id="L395"><span class="lineNum">     395</span> <span class="tlaUNC">           0 :   return sql;</span></span>
-<span id="L396"><span class="lineNum">     396</span> <span class="tlaUNC">           0 : }</span></span>
-<span id="L397"><span class="lineNum">     397</span>              : </span>
-<span id="L398"><span class="lineNum">     398</span>              : inline bool SupportsOrderedAggregateModifiers(absl::string_view name) {</span>
-<span id="L399"><span class="lineNum">     399</span>              :   return name == &quot;array_agg&quot; || name == &quot;string_agg&quot; ||</span>
-<span id="L400"><span class="lineNum">     400</span>              :          name == &quot;array_concat_agg&quot;;</span>
-<span id="L401"><span class="lineNum">     401</span>              : }</span>
-<span id="L402"><span class="lineNum">     402</span>              : </span>
-<span id="L403"><span class="lineNum">     403</span>              : inline bool SupportsAnalyticNullHandling(absl::string_view name) {</span>
-<span id="L404"><span class="lineNum">     404</span>              :   return name == &quot;first_value&quot; || name == &quot;last_value&quot; || name == &quot;nth_value&quot;;</span>
-<span id="L405"><span class="lineNum">     405</span>              : }</span>
-<span id="L406"><span class="lineNum">     406</span>              : </span>
-<span id="L407"><span class="lineNum">     407</span>              : inline std::string AnalyticNullHandlingSuffix(</span>
-<span id="L408"><span class="lineNum">     408</span>              :     const ::googlesql::ResolvedAnalyticFunctionCall* node) {</span>
-<span id="L409"><span class="lineNum">     409</span>              :   if (node == nullptr) return &quot;&quot;;</span>
-<span id="L410"><span class="lineNum">     410</span>              :   switch (node-&gt;null_handling_modifier()) {</span>
-<span id="L411"><span class="lineNum">     411</span>              :     case ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS:</span>
-<span id="L412"><span class="lineNum">     412</span>              :       return &quot; IGNORE NULLS&quot;;</span>
-<span id="L413"><span class="lineNum">     413</span>              :     case ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS:</span>
-<span id="L414"><span class="lineNum">     414</span>              :       return &quot; RESPECT NULLS&quot;;</span>
-<span id="L415"><span class="lineNum">     415</span>              :     default:</span>
-<span id="L416"><span class="lineNum">     416</span>              :       return &quot;&quot;;</span>
-<span id="L417"><span class="lineNum">     417</span>              :   }</span>
-<span id="L418"><span class="lineNum">     418</span>              : }</span>
-<span id="L419"><span class="lineNum">     419</span>              : </span>
-<span id="L420"><span class="lineNum">     420</span>              : inline std::string AppendArrayAggNullFilter(absl::string_view body,</span>
-<span id="L421"><span class="lineNum">     421</span>              :                                             absl::string_view arg,</span>
-<span id="L422"><span class="lineNum">     422</span>              :                                             bool ignore_nulls) {</span>
-<span id="L423"><span class="lineNum">     423</span>              :   if (!ignore_nulls) return std::string(body);</span>
-<span id="L424"><span class="lineNum">     424</span>              :   return absl::StrCat(body, &quot; FILTER (WHERE &quot;, arg, &quot; IS NOT NULL)&quot;);</span>
-<span id="L425"><span class="lineNum">     425</span>              : }</span>
-<span id="L426"><span class="lineNum">     426</span>              : </span>
-<span id="L427"><span class="lineNum">     427</span>              : bool ScanTreeContainsAnalytic(const ::googlesql::ResolvedScan* scan);</span>
-<span id="L428"><span class="lineNum">     428</span>              : bool AnalyticOrderNeedsInputRn(</span>
-<span id="L429"><span class="lineNum">     429</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
-<span id="L430"><span class="lineNum">     430</span>              : bool AnalyticGroupNeedsInputRnForEmptyOrder(</span>
-<span id="L431"><span class="lineNum">     431</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
-<span id="L432"><span class="lineNum">     432</span>              : bool AnalyticGroupHasRangeFrame(</span>
-<span id="L433"><span class="lineNum">     433</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
-<span id="L434"><span class="lineNum">     434</span>              : bool AggregateScanNeedsInputRn(const ::googlesql::ResolvedAggregateScan* node);</span>
-<span id="L435"><span class="lineNum">     435</span>              : }  // namespace internal</span>
-<span id="L436"><span class="lineNum">     436</span>              : }  // namespace transpiler</span>
-<span id="L437"><span class="lineNum">     437</span>              : }  // namespace duckdb</span>
-<span id="L438"><span class="lineNum">     438</span>              : }  // namespace engine</span>
-<span id="L439"><span class="lineNum">     439</span>              : }  // namespace backend</span>
-<span id="L440"><span class="lineNum">     440</span>              : }  // namespace bigquery_emulator</span>
-<span id="L441"><span class="lineNum">     441</span>              : </span>
-<span id="L442"><span class="lineNum">     442</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_INTERNAL_H_</span>
+<span id="L326"><span class="lineNum">     326</span>              : inline std::string RemapOrderItemForJoinAliases(const std::string&amp; item,</span>
+<span id="L327"><span class="lineNum">     327</span>              :                                                 int column_id,</span>
+<span id="L328"><span class="lineNum">     328</span>              :                                                 bool join_id_aliases) {</span>
+<span id="L329"><span class="lineNum">     329</span>              :   if (!join_id_aliases || column_id &lt; 0) return item;</span>
+<span id="L330"><span class="lineNum">     330</span>              :   const std::string leading = OrderItemLeadingColumn(item);</span>
+<span id="L331"><span class="lineNum">     331</span>              :   if (leading.empty()) return item;</span>
+<span id="L332"><span class="lineNum">     332</span>              :   return absl::StrCat(JoinColumnIdAlias(column_id),</span>
+<span id="L333"><span class="lineNum">     333</span>              :                       item.substr(leading.size()));</span>
+<span id="L334"><span class="lineNum">     334</span>              : }</span>
+<span id="L335"><span class="lineNum">     335</span>              : </span>
+<span id="L336"><span class="lineNum">     336</span>              : inline std::string OrderColumnExprForWrap(const std::string&amp; quoted_name,</span>
+<span id="L337"><span class="lineNum">     337</span>              :                                           int column_id,</span>
+<span id="L338"><span class="lineNum">     338</span>              :                                           bool join_id_aliases) {</span>
+<span id="L339"><span class="lineNum">     339</span>              :   if (join_id_aliases &amp;&amp; column_id &gt;= 0) {</span>
+<span id="L340"><span class="lineNum">     340</span>              :     return JoinColumnIdAlias(column_id);</span>
+<span id="L341"><span class="lineNum">     341</span>              :   }</span>
+<span id="L342"><span class="lineNum">     342</span>              :   return quoted_name;</span>
+<span id="L343"><span class="lineNum">     343</span>              : }</span>
+<span id="L344"><span class="lineNum">     344</span>              : </span>
+<span id="L345"><span class="lineNum">     345</span>              : inline bool OutputListContainsColumn(</span>
+<span id="L346"><span class="lineNum">     346</span>              :     absl::string_view quoted_col, const ::googlesql::ResolvedQueryStmt* node) {</span>
+<span id="L347"><span class="lineNum">     347</span>              :   if (node == nullptr) return false;</span>
+<span id="L348"><span class="lineNum">     348</span>              :   for (int i = 0; i &lt; node-&gt;output_column_list_size(); ++i) {</span>
+<span id="L349"><span class="lineNum">     349</span>              :     const ::googlesql::ResolvedOutputColumn* out = node-&gt;output_column_list(i);</span>
+<span id="L350"><span class="lineNum">     350</span>              :     if (out == nullptr) continue;</span>
+<span id="L351"><span class="lineNum">     351</span>              :     if (quoted_col == QuoteIdent(out-&gt;column().name())) return true;</span>
+<span id="L352"><span class="lineNum">     352</span>              :   }</span>
+<span id="L353"><span class="lineNum">     353</span>              :   return false;</span>
+<span id="L354"><span class="lineNum">     354</span>              : }</span>
+<span id="L355"><span class="lineNum">     355</span>              : </span>
+<span id="L356"><span class="lineNum">     356</span>              : inline std::vector&lt;std::string&gt; ExtraOrderColumnsForWrap(</span>
+<span id="L357"><span class="lineNum">     357</span>              :     const std::vector&lt;std::string&gt;&amp; order_items,</span>
+<span id="L358"><span class="lineNum">     358</span>              :     const ::googlesql::ResolvedQueryStmt* node,</span>
+<span id="L359"><span class="lineNum">     359</span>              :     const std::vector&lt;int&gt;* order_column_ids = nullptr,</span>
+<span id="L360"><span class="lineNum">     360</span> <span class="tlaUNC">           0 :     bool join_id_aliases = false) {</span></span>
+<span id="L361"><span class="lineNum">     361</span> <span class="tlaUNC">           0 :   std::vector&lt;std::string&gt; extra;</span></span>
+<span id="L362"><span class="lineNum">     362</span> <span class="tlaUNC">           0 :   for (size_t i = 0; i &lt; order_items.size(); ++i) {</span></span>
+<span id="L363"><span class="lineNum">     363</span> <span class="tlaUNC">           0 :     const std::string&amp; item = order_items[i];</span></span>
+<span id="L364"><span class="lineNum">     364</span> <span class="tlaUNC">           0 :     const std::string col = OrderItemLeadingColumn(item);</span></span>
+<span id="L365"><span class="lineNum">     365</span> <span class="tlaUNC">           0 :     if (col.empty() || col == QuoteIdent(kBqInputRnCol)) continue;</span></span>
+<span id="L366"><span class="lineNum">     366</span> <span class="tlaUNC">           0 :     if (OutputListContainsColumn(col, node)) continue;</span></span>
+<span id="L367"><span class="lineNum">     367</span> <span class="tlaUNC">           0 :     const int column_id =</span></span>
+<span id="L368"><span class="lineNum">     368</span> <span class="tlaUNC">           0 :         order_column_ids != nullptr &amp;&amp; i &lt; order_column_ids-&gt;size()</span></span>
+<span id="L369"><span class="lineNum">     369</span> <span class="tlaUNC">           0 :             ? (*order_column_ids)[i]</span></span>
+<span id="L370"><span class="lineNum">     370</span> <span class="tlaUNC">           0 :             : -1;</span></span>
+<span id="L371"><span class="lineNum">     371</span> <span class="tlaUNC">           0 :     const std::string proj =</span></span>
+<span id="L372"><span class="lineNum">     372</span> <span class="tlaUNC">           0 :         OrderColumnExprForWrap(col, column_id, join_id_aliases);</span></span>
+<span id="L373"><span class="lineNum">     373</span> <span class="tlaUNC">           0 :     if (std::find(extra.begin(), extra.end(), proj) == extra.end()) {</span></span>
+<span id="L374"><span class="lineNum">     374</span> <span class="tlaUNC">           0 :       extra.push_back(proj);</span></span>
+<span id="L375"><span class="lineNum">     375</span> <span class="tlaUNC">           0 :     }</span></span>
+<span id="L376"><span class="lineNum">     376</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L377"><span class="lineNum">     377</span> <span class="tlaUNC">           0 :   return extra;</span></span>
+<span id="L378"><span class="lineNum">     378</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L379"><span class="lineNum">     379</span>              : </span>
+<span id="L380"><span class="lineNum">     380</span>              : // Drop implicit ORDER BY keys that are not projected by a column-reducing</span>
+<span id="L381"><span class="lineNum">     381</span>              : // scan (e.g. SELECT DISTINCT / GROUP BY after an analytic dedup window).</span>
+<span id="L382"><span class="lineNum">     382</span>              : inline void FilterOutputOrderItemsByProjectedColumns(</span>
+<span id="L383"><span class="lineNum">     383</span>              :     std::vector&lt;std::string&gt;* order_items,</span>
+<span id="L384"><span class="lineNum">     384</span>              :     std::vector&lt;int&gt;* order_column_ids,</span>
+<span id="L385"><span class="lineNum">     385</span>              :     const absl::flat_hash_set&lt;std::string&gt;&amp; projected_quoted_names) {</span>
+<span id="L386"><span class="lineNum">     386</span>              :   if (order_items == nullptr || order_items-&gt;empty()) return;</span>
+<span id="L387"><span class="lineNum">     387</span>              :   std::vector&lt;std::string&gt; filtered;</span>
+<span id="L388"><span class="lineNum">     388</span>              :   std::vector&lt;int&gt; filtered_ids;</span>
+<span id="L389"><span class="lineNum">     389</span>              :   filtered.reserve(order_items-&gt;size());</span>
+<span id="L390"><span class="lineNum">     390</span>              :   filtered_ids.reserve(order_items-&gt;size());</span>
+<span id="L391"><span class="lineNum">     391</span>              :   for (size_t i = 0; i &lt; order_items-&gt;size(); ++i) {</span>
+<span id="L392"><span class="lineNum">     392</span>              :     const std::string col = OrderItemLeadingColumn((*order_items)[i]);</span>
+<span id="L393"><span class="lineNum">     393</span>              :     if (col.empty()) continue;</span>
+<span id="L394"><span class="lineNum">     394</span>              :     if (projected_quoted_names.contains(col)) {</span>
+<span id="L395"><span class="lineNum">     395</span>              :       filtered.push_back((*order_items)[i]);</span>
+<span id="L396"><span class="lineNum">     396</span>              :       filtered_ids.push_back(order_column_ids != nullptr &amp;&amp;</span>
+<span id="L397"><span class="lineNum">     397</span>              :                                      i &lt; order_column_ids-&gt;size()</span>
+<span id="L398"><span class="lineNum">     398</span>              :                                  ? (*order_column_ids)[i]</span>
+<span id="L399"><span class="lineNum">     399</span>              :                                  : -1);</span>
+<span id="L400"><span class="lineNum">     400</span>              :     }</span>
+<span id="L401"><span class="lineNum">     401</span>              :   }</span>
+<span id="L402"><span class="lineNum">     402</span>              :   *order_items = std::move(filtered);</span>
+<span id="L403"><span class="lineNum">     403</span>              :   if (order_column_ids != nullptr) {</span>
+<span id="L404"><span class="lineNum">     404</span>              :     *order_column_ids = std::move(filtered_ids);</span>
+<span id="L405"><span class="lineNum">     405</span>              :   }</span>
+<span id="L406"><span class="lineNum">     406</span>              : }</span>
+<span id="L407"><span class="lineNum">     407</span>              : </span>
+<span id="L408"><span class="lineNum">     408</span>              : // `CASE val WHEN w1 THEN t1 ... ELSE e END` for analyzer `$case_with_value`.</span>
+<span id="L409"><span class="lineNum">     409</span> <span class="tlaUNC">           0 : inline std::string EmitCaseWithValue(const std::vector&lt;std::string&gt;&amp; args) {</span></span>
+<span id="L410"><span class="lineNum">     410</span> <span class="tlaUNC">           0 :   if (args.size() &lt; 2 || (args.size() % 2) != 0) return &quot;&quot;;</span></span>
+<span id="L411"><span class="lineNum">     411</span> <span class="tlaUNC">           0 :   std::string sql = absl::StrCat(&quot;CASE &quot;, args[0], &quot; &quot;);</span></span>
+<span id="L412"><span class="lineNum">     412</span> <span class="tlaUNC">           0 :   for (size_t i = 1; i + 1 &lt; args.size(); i += 2) {</span></span>
+<span id="L413"><span class="lineNum">     413</span> <span class="tlaUNC">           0 :     absl::StrAppend(&amp;sql, &quot;WHEN &quot;, args[i], &quot; THEN &quot;, args[i + 1], &quot; &quot;);</span></span>
+<span id="L414"><span class="lineNum">     414</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L415"><span class="lineNum">     415</span> <span class="tlaUNC">           0 :   absl::StrAppend(&amp;sql, &quot;ELSE &quot;, args.back(), &quot; END&quot;);</span></span>
+<span id="L416"><span class="lineNum">     416</span> <span class="tlaUNC">           0 :   return sql;</span></span>
+<span id="L417"><span class="lineNum">     417</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L418"><span class="lineNum">     418</span>              : </span>
+<span id="L419"><span class="lineNum">     419</span>              : // `CASE WHEN c1 THEN t1 ... ELSE e END` for analyzer `$case_no_value`.</span>
+<span id="L420"><span class="lineNum">     420</span> <span class="tlaUNC">           0 : inline std::string EmitCaseNoValue(const std::vector&lt;std::string&gt;&amp; args) {</span></span>
+<span id="L421"><span class="lineNum">     421</span> <span class="tlaUNC">           0 :   if (args.size() &lt; 1 || (args.size() % 2) == 0) return &quot;&quot;;</span></span>
+<span id="L422"><span class="lineNum">     422</span> <span class="tlaUNC">           0 :   std::string sql = &quot;CASE &quot;;</span></span>
+<span id="L423"><span class="lineNum">     423</span> <span class="tlaUNC">           0 :   for (size_t i = 0; i + 1 &lt; args.size(); i += 2) {</span></span>
+<span id="L424"><span class="lineNum">     424</span> <span class="tlaUNC">           0 :     absl::StrAppend(&amp;sql, &quot;WHEN &quot;, args[i], &quot; THEN &quot;, args[i + 1], &quot; &quot;);</span></span>
+<span id="L425"><span class="lineNum">     425</span> <span class="tlaUNC">           0 :   }</span></span>
+<span id="L426"><span class="lineNum">     426</span> <span class="tlaUNC">           0 :   absl::StrAppend(&amp;sql, &quot;ELSE &quot;, args.back(), &quot; END&quot;);</span></span>
+<span id="L427"><span class="lineNum">     427</span> <span class="tlaUNC">           0 :   return sql;</span></span>
+<span id="L428"><span class="lineNum">     428</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L429"><span class="lineNum">     429</span>              : </span>
+<span id="L430"><span class="lineNum">     430</span>              : inline bool SupportsOrderedAggregateModifiers(absl::string_view name) {</span>
+<span id="L431"><span class="lineNum">     431</span>              :   return name == &quot;array_agg&quot; || name == &quot;string_agg&quot; ||</span>
+<span id="L432"><span class="lineNum">     432</span>              :          name == &quot;array_concat_agg&quot;;</span>
+<span id="L433"><span class="lineNum">     433</span>              : }</span>
+<span id="L434"><span class="lineNum">     434</span>              : </span>
+<span id="L435"><span class="lineNum">     435</span>              : inline bool SupportsAnalyticNullHandling(absl::string_view name) {</span>
+<span id="L436"><span class="lineNum">     436</span>              :   return name == &quot;first_value&quot; || name == &quot;last_value&quot; || name == &quot;nth_value&quot;;</span>
+<span id="L437"><span class="lineNum">     437</span>              : }</span>
+<span id="L438"><span class="lineNum">     438</span>              : </span>
+<span id="L439"><span class="lineNum">     439</span>              : inline std::string AnalyticNullHandlingSuffix(</span>
+<span id="L440"><span class="lineNum">     440</span>              :     const ::googlesql::ResolvedAnalyticFunctionCall* node) {</span>
+<span id="L441"><span class="lineNum">     441</span>              :   if (node == nullptr) return &quot;&quot;;</span>
+<span id="L442"><span class="lineNum">     442</span>              :   switch (node-&gt;null_handling_modifier()) {</span>
+<span id="L443"><span class="lineNum">     443</span>              :     case ::googlesql::ResolvedNonScalarFunctionCallBase::IGNORE_NULLS:</span>
+<span id="L444"><span class="lineNum">     444</span>              :       return &quot; IGNORE NULLS&quot;;</span>
+<span id="L445"><span class="lineNum">     445</span>              :     case ::googlesql::ResolvedNonScalarFunctionCallBase::RESPECT_NULLS:</span>
+<span id="L446"><span class="lineNum">     446</span>              :       return &quot; RESPECT NULLS&quot;;</span>
+<span id="L447"><span class="lineNum">     447</span>              :     default:</span>
+<span id="L448"><span class="lineNum">     448</span>              :       return &quot;&quot;;</span>
+<span id="L449"><span class="lineNum">     449</span>              :   }</span>
+<span id="L450"><span class="lineNum">     450</span>              : }</span>
+<span id="L451"><span class="lineNum">     451</span>              : </span>
+<span id="L452"><span class="lineNum">     452</span>              : inline std::string AppendArrayAggNullFilter(absl::string_view body,</span>
+<span id="L453"><span class="lineNum">     453</span>              :                                             absl::string_view arg,</span>
+<span id="L454"><span class="lineNum">     454</span>              :                                             bool ignore_nulls) {</span>
+<span id="L455"><span class="lineNum">     455</span>              :   if (!ignore_nulls) return std::string(body);</span>
+<span id="L456"><span class="lineNum">     456</span>              :   return absl::StrCat(body, &quot; FILTER (WHERE &quot;, arg, &quot; IS NOT NULL)&quot;);</span>
+<span id="L457"><span class="lineNum">     457</span>              : }</span>
+<span id="L458"><span class="lineNum">     458</span>              : </span>
+<span id="L459"><span class="lineNum">     459</span>              : bool ScanTreeContainsAnalytic(const ::googlesql::ResolvedScan* scan);</span>
+<span id="L460"><span class="lineNum">     460</span>              : bool AnalyticOrderNeedsInputRn(</span>
+<span id="L461"><span class="lineNum">     461</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
+<span id="L462"><span class="lineNum">     462</span>              : bool AnalyticGroupNeedsInputRnForEmptyOrder(</span>
+<span id="L463"><span class="lineNum">     463</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
+<span id="L464"><span class="lineNum">     464</span>              : bool AnalyticGroupHasRangeFrame(</span>
+<span id="L465"><span class="lineNum">     465</span>              :     const ::googlesql::ResolvedAnalyticFunctionGroup* group);</span>
+<span id="L466"><span class="lineNum">     466</span>              : bool AggregateScanNeedsInputRn(const ::googlesql::ResolvedAggregateScan* node);</span>
+<span id="L467"><span class="lineNum">     467</span>              : }  // namespace internal</span>
+<span id="L468"><span class="lineNum">     468</span>              : }  // namespace transpiler</span>
+<span id="L469"><span class="lineNum">     469</span>              : }  // namespace duckdb</span>
+<span id="L470"><span class="lineNum">     470</span>              : }  // namespace engine</span>
+<span id="L471"><span class="lineNum">     471</span>              : }  // namespace backend</span>
+<span id="L472"><span class="lineNum">     472</span>              : }  // namespace bigquery_emulator</span>
+<span id="L473"><span class="lineNum">     473</span>              : </span>
+<span id="L474"><span class="lineNum">     474</span>              : #endif  // BIGQUERY_EMULATOR_BACKEND_ENGINE_DUCKDB_TRANSPILER_TRANSPILER_INTERNAL_H_</span>
         </pre>
               </td>
             </tr>
