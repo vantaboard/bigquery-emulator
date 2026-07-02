@@ -49,11 +49,19 @@
          <lastmod>2026-07-02</lastmod>
     </url>
     <url>
+         <loc>https://vantaboard.github.io/bigquery-emulator/guides/external-query/</loc>
+         <lastmod>2026-07-02</lastmod>
+    </url>
+    <url>
          <loc>https://vantaboard.github.io/bigquery-emulator/guides/load-jobs/</loc>
          <lastmod>2026-07-02</lastmod>
     </url>
     <url>
          <loc>https://vantaboard.github.io/bigquery-emulator/guides/multi-language/</loc>
+         <lastmod>2026-07-02</lastmod>
+    </url>
+    <url>
+         <loc>https://vantaboard.github.io/bigquery-emulator/guides/python-udfs/</loc>
          <lastmod>2026-07-02</lastmod>
     </url>
 </urlset>

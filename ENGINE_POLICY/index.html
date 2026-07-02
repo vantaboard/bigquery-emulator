@@ -717,6 +717,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#external-query-and-federated-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      External query and federated sources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#google-sheets-external-tables" class="md-nav__link">
     <span class="md-ellipsis">
       Google Sheets external tables
@@ -1007,6 +1016,15 @@
   <a href="#bigquery-storage-grpc-engine-bigquery_emulatorv1" class="md-nav__link">
     <span class="md-ellipsis">
       BigQuery Storage gRPC (engine bigquery_emulator.v1.*)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-query-and-federated-sources" class="md-nav__link">
+    <span class="md-ellipsis">
+      External query and federated sources
     </span>
   </a>
   
@@ -1363,7 +1381,7 @@ summary the unsupported error envelope points at. Per-family posture
 <tr>
 <td>Python UDFs (<code>CREATE FUNCTION ... LANGUAGE python</code>)</td>
 <td><code>local_impl</code></td>
-<td><code>CREATE FUNCTION ... LANGUAGE python</code> registers through <code>python_udf_registry.cc</code>, persists the DDL in <code>DuckDBStorage</code>, and evaluates scalar bodies at call time on the semantic executor via a sandboxed <code>python3</code> subprocess (<code>python_udf_runtime.cc</code>) so <code>routines.get</code> round-trips and call-time execution match. Pinned by <code>conformance/fixtures/udf/python_scalar_add.yaml</code>; <code>cw_xml_extract</code> promoted in bqutils <code>passing/</code>. <code>CREATE AGGREGATE FUNCTION ... LANGUAGE python</code> and <code>CREATE TABLE FUNCTION ... LANGUAGE python</code> are <strong>not</strong> a production BigQuery surface (bq dry-run rejects both); the emulator surfaces the same analyzer-time envelopes, pinned by <code>conformance/fixtures/udf/python_udaf_rejected.yaml</code> and <code>python_tvf_rejected.yaml</code>. Arbitrary <code>packages</code> pip installs remain unsupported.</td>
+<td><code>CREATE FUNCTION ... LANGUAGE python</code> registers through <code>python_udf_registry.cc</code>, persists the DDL in <code>DuckDBStorage</code>, and evaluates scalar bodies at call time on the semantic executor via a sandboxed <code>python3</code> subprocess (<code>python_udf_runtime.cc</code>) so <code>routines.get</code> round-trips and call-time execution match. Pinned by <code>conformance/fixtures/udf/python_scalar_add.yaml</code>; <code>cw_xml_extract</code> promoted in bqutils <code>passing/</code>. <code>CREATE AGGREGATE FUNCTION ... LANGUAGE python</code> and <code>CREATE TABLE FUNCTION ... LANGUAGE python</code> are <strong>not</strong> a production BigQuery surface (bq dry-run rejects both); the emulator surfaces the same analyzer-time envelopes, pinned by <code>conformance/fixtures/udf/python_udaf_rejected.yaml</code> and <code>python_tvf_rejected.yaml</code>. Declared <code>packages</code> resolve against <code>BIGQUERY_EMULATOR_PYTHON</code>, then <code>$data_dir/python-udf-env/</code>, then host <code>python3</code>; missing packages fail with a structured error (not a traceback). Operator provisioning: <code>task python-udf:provision</code> with <code>BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1</code> — see <code>docs/guides/python-udfs.md</code>. Pinned by <code>conformance/fixtures/udf/python_packages_lxml.yaml</code> and <code>python_packages_missing.yaml</code>.</td>
 </tr>
 <tr>
 <td>SQL scalar UDFs (<code>CREATE FUNCTION ... AS (...)</code>), including <code>ANY TYPE</code> templated parameters</td>
@@ -1618,7 +1636,7 @@ services the Go sample suites exercise:</p>
 </tr>
 <tr>
 <td><code>google.cloud.bigquery.connection.v1.ConnectionService</code></td>
-<td>Shallow list/create/get stubs (<code>gateway/handlers/bqconnection/</code>)</td>
+<td>CRUD + persistence under <code>$data_dir/external/connections/_registry/</code> (<code>gateway/handlers/bqconnection/</code>); <code>EXTERNAL_QUERY</code> is fixture-backed only</td>
 </tr>
 <tr>
 <td><code>google.cloud.bigquery.reservation.v1.ReservationService</code></td>
@@ -1637,6 +1655,47 @@ services the Go sample suites exercise:</p>
 <p>Set <code>BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT</code> to the same host:port when
 samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
 <code>BIGQUERY_STORAGE_GRPC_ENDPOINT</code> via <code>bqopts.BigQueryV2GRPCClientOptions()</code>.</p>
+<h2 id="external-query-and-federated-sources">External query and federated sources<a class="headerlink" href="#external-query-and-federated-sources" title="Permanent link">&para;</a></h2>
+<p><code>EXTERNAL_QUERY(connection, query)</code> is <strong>fixture-backed only</strong> — the emulator
+never opens live federation sockets to Cloud SQL, Spanner, or AlloyDB. Snapshot
+layout, manifest format, and operator workflow are documented in
+<a href="../guides/external-query/"><code>docs/guides/external-query.md</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Posture</th>
+<th>Conformance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EXTERNAL_QUERY</code> TVF</td>
+<td><code>semantic_executor</code>; schema + rows from <code>$data_dir/external/connections/&lt;id&gt;/</code></td>
+<td><code>conformance/fixtures/external/external_query_fixture.yaml</code>, <code>external_query_missing_fixture.yaml</code></td>
+</tr>
+<tr>
+<td>Connection API metadata</td>
+<td>Persisted JSON registry; property blocks round-trip</td>
+<td><code>gateway/handlers/bqconnection/grpc_test.go</code></td>
+</tr>
+<tr>
+<td>BigLake tables (<code>biglakeConfiguration</code>)</td>
+<td><code>501 notImplemented</code> with ENGINE_POLICY link</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Object tables (<code>objectTableOptions</code> / <code>OBJECT_TABLE</code>)</td>
+<td><code>501 notImplemented</code> with ENGINE_POLICY link</td>
+<td>—</td>
+</tr>
+<tr>
+<td>External datasets (<code>externalDatasetReference</code>)</td>
+<td><code>501 notImplemented</code> with ENGINE_POLICY link</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
 <h2 id="google-sheets-external-tables">Google Sheets external tables<a class="headerlink" href="#google-sheets-external-tables" title="Permanent link">&para;</a></h2>
 <p>Google Sheets external tables (<code>GOOGLE_SHEETS</code> / <code>googleSheetsOptions</code>) are
 materialized at insert / <code>tableDefinitions</code> time through

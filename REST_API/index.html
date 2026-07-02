@@ -1387,6 +1387,12 @@ per-project metadata.</p>
 </tr>
 </tbody>
 </table>
+<p><strong><code>datasets.undelete</code> semantics:</strong> Restores the newest soft-deleted tombstone
+for the dataset (same 7-day window as table time travel). Restores member
+tables, views, routines, row-access policies, and gateway REST metadata
+(labels, <code>friendlyName</code>, …) captured at delete time. Returns <strong>409</strong>
+(<code>alreadyExists</code>) when a live dataset with the same id already exists.
+There is no <code>deletedTime</code> selector — only the newest tombstone is restored.</p>
 <p><strong>Dataset metadata:</strong> REST-only fields (<code>friendlyName</code>, <code>description</code>,
 <code>labels</code>, <code>defaultCollation</code>, <code>defaultTableExpirationMs</code>,
 <code>defaultPartitionExpirationMs</code>, <code>defaultRoundingMode</code>,
@@ -1422,50 +1428,23 @@ non-empty dataset returns <strong>400</strong> (<code>failedPrecondition</code>)
 <td>done</td>
 <td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableInsert</code></a></td>
 </tr>
-<tr>
-<td><code>tables.get</code></td>
-<td><code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
-<td>done</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGet</code></a></td>
-</tr>
-<tr>
-<td><code>tables.update</code></td>
-<td><code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
-<td>done</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableUpdate</code></a></td>
-</tr>
-<tr>
-<td><code>tables.patch</code></td>
-<td><code>PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
-<td>done</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TablePatch</code></a></td>
-</tr>
-<tr>
-<td><code>tables.delete</code></td>
-<td><code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code></td>
-<td>done (captures snapshot for undelete)</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableDelete</code></a></td>
-</tr>
-<tr>
-<td><code>tables.getIamPolicy</code></td>
-<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy</code></td>
-<td>wired</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGetIamPolicy</code></a></td>
-</tr>
-<tr>
-<td><code>tables.setIamPolicy</code></td>
-<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy</code></td>
-<td>wired</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableSetIamPolicy</code></a></td>
-</tr>
-<tr>
-<td><code>tables.testIamPermissions</code></td>
-<td><code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions</code></td>
-<td>wired</td>
-<td><a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableTestIamPermissions</code></a></td>
-</tr>
 </tbody>
 </table>
+<p><strong>Federated / BigLake posture (insert, update, patch):</strong> Requests that set
+<code>biglakeConfiguration</code>, <code>objectTableOptions</code>, or
+<code>externalDataConfiguration.sourceFormat=OBJECT_TABLE</code> return <strong>501</strong>
+<code>notImplemented</code> with a pointer to <a href="../ENGINE_POLICY/"><code>docs/ENGINE_POLICY.md</code></a>.
+<code>datasets.insert</code> / <code>datasets.update</code> / <code>datasets.patch</code> with
+<code>externalDatasetReference</code> (Spanner / Cloud SQL external datasets) return the
+same envelope. Use fixture-backed <code>EXTERNAL_QUERY</code> or local external tables
+instead — see <a href="../guides/external-query/"><code>docs/guides/external-query.md</code></a>.
+| <code>tables.get</code> | <code>GET /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code> | done | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGet</code></a> |
+| <code>tables.update</code> | <code>PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code> | done | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableUpdate</code></a> |
+| <code>tables.patch</code> | <code>PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code> | done | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TablePatch</code></a> |
+| <code>tables.delete</code> | <code>DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}</code> | done (captures snapshot for undelete) | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableDelete</code></a> |
+| <code>tables.getIamPolicy</code> | <code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:getIamPolicy</code> | wired | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableGetIamPolicy</code></a> |
+| <code>tables.setIamPolicy</code> | <code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:setIamPolicy</code> | wired | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableSetIamPolicy</code></a> |
+| <code>tables.testIamPermissions</code> | <code>POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}/tables/{tableId}:testIamPermissions</code> | wired | <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/gateway/handlers/tables.go"><code>gateway/handlers/tables.go::TableTestIamPermissions</code></a> |</p>
 <p><strong>Table metadata:</strong> REST-only fields (<code>friendlyName</code>, <code>description</code>,
 <code>labels</code>, <code>expirationTime</code>, partitioning/clustering specs,
 <code>defaultCollation</code>, <code>defaultRoundingMode</code>, <code>caseInsensitive</code>,
@@ -1740,6 +1719,10 @@ store mirrors responses for the synchronous query path and supplies
 <code>CREATE FUNCTION</code> / <code>CREATE PROCEDURE</code> DDL via <code>jobs.query</code> also
 registers routines and surfaces <code>ddlTargetRoutine</code> on the job
 statistics envelope.</p>
+<p><strong><code>pythonOptions</code> on <code>routines.get</code>:</strong> Python scalar UDFs created with
+<code>CREATE FUNCTION ... LANGUAGE python OPTIONS (packages=[...], entry_point=...)</code>
+round-trip <code>pythonOptions.packages</code> and <code>pythonOptions.entryPoint</code> on the
+REST <code>Routine</code> resource. See <a href="../guides/python-udfs/"><code>docs/guides/python-udfs.md</code></a>.</p>
 <table>
 <thead>
 <tr>

@@ -8,28 +8,24 @@
       
       
       
-        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/RELEASES/">
+        <link rel="canonical" href="https://vantaboard.github.io/bigquery-emulator/guides/python-udfs/">
       
       
-        <link rel="prev" href="../SEEDING/">
       
       
-        <link rel="next" href="../REST_API/">
-      
-      
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
     
     
       
-        <title>Releases & install - BigQuery Emulator</title>
+        <title>Python UDFs (local) - BigQuery Emulator</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -48,7 +44,7 @@
       
     
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +70,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#releases" class="md-skip">
+        <a href="#python-udfs-local" class="md-skip">
           Skip to content
         </a>
       
@@ -88,7 +84,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+    <a href="../.." title="BigQuery Emulator" class="md-header__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -108,7 +104,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Releases & install
+              Python UDFs (local)
             
           </span>
         </div>
@@ -219,7 +215,7 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -236,13 +232,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../DOCKER/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../DOCKER/" class="md-tabs__link">
           
   
   
@@ -262,7 +256,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../REST_API/" class="md-tabs__link">
+        <a href="../../REST_API/" class="md-tabs__link">
           
   
   
@@ -282,7 +276,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../DEVELOPMENT/" class="md-tabs__link">
+        <a href="../../DEVELOPMENT/" class="md-tabs__link">
           
   
   
@@ -316,7 +310,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
+    <a href="../.." title="BigQuery Emulator" class="md-nav__button md-logo" aria-label="BigQuery Emulator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -346,7 +340,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -365,31 +359,26 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
             
   
   
@@ -402,7 +391,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             Getting Started
@@ -416,7 +405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DOCKER/" class="md-nav__link">
+      <a href="../../DOCKER/" class="md-nav__link">
         
   
   
@@ -439,7 +428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../CLIENTS/" class="md-nav__link">
+      <a href="../../CLIENTS/" class="md-nav__link">
         
   
   
@@ -462,7 +451,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guides/multi-language/" class="md-nav__link">
+      <a href="../multi-language/" class="md-nav__link">
         
   
   
@@ -485,7 +474,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../SEEDING/" class="md-nav__link">
+      <a href="../../SEEDING/" class="md-nav__link">
         
   
   
@@ -505,32 +494,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Releases & install
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../RELEASES/" class="md-nav__link">
         
   
   
@@ -541,35 +508,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#install-via-release-archive" class="md-nav__link">
-    <span class="md-ellipsis">
-      Install via release archive
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -632,7 +570,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../REST_API/" class="md-nav__link">
+      <a href="../../REST_API/" class="md-nav__link">
         
   
   
@@ -655,7 +593,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ENGINE_POLICY/" class="md-nav__link">
+      <a href="../../ENGINE_POLICY/" class="md-nav__link">
         
   
   
@@ -678,7 +616,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../features/support/" class="md-nav__link">
+      <a href="../../features/support/" class="md-nav__link">
         
   
   
@@ -751,7 +689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../DEVELOPMENT/" class="md-nav__link">
+      <a href="../../DEVELOPMENT/" class="md-nav__link">
         
   
   
@@ -774,7 +712,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dev/cpp-lint/" class="md-nav__link">
+      <a href="../../dev/cpp-lint/" class="md-nav__link">
         
   
   
@@ -824,9 +762,45 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#install-via-release-archive" class="md-nav__link">
+  <a href="#interpreter-resolution-order" class="md-nav__link">
     <span class="md-ellipsis">
-      Install via release archive
+      Interpreter resolution order
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#declaring-packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Declaring packages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#provisioning-operator-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provisioning (operator-only)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conformance-fixtures" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conformance fixtures
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      Out of scope
     </span>
   </a>
   
@@ -851,55 +825,76 @@
   
 
 
-<h1 id="releases">Releases<a class="headerlink" href="#releases" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>Preview-grade.</strong> The <code>v0.x</code> series is an explicit preview: the REST surface,
-gRPC contract, and on-disk format may break across releases. Stable promises
-arrive at <code>v1.0.0</code>. See <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md"><code>ROADMAP.md</code></a> for the active plan.</p>
-</blockquote>
-<p>Releases are cut by tag push today. Tag the commit you want to release with
-<code>vX.Y.Z</code> and push the tag; that triggers
-<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.github/workflows/release.yml"><code>.github/workflows/release.yml</code></a>, which
-builds the engine via Bazel, publishes the runtime Docker image to
-<a href="https://github.com/users/vantaboard/packages/container/package/bigquery-emulator">GHCR</a>,
-and uses <a href="https://goreleaser.com">goreleaser</a> (config:
-<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.goreleaser.yml"><code>.goreleaser.yml</code></a>) to upload the gateway archives + SHA-256
-checksums to the GitHub release page.</p>
-<div class="language-bash highlight"><pre><span></span><code><span class="c1"># Cut the very first release (preview).</span>
-git<span class="w"> </span>tag<span class="w"> </span>-a<span class="w"> </span>v0.0.1<span class="w"> </span>-m<span class="w"> </span><span class="s1">&#39;release: v0.0.1 (preview)&#39;</span>
-git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.0.1
+<h1 id="python-udfs-local">Python UDFs (local)<a class="headerlink" href="#python-udfs-local" title="Permanent link">&para;</a></h1>
+<p>The emulator evaluates scalar <code>CREATE FUNCTION ... LANGUAGE python</code> bodies
+locally via a sandboxed <code>python3</code> subprocess (<code>python_udf_runtime.cc</code>). This
+guide covers third-party <code>packages</code> declared in <code>OPTIONS</code> — resolution against
+an operator-provisioned environment, not live PyPI at query time.</p>
+<h2 id="interpreter-resolution-order">Interpreter resolution order<a class="headerlink" href="#interpreter-resolution-order" title="Permanent link">&para;</a></h2>
+<p>At call time the runtime picks a Python interpreter in this order:</p>
+<ol>
+<li><strong><code>BIGQUERY_EMULATOR_PYTHON</code></strong> — explicit path (venv <code>bin/python3</code>, container
+   interpreter, etc.).</li>
+<li><strong><code>$BIGQUERY_EMULATOR_DATA_DIR/python-udf-env/bin/python3</code></strong> — managed venv
+   when present and executable. <code>emulator_main</code> sets
+   <code>BIGQUERY_EMULATOR_DATA_DIR</code> from <code>--data_dir</code>.</li>
+<li><strong>Host <code>python3</code></strong> — stdlib plus whatever happens to be importable (e.g.
+   distro <code>python3-lxml</code>).</li>
+</ol>
+<h2 id="declaring-packages">Declaring packages<a class="headerlink" href="#declaring-packages" title="Permanent link">&para;</a></h2>
+<div class="language-sql highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">FUNCTION</span><span class="w"> </span><span class="n">py_tag</span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="n">STRING</span><span class="p">)</span><span class="w"> </span><span class="k">RETURNS</span><span class="w"> </span><span class="n">STRING</span>
+<span class="k">LANGUAGE</span><span class="w"> </span><span class="n">python</span>
+<span class="k">OPTIONS</span><span class="w"> </span><span class="p">(</span><span class="n">entry_point</span><span class="o">=</span><span class="s1">&#39;do_tag&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">packages</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;lxml&#39;</span><span class="p">])</span>
+<span class="k">AS</span><span class="w"> </span><span class="n">r</span><span class="ss">&quot;&quot;&quot;</span>
+<span class="ss">from lxml import etree</span>
+<span class="ss">def do_tag(x):</span>
+<span class="ss">  return etree.fromstring(x).tag</span>
+<span class="ss">&quot;&quot;&quot;</span><span class="p">;</span>
 </code></pre></div>
-<p><code>task release:tag VERSION=v0.0.1</code> is a foot-gun guard around the above: it
-prints the exact <code>git tag</code> + <code>git push</code> lines and only executes them when
-<code>CONFIRM=yes</code> is set (<code>task release:tag VERSION=v0.0.1 CONFIRM=yes</code>).</p>
-<p>The semantic-release config at <a href="https://github.com/vantaboard/bigquery-emulator/blob/main/.releaserc.yml"><code>.releaserc.yml</code></a> is parked
-for the eventual switch to auto-release on push to <code>main</code>. It is not currently
-driving any GitHub Actions job; the file exists so the conventional-commits
-format documented in <code>.cursor/rules/auto-commit.mdc</code> has a target for the
-future flip.</p>
-<h2 id="install-via-release-archive">Install via release archive<a class="headerlink" href="#install-via-release-archive" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span class="c1"># Pick the right tarball for your OS/arch from the releases page:</span>
-<span class="c1"># https://github.com/vantaboard/bigquery-emulator/releases</span>
-curl<span class="w"> </span>-fL<span class="w"> </span>https://github.com/vantaboard/bigquery-emulator/releases/download/v0.0.1/bigquery-emulator_0.0.1_linux_amd64.tar.gz<span class="w"> </span><span class="se">\</span>
-<span class="w">    </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>xz
-./bigquery-emulator-gateway<span class="w"> </span>--help
+<ul>
+<li><code>packages</code> is parsed at <code>CREATE FUNCTION</code> time, persisted with the routine
+  DDL, and echoed on <code>routines.get</code> as <code>pythonOptions.packages</code>.</li>
+<li>Before evaluating a UDF, the runtime preflights each package with
+  <code>importlib.util.find_spec</code> in the chosen interpreter. A missing package
+  surfaces a BigQuery-shaped <code>invalidQuery</code> error naming the package and pointing
+  here — not a Python traceback.</li>
+</ul>
+<h2 id="provisioning-operator-only">Provisioning (operator-only)<a class="headerlink" href="#provisioning-operator-only" title="Permanent link">&para;</a></h2>
+<p><strong>No <code>pip install</code> runs during query execution.</strong> To install declared packages
+into the managed venv:</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BIGQUERY_EMULATOR_DATA_DIR</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BIGQUERY_EMULATOR_DATA_DIR</span><span class="k">:-</span><span class="nv">$HOME</span><span class="p">/.bigquery-emulator</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP</span><span class="o">=</span><span class="m">1</span><span class="w">   </span><span class="c1"># required opt-in</span>
+task<span class="w"> </span>python-udf:provision<span class="w"> </span>--<span class="w"> </span>lxml<span class="w"> </span>pandas
 </code></pre></div>
-<p>Each archive bundles <code>bigquery-emulator-gateway</code> (the Go REST gateway) plus
-<code>bin/emulator_main</code> and <code>bin/libduckdb.so</code> (the C++ engine). The gateway's
-<code>--engine_binary</code> flag defaults to discovering the engine beside the gateway
-binary, so <code>./bigquery-emulator-gateway</code> works out of the tarball without extra
-flags.</p>
-<blockquote>
-<p><strong>Engine binary is linux/amd64 in release archives today.</strong> Native
-<code>linux/arm64</code> engine builds are in CI (non-blocking); see
-<a href="../dev/googlesql-prebuilt/arm64-feasibility/"><code>docs/dev/googlesql-prebuilt/arm64-feasibility.md</code></a>.
-macOS engine builds remain out of scope. The macOS + linux/arm64 gateway
-archives still bundle the linux/amd64 engine binary until arm64 engine
-releases ship, so you cannot run the bundled engine on a non-linux/amd64
-host today. The recommended path on macOS or linux/arm64 is the published
-Docker image — see
-<a href="../DOCKER/#install-via-docker">Docker → Install via Docker</a>.</p>
-</blockquote>
+<p>With no package arguments, <code>task python-udf:provision</code> scans
+<code>$BIGQUERY_EMULATOR_DATA_DIR/catalog.duckdb</code> (<code>__bqemu_routines</code>) for the
+union of <code>packages</code> declared on registered <code>LANGUAGE python</code> routines and
+installs that set into the managed venv.</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP</span><span class="o">=</span><span class="m">1</span>
+task<span class="w"> </span>python-udf:provision
+</code></pre></div>
+<p>This creates or updates <code>$BIGQUERY_EMULATOR_DATA_DIR/python-udf-env</code> and runs
+<code>pip install</code> only inside that provisioning step.</p>
+<p>To pin the interpreter explicitly after provisioning:</p>
+<div class="language-bash highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">BIGQUERY_EMULATOR_PYTHON</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$BIGQUERY_EMULATOR_DATA_DIR</span><span class="s2">/python-udf-env/bin/python3&quot;</span>
+</code></pre></div>
+<h2 id="conformance-fixtures">Conformance fixtures<a class="headerlink" href="#conformance-fixtures" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>conformance/fixtures/udf/python_packages_lxml.yaml</code> — happy path when <code>lxml</code>
+  is importable (CI installs <code>python3-lxml</code>).</li>
+<li><code>conformance/fixtures/udf/python_packages_missing.yaml</code> — structured error for
+  a deliberately absent package name.</li>
+</ul>
+<h2 id="out-of-scope">Out of scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Arbitrary/unpinned live <code>pip</code> at query time.</li>
+<li>Package version pinning semantics matching BigQuery container images.</li>
+<li><code>CREATE AGGREGATE FUNCTION</code> / <code>CREATE TABLE FUNCTION</code> with <code>LANGUAGE python</code>
+  (production BigQuery rejects these shapes; the emulator mirrors that).</li>
+</ul>
+<p>See also <a href="../../ENGINE_POLICY/"><code>docs/ENGINE_POLICY.md</code></a> and
+<a href="https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md"><code>ROADMAP.md</code></a>
+§Python UDFs.</p>
 
 
 
@@ -933,44 +928,6 @@ Docker image — see
         <footer class="md-footer">
   
     
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href="../SEEDING/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Seeding data">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Seeding data
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="../REST_API/" class="md-footer__link md-footer__link--next" aria-label="Next: REST API">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                REST API
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
-        
-      </nav>
-    
   
   <div class="md-footer-meta md-typeset">
     <div class="md-footer-meta__inner md-grid">
@@ -996,10 +953,10 @@ Docker image — see
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.select", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
       
     
   </body>
