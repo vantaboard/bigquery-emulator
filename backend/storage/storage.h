@@ -289,17 +289,20 @@ class Storage {
   // mirrors the BigQuery REST `deleteContents` query parameter on
   // `datasets.delete`.
   //
-  // The `absl::Status` returns are `[[nodiscard]]` so a caller that
-  // drops the result is caught by the compiler — the gateway has no
-  // other way to surface dataset CRUD failures, and silent drops
-  // were the motivating example for the rollout's status-discarded
-  // rule. The same rationale applies to every other Status-returning
-  // method on this interface.
+  // Status returns are `[[nodiscard]]` so callers cannot silently drop
+  // dataset CRUD failures at compile time.
   // ------------------------------------------------------------------
   [[nodiscard]] virtual absl::Status CreateDataset(
       const DatasetId& id, absl::string_view location) = 0;
   [[nodiscard]] virtual absl::Status DropDataset(const DatasetId& id,
                                                  bool delete_contents) = 0;
+  [[nodiscard]] virtual absl::Status RestoreDataset(
+      const DatasetId& id, std::int64_t deleted_ms = 0) {
+    (void)id;
+    (void)deleted_ms;
+    return absl::UnimplementedError(
+        "Storage::RestoreDataset is not implemented for this backend");
+  }
 
   // Lists the datasets registered under `project_id`. Returns an empty
   // vector when the project has no datasets (i.e. never registered any
@@ -326,9 +329,6 @@ class Storage {
   [[nodiscard]] virtual absl::Status CreateTable(
       const TableId& id, const schema::TableSchema& schema) = 0;
   [[nodiscard]] virtual absl::Status DropTable(const TableId& id) = 0;
-
-  // Restores a table previously soft-deleted by `DropTable`. When
-  // `deleted_ms` is zero, restores the newest tombstone for the table.
   [[nodiscard]] virtual absl::Status RestoreTable(const TableId& id,
                                                   std::int64_t deleted_ms = 0) {
     (void)id;

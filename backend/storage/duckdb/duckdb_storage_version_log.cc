@@ -283,6 +283,18 @@ std::string TableTombstoneDir(const DuckDBStorage& storage,
       .string();
 }
 
+std::string DatasetTombstoneKey(const DatasetId& id) {
+  return absl::StrCat(id.project_id, ".", id.dataset_id);
+}
+
+std::string DatasetTombstoneDir(const DuckDBStorage& storage,
+                                const DatasetId& id,
+                                std::int64_t deleted_ms) {
+  return (fs::path(storage.data_dir()) / ".tombstones" / "__dataset__" /
+          DatasetTombstoneKey(id) / absl::StrCat(deleted_ms))
+      .string();
+}
+
 absl::StatusOr<VersionIndex> ReadVersionIndex(absl::string_view index_path,
                                               bool allow_missing) {
   std::error_code ec;

@@ -61,6 +61,7 @@ cc_test(
         "duckdb_storage_read_test.cc",
         "duckdb_storage_test_fixture.cc",
         "duckdb_storage_test_fixture.h",
+        "duckdb_storage_tombstone_test.cc",
     ],
     deps = [
         ":duckdb_storage",

@@ -82,6 +82,8 @@ class DuckDBStorage : public Storage {
   absl::Status CreateDataset(const DatasetId& id,
                              absl::string_view location) override;
   absl::Status DropDataset(const DatasetId& id, bool delete_contents) override;
+  absl::Status RestoreDataset(const DatasetId& id,
+                              std::int64_t deleted_ms = 0) override;
   absl::StatusOr<std::vector<DatasetId>> ListDatasets(
       absl::string_view project_id) const override;
 

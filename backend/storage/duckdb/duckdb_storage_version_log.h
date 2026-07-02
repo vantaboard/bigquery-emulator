@@ -43,6 +43,10 @@ std::string TableVersionsIndexPath(const DuckDBStorage& storage,
 std::string TableTombstoneDir(const DuckDBStorage& storage,
                               const TableId& id,
                               std::int64_t deleted_ms);
+std::string DatasetTombstoneDir(const DuckDBStorage& storage,
+                                const DatasetId& id,
+                                std::int64_t deleted_ms);
+std::string DatasetTombstoneKey(const DatasetId& id);
 
 absl::StatusOr<VersionIndex> ReadVersionIndex(absl::string_view index_path,
                                               bool allow_missing);
@@ -81,6 +85,19 @@ absl::Status MoveTableToTombstone(const DuckDBStorage& storage,
 absl::Status RestoreTableFromTombstone(const DuckDBStorage& storage,
                                        const TableId& id,
                                        std::int64_t deleted_ms);
+
+// Soft-deletes a dataset (metadata + member tables) into
+// `.tombstones/__dataset__/{project.dataset}/{deleted_ms}/`.
+absl::Status MoveDatasetToTombstone(const DuckDBStorage& storage,
+                                    const DatasetId& id,
+                                    std::int64_t deleted_ms);
+
+// Restores a soft-deleted dataset and its tables from the dataset
+// tombstone. When `deleted_ms` is zero, picks the newest tombstone
+// within the 7-day retention window.
+absl::Status RestoreDatasetFromTombstone(const DuckDBStorage& storage,
+                                         const DatasetId& id,
+                                         std::int64_t deleted_ms);
 
 }  // namespace internal
 }  // namespace duckdb

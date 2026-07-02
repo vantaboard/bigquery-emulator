@@ -109,19 +109,26 @@ absl::Status DuckDBStorage::DropDataset(const DatasetId& id,
                      id.dataset_id,
                      " (use delete_contents=true to drop with tables)"));
   }
-  fs::remove_all(ds_dir, ec);
-  if (ec) {
-    return internal::FilesystemStatus(
-        absl::StrCat("failed to remove dataset dir: ", ds_dir.string()), ec);
-  }
-  // Drop the matching DuckDB schema. We use CASCADE here to mirror
-  // the file-tree removal above (every table file is gone, so any
-  // catalog references in DuckDB must go too).
+  const std::int64_t deleted_ms = absl::ToUnixMillis(absl::Now());
+  absl::Status moved = internal::MoveDatasetToTombstone(*this, id, deleted_ms);
+  if (!moved.ok()) return moved;
   const std::string schema_name = DuckDBSchemaName(id);
   return internal::RunSql(impl_.get(),
                           absl::StrCat("DROP SCHEMA IF EXISTS ",
                                        internal::QuoteIdent(schema_name),
                                        " CASCADE"));
+}
+
+absl::Status DuckDBStorage::RestoreDataset(const DatasetId& id,
+                                           std::int64_t deleted_ms) {
+  absl::MutexLock lock(&mu_);
+  absl::Status restored =
+      internal::RestoreDatasetFromTombstone(*this, id, deleted_ms);
+  if (!restored.ok()) return restored;
+  const std::string schema_name = DuckDBSchemaName(id);
+  return internal::RunSql(impl_.get(),
+                          absl::StrCat("CREATE SCHEMA IF NOT EXISTS ",
+                                       internal::QuoteIdent(schema_name)));
 }
 
 absl::StatusOr<std::vector<DatasetId>> DuckDBStorage::ListDatasets(
