@@ -3,6 +3,9 @@
 # Runs once per push/PR: builds `engine-binaries` and runs first-party
 # `cc_test` on pull requests. Main pushes skip cc_test (coverage-bazel runs
 # the same targets under instrumentation after this workflow succeeds).
+# A parallel non-blocking `build-engine-arm64` job on `ubuntu-24.04-arm`
+# exercises the in-flight linux/arm64 engine lane (see
+# `docs/dev/googlesql-prebuilt/arm64-feasibility.md`).
 # Downstream workflows (ci, conformance, googlesql-corpus, docker-smoke,
 # thirdparty live lanes) consume artifacts via `workflow_run` +
 # `setup-engine-from-artifact` / artifact download.
@@ -200,6 +203,80 @@ jobs:
             engine-provenance.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Release Bazel daemon
+        if: always()
+        run: timeout 60 bazel shutdown || true
+
+  build-engine-arm64:
+    name: build (linux/arm64, non-blocking)
+    runs-on: ubuntu-24.04-arm
+    continue-on-error: true
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install C++ build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libgrpc++-dev \
+            libgrpc-dev \
+            protobuf-compiler-grpc
+
+      - name: Restore GoogleSQL prebuilt cache (arm64)
+        uses: actions/cache@v5
+        with:
+          path: .cache/googlesql-prebuilt
+          key: googlesql-prebuilt-arm64-${{ vars.GOOGLESQL_PREBUILT_SHA256_ARM64 || 'source' }}
+
+      - name: Set up Bazel (bazelisk)
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: engine-arm64-v1
+          cache-version: 1
+          repository-cache: true
+
+      - name: Resolve GoogleSQL build mode (arm64)
+        id: googlesql
+        uses: ./.github/actions/setup-googlesql
+        with:
+          target-arch: arm64
+          prebuilt-url: ${{ vars.GOOGLESQL_PREBUILT_URL_ARM64 }}
+          prebuilt-sha256: ${{ vars.GOOGLESQL_PREBUILT_SHA256_ARM64 }}
+
+      - name: Build C++ engine via Bazel (linux/arm64 spike)
+        env:
+          GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+          GOOGLESQL_PREBUILT_ARCH: arm64
+        run: |
+          set -euo pipefail
+          echo "::notice::arm64 engine spike: GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          task emulator:build-engine:bazel
+
+      - name: Smoke engine binary
+        run: |
+          set -euo pipefail
+          file bin/emulator_main
+          ldd bin/emulator_main | grep -E 'libduckdb|not a dynamic'
+          ./bin/emulator_main --version
 
       - name: Release Bazel daemon
         if: always()
