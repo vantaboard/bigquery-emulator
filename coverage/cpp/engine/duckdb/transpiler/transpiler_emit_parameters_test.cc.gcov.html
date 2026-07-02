@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">174</td>
-            <td class="headerCovTableEntry">174</td>
+            <td class="headerCovTableEntry">175</td>
+            <td class="headerCovTableEntry">175</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -81,8 +81,8 @@
 <span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(</span></span>
 <span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           1 :       options.AddQueryParameter(&quot;customer_id&quot;, type_factory_-&gt;get_int64())</span></span>
 <span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :           .ok());</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :       AnalyzeWith(&quot;SELECT @customer_id AS x&quot;, options);</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(&quot;SELECT @customer_id AS x&quot;, options);</span></span>
 <span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
 <span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_PARAMETER);</span></span>
@@ -106,8 +106,8 @@
 <span id="L44"><span class="lineNum">      44</span>              :   // Use the parameter twice in distinct projections: GoogleSQL</span>
 <span id="L45"><span class="lineNum">      45</span>              :   // produces two `ResolvedParameter` nodes (one per reference) but</span>
 <span id="L46"><span class="lineNum">      46</span>              :   // both carry the same `name()`, so the dedup collapses them.</span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 :       AnalyzeWith(&quot;SELECT @threshold AS a, @threshold AS b&quot;, options);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(&quot;SELECT @threshold AS a, @threshold AS b&quot;, options);</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 :   const auto* q = stmt-&gt;GetAs&lt;::googlesql::ResolvedQueryStmt&gt;();</span></span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 :   ASSERT_NE(q, nullptr);</span></span>
@@ -140,8 +140,8 @@
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :       options.AddPositionalQueryParameter(type_factory_-&gt;get_int64()).ok());</span></span>
 <span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(</span></span>
 <span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 :       options.AddPositionalQueryParameter(type_factory_-&gt;get_string()).ok());</span></span>
-<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           1 :       AnalyzeWith(&quot;SELECT ? AS a, ? AS b&quot;, options);</span></span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(&quot;SELECT ? AS a, ? AS b&quot;, options);</span></span>
 <span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
 <span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           1 :   const auto* q = stmt-&gt;GetAs&lt;::googlesql::ResolvedQueryStmt&gt;();</span></span>
 <span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">           1 :   ASSERT_NE(q, nullptr);</span></span>
@@ -172,150 +172,151 @@
 <span id="L110"><span class="lineNum">     110</span>              :   // entry.</span>
 <span id="L111"><span class="lineNum">     111</span> <span class="tlaGNC">           1 :   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();</span></span>
 <span id="L112"><span class="lineNum">     112</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(options.AddQueryParameter(&quot;n&quot;, type_factory_-&gt;get_int64()).ok());</span></span>
-<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(</span></span>
-<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 :       &quot;SELECT * FROM people ORDER BY id LIMIT @n OFFSET @n&quot;, options);</span></span>
-<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
-<span id="L116"><span class="lineNum">     116</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
-<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN);</span></span>
-<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitLimitOffsetScan(</span></span>
-<span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedLimitOffsetScan&gt;()),</span></span>
-<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">           1 :             &quot;SELECT * FROM (SELECT * FROM (SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM &quot;</span></span>
-<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :             &quot;\&quot;people\&quot;) ORDER BY \&quot;id\&quot; ASC NULLS FIRST) LIMIT $1 OFFSET $1&quot;);</span></span>
-<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :   ASSERT_EQ(t.parameter_order().size(), 1u);</span></span>
-<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.parameter_order()[0].name, &quot;n&quot;);</span></span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L126"><span class="lineNum">     126</span>              : </span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitParameterInsideFunctionArgument) {</span></span>
-<span id="L128"><span class="lineNum">     128</span>              :   // Parameters thread through `EmitFunctionCall`'s argument loop</span>
-<span id="L129"><span class="lineNum">     129</span>              :   // exactly like any other expression: `IFNULL(@s, 'x')` lowers to</span>
-<span id="L130"><span class="lineNum">     130</span>              :   // `IFNULL($1, 'x')` and the parameter accumulator records the</span>
-<span id="L131"><span class="lineNum">     131</span>              :   // single `@s` slot. `IFNULL` is on the function disposition table</span>
-<span id="L132"><span class="lineNum">     132</span>              :   // so the surrounding emit composes fully.</span>
-<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">           1 :   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();</span></span>
-<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(options.AddQueryParameter(&quot;s&quot;, type_factory_-&gt;get_string()).ok());</span></span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :       AnalyzeWith(&quot;SELECT IFNULL(@s, 'x') FROM people&quot;, options);</span></span>
-<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);</span></span>
-<span id="L140"><span class="lineNum">     140</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">           1 :   EXPECT_EQ(</span></span>
-<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">           1 :       t.EmitFunctionCall(expr-&gt;GetAs&lt;::googlesql::ResolvedFunctionCall&gt;()),</span></span>
-<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           1 :       &quot;IFNULL($1, 'x')&quot;);</span></span>
-<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">           1 :   ASSERT_EQ(t.parameter_order().size(), 1u);</span></span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.parameter_order()[0].name, &quot;s&quot;);</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L147"><span class="lineNum">     147</span>              : </span>
-<span id="L148"><span class="lineNum">     148</span>              : // --- Cast ---------------------------------------------------------------</span>
-<span id="L149"><span class="lineNum">     149</span>              : </span>
-<span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastInt64ToString) {</span></span>
-<span id="L151"><span class="lineNum">     151</span>              :   // `CAST(id AS STRING)` produces a `ResolvedCast` whose `expr` is</span>
-<span id="L152"><span class="lineNum">     152</span>              :   // the column ref and whose target `Type` is STRING. The emit</span>
-<span id="L153"><span class="lineNum">     153</span>              :   // composes both via `EmitColumnRef` + `ToDuckDBSqlType`, so the</span>
-<span id="L154"><span class="lineNum">     154</span>              :   // result threads quoted-identifier and DuckDB type-name conventions</span>
-<span id="L155"><span class="lineNum">     155</span>              :   // together.</span>
-<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT CAST(id AS STRING) FROM people&quot;);</span></span>
-<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
-<span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
-<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">           1 :             &quot;CAST(\&quot;id\&quot; AS VARCHAR)&quot;);</span></span>
-<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L165"><span class="lineNum">     165</span>              : </span>
-<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastStringToInt64) {</span></span>
-<span id="L167"><span class="lineNum">     167</span>              :   // CAST against a column ref of the right source type lands on the</span>
-<span id="L168"><span class="lineNum">     168</span>              :   // expected DuckDB `BIGINT` (BQ INT64 -&gt; DuckDB BIGINT, see</span>
-<span id="L169"><span class="lineNum">     169</span>              :   // `types.cc`). The shape is symmetrical to the int-&gt;string case</span>
-<span id="L170"><span class="lineNum">     170</span>              :   // above and pins the type-name mapping for INT64.</span>
-<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT CAST(name AS INT64) FROM people&quot;);</span></span>
-<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
-<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 :             &quot;CAST(\&quot;name\&quot; AS BIGINT)&quot;);</span></span>
-<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L180"><span class="lineNum">     180</span>              : </span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSafeCastUsesTryCast) {</span></span>
-<span id="L182"><span class="lineNum">     182</span>              :   // `SAFE_CAST(&lt;expr&gt; AS T)` sets `return_null_on_error()` on the</span>
-<span id="L183"><span class="lineNum">     183</span>              :   // ResolvedCast; we lower it to DuckDB's `TRY_CAST(...)` which</span>
-<span id="L184"><span class="lineNum">     184</span>              :   // matches BigQuery's &quot;return NULL on conversion failure&quot; contract.</span>
-<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT SAFE_CAST(name AS INT64) FROM people&quot;);</span></span>
-<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
-<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
-<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 :             &quot;TRY_CAST(\&quot;name\&quot; AS BIGINT)&quot;);</span></span>
-<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L194"><span class="lineNum">     194</span>              : </span>
-<span id="L195"><span class="lineNum">     195</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastNestedInsideFunctionCall) {</span></span>
-<span id="L196"><span class="lineNum">     196</span>              :   // CAST nested inside another function call exercises the dispatch</span>
-<span id="L197"><span class="lineNum">     197</span>              :   // path: `EmitFunctionCall` calls `EmitExpr` per argument, which</span>
-<span id="L198"><span class="lineNum">     198</span>              :   // routes the cast through `EmitCast`. The full lower stays on the</span>
-<span id="L199"><span class="lineNum">     199</span>              :   // DuckDB path because both COALESCE (disposition table) and CAST</span>
-<span id="L200"><span class="lineNum">     200</span>              :   // (whitelisted target) are first-class.</span>
-<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT COALESCE(CAST(id AS STRING), 'x') FROM people&quot;);</span></span>
-<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);</span></span>
-<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">           1 :   EXPECT_EQ(</span></span>
-<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">           1 :       t.EmitFunctionCall(expr-&gt;GetAs&lt;::googlesql::ResolvedFunctionCall&gt;()),</span></span>
-<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">           1 :       &quot;COALESCE(CAST(\&quot;id\&quot; AS VARCHAR), 'x')&quot;);</span></span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L211"><span class="lineNum">     211</span>              : </span>
-<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastStructPositionalRemap) {</span></span>
-<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory factory;</span></span>
-<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :   const ::googlesql::Type* int64 = factory.get_int64();</span></span>
-<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 :   const ::googlesql::Type* str = factory.get_string();</span></span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           1 :   std::vector&lt;::googlesql::StructField&gt; src_fields;</span></span>
-<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           1 :   src_fields.emplace_back(&quot;&quot;, int64);</span></span>
-<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :   src_fields.emplace_back(&quot;&quot;, str);</span></span>
-<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :   const ::googlesql::StructType* source_st = nullptr;</span></span>
-<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(factory.MakeStructType(src_fields, &amp;source_st).ok());</span></span>
-<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           1 :   std::vector&lt;::googlesql::StructField&gt; tgt_fields;</span></span>
-<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           1 :   tgt_fields.emplace_back(&quot;x&quot;, int64);</span></span>
-<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           1 :   tgt_fields.emplace_back(&quot;y&quot;, str);</span></span>
-<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           1 :   const ::googlesql::StructType* target_st = nullptr;</span></span>
-<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(factory.MakeStructType(tgt_fields, &amp;target_st).ok());</span></span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           1 :   EXPECT_EQ(internal::EmitStructPositionalCastRemap(</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           1 :                 &quot;{ '_0': 1, '_1': 'a' }&quot;, *source_st, *target_st),</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           1 :             &quot;{'x': ({ '_0': 1, '_1': 'a' }).\&quot;_0\&quot;, 'y': ({ '_0': 1, '_1': 'a' &quot;</span></span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           1 :             &quot;}).\&quot;_1\&quot;}&quot;);</span></span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L231"><span class="lineNum">     231</span>              : </span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {</span></span>
-<span id="L233"><span class="lineNum">     233</span>              :   // ARRAY casts thread `ToDuckDBSqlType`'s recursive type expansion;</span>
-<span id="L234"><span class="lineNum">     234</span>              :   // ARRAY&lt;STRING&gt; -&gt; VARCHAR[] mirrors DuckDB's native list-of</span>
-<span id="L235"><span class="lineNum">     235</span>              :   // syntax. We wrap a non-const expression (`[id]`) inside the cast</span>
-<span id="L236"><span class="lineNum">     236</span>              :   // so the analyzer cannot constant-fold the whole expression onto</span>
-<span id="L237"><span class="lineNum">     237</span>              :   // a `ResolvedLiteral` -- a folded array-of-int64 would skip the</span>
-<span id="L238"><span class="lineNum">     238</span>              :   // ResolvedCast entirely and the test would fail with &quot;expected</span>
-<span id="L239"><span class="lineNum">     239</span>              :   // RESOLVED_CAST, got RESOLVED_LITERAL&quot;.</span>
-<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT CAST([id] AS ARRAY&lt;STRING&gt;) FROM people&quot;);</span></span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
-<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
-<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
-<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L246"><span class="lineNum">     246</span>              :   // `[id]` is a non-const ARRAY constructor; it lowers through</span>
-<span id="L247"><span class="lineNum">     247</span>              :   // `$make_array` to DuckDB's bracket syntax.</span>
-<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
-<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">           1 :             &quot;CAST([\&quot;id\&quot;] AS VARCHAR[])&quot;);</span></span>
-<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L251"><span class="lineNum">     251</span>              : </span>
-<span id="L252"><span class="lineNum">     252</span>              : }  // namespace transpiler</span>
-<span id="L253"><span class="lineNum">     253</span>              : }  // namespace duckdb</span>
-<span id="L254"><span class="lineNum">     254</span>              : }  // namespace engine</span>
-<span id="L255"><span class="lineNum">     255</span>              : }  // namespace backend</span>
-<span id="L256"><span class="lineNum">     256</span>              : }  // namespace bigquery_emulator</span>
+<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(&quot;SELECT * FROM people ORDER BY id LIMIT @n OFFSET @n&quot;,</span></span>
+<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :                      options);</span></span>
+<span id="L116"><span class="lineNum">     116</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedScan* scan = QueryInputScan(stmt);</span></span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :   ASSERT_NE(scan, nullptr);</span></span>
+<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           1 :   ASSERT_EQ(scan-&gt;node_kind(), ::googlesql::RESOLVED_LIMIT_OFFSET_SCAN);</span></span>
+<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitLimitOffsetScan(</span></span>
+<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">           1 :                 scan-&gt;GetAs&lt;::googlesql::ResolvedLimitOffsetScan&gt;()),</span></span>
+<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :             &quot;SELECT * FROM (SELECT * FROM (SELECT \&quot;id\&quot;, \&quot;name\&quot; FROM &quot;</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :             &quot;\&quot;people\&quot;) ORDER BY \&quot;id\&quot; ASC NULLS FIRST) LIMIT $1 OFFSET $1&quot;);</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :   ASSERT_EQ(t.parameter_order().size(), 1u);</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.parameter_order()[0].name, &quot;n&quot;);</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L127"><span class="lineNum">     127</span>              : </span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitParameterInsideFunctionArgument) {</span></span>
+<span id="L129"><span class="lineNum">     129</span>              :   // Parameters thread through `EmitFunctionCall`'s argument loop</span>
+<span id="L130"><span class="lineNum">     130</span>              :   // exactly like any other expression: `IFNULL(@s, 'x')` lowers to</span>
+<span id="L131"><span class="lineNum">     131</span>              :   // `IFNULL($1, 'x')` and the parameter accumulator records the</span>
+<span id="L132"><span class="lineNum">     132</span>              :   // single `@s` slot. `IFNULL` is on the function disposition table</span>
+<span id="L133"><span class="lineNum">     133</span>              :   // so the surrounding emit composes fully.</span>
+<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">           1 :   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();</span></span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(options.AddQueryParameter(&quot;s&quot;, type_factory_-&gt;get_string()).ok());</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(&quot;SELECT IFNULL(@s, 'x') FROM people&quot;, options);</span></span>
+<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L140"><span class="lineNum">     140</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);</span></span>
+<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">           1 :   EXPECT_EQ(</span></span>
+<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           1 :       t.EmitFunctionCall(expr-&gt;GetAs&lt;::googlesql::ResolvedFunctionCall&gt;()),</span></span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">           1 :       &quot;IFNULL($1, 'x')&quot;);</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   ASSERT_EQ(t.parameter_order().size(), 1u);</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.parameter_order()[0].name, &quot;s&quot;);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L148"><span class="lineNum">     148</span>              : </span>
+<span id="L149"><span class="lineNum">     149</span>              : // --- Cast ---------------------------------------------------------------</span>
+<span id="L150"><span class="lineNum">     150</span>              : </span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastInt64ToString) {</span></span>
+<span id="L152"><span class="lineNum">     152</span>              :   // `CAST(id AS STRING)` produces a `ResolvedCast` whose `expr` is</span>
+<span id="L153"><span class="lineNum">     153</span>              :   // the column ref and whose target `Type` is STRING. The emit</span>
+<span id="L154"><span class="lineNum">     154</span>              :   // composes both via `EmitColumnRef` + `ToDuckDBSqlType`, so the</span>
+<span id="L155"><span class="lineNum">     155</span>              :   // result threads quoted-identifier and DuckDB type-name conventions</span>
+<span id="L156"><span class="lineNum">     156</span>              :   // together.</span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">           1 :   stmt = Analyze(&quot;SELECT CAST(id AS STRING) FROM people&quot;);</span></span>
+<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L160"><span class="lineNum">     160</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
+<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">           1 :             &quot;CAST(\&quot;id\&quot; AS VARCHAR)&quot;);</span></span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L166"><span class="lineNum">     166</span>              : </span>
+<span id="L167"><span class="lineNum">     167</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastStringToInt64) {</span></span>
+<span id="L168"><span class="lineNum">     168</span>              :   // CAST against a column ref of the right source type lands on the</span>
+<span id="L169"><span class="lineNum">     169</span>              :   // expected DuckDB `BIGINT` (BQ INT64 -&gt; DuckDB BIGINT, see</span>
+<span id="L170"><span class="lineNum">     170</span>              :   // `types.cc`). The shape is symmetrical to the int-&gt;string case</span>
+<span id="L171"><span class="lineNum">     171</span>              :   // above and pins the type-name mapping for INT64.</span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :   stmt = Analyze(&quot;SELECT CAST(name AS INT64) FROM people&quot;);</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           1 :             &quot;CAST(\&quot;name\&quot; AS BIGINT)&quot;);</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L181"><span class="lineNum">     181</span>              : </span>
+<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitSafeCastUsesTryCast) {</span></span>
+<span id="L183"><span class="lineNum">     183</span>              :   // `SAFE_CAST(&lt;expr&gt; AS T)` sets `return_null_on_error()` on the</span>
+<span id="L184"><span class="lineNum">     184</span>              :   // ResolvedCast; we lower it to DuckDB's `TRY_CAST(...)` which</span>
+<span id="L185"><span class="lineNum">     185</span>              :   // matches BigQuery's &quot;return NULL on conversion failure&quot; contract.</span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :   stmt = Analyze(&quot;SELECT SAFE_CAST(name AS INT64) FROM people&quot;);</span></span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
+<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 :             &quot;TRY_CAST(\&quot;name\&quot; AS BIGINT)&quot;);</span></span>
+<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L195"><span class="lineNum">     195</span>              : </span>
+<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastNestedInsideFunctionCall) {</span></span>
+<span id="L197"><span class="lineNum">     197</span>              :   // CAST nested inside another function call exercises the dispatch</span>
+<span id="L198"><span class="lineNum">     198</span>              :   // path: `EmitFunctionCall` calls `EmitExpr` per argument, which</span>
+<span id="L199"><span class="lineNum">     199</span>              :   // routes the cast through `EmitCast`. The full lower stays on the</span>
+<span id="L200"><span class="lineNum">     200</span>              :   // DuckDB path because both COALESCE (disposition table) and CAST</span>
+<span id="L201"><span class="lineNum">     201</span>              :   // (whitelisted target) are first-class.</span>
+<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           1 :   stmt = Analyze(&quot;SELECT COALESCE(CAST(id AS STRING), 'x') FROM people&quot;);</span></span>
+<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_FUNCTION_CALL);</span></span>
+<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">           1 :   EXPECT_EQ(</span></span>
+<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">           1 :       t.EmitFunctionCall(expr-&gt;GetAs&lt;::googlesql::ResolvedFunctionCall&gt;()),</span></span>
+<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           1 :       &quot;COALESCE(CAST(\&quot;id\&quot; AS VARCHAR), 'x')&quot;);</span></span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L212"><span class="lineNum">     212</span>              : </span>
+<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastStructPositionalRemap) {</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory factory;</span></span>
+<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 :   const ::googlesql::Type* int64 = factory.get_int64();</span></span>
+<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           1 :   const ::googlesql::Type* str = factory.get_string();</span></span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           1 :   std::vector&lt;::googlesql::StructField&gt; src_fields;</span></span>
+<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :   src_fields.emplace_back(&quot;&quot;, int64);</span></span>
+<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :   src_fields.emplace_back(&quot;&quot;, str);</span></span>
+<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           1 :   const ::googlesql::StructType* source_st = nullptr;</span></span>
+<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(factory.MakeStructType(src_fields, &amp;source_st).ok());</span></span>
+<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           1 :   std::vector&lt;::googlesql::StructField&gt; tgt_fields;</span></span>
+<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           1 :   tgt_fields.emplace_back(&quot;x&quot;, int64);</span></span>
+<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           1 :   tgt_fields.emplace_back(&quot;y&quot;, str);</span></span>
+<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           1 :   const ::googlesql::StructType* target_st = nullptr;</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(factory.MakeStructType(tgt_fields, &amp;target_st).ok());</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           1 :   EXPECT_EQ(internal::EmitStructPositionalCastRemap(</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           1 :                 &quot;{ '_0': 1, '_1': 'a' }&quot;, *source_st, *target_st),</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           1 :             &quot;{'x': ({ '_0': 1, '_1': 'a' }).\&quot;_0\&quot;, 'y': ({ '_0': 1, '_1': 'a' &quot;</span></span>
+<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           1 :             &quot;}).\&quot;_1\&quot;}&quot;);</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L232"><span class="lineNum">     232</span>              : </span>
+<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {</span></span>
+<span id="L234"><span class="lineNum">     234</span>              :   // ARRAY casts thread `ToDuckDBSqlType`'s recursive type expansion;</span>
+<span id="L235"><span class="lineNum">     235</span>              :   // ARRAY&lt;STRING&gt; -&gt; VARCHAR[] mirrors DuckDB's native list-of</span>
+<span id="L236"><span class="lineNum">     236</span>              :   // syntax. We wrap a non-const expression (`[id]`) inside the cast</span>
+<span id="L237"><span class="lineNum">     237</span>              :   // so the analyzer cannot constant-fold the whole expression onto</span>
+<span id="L238"><span class="lineNum">     238</span>              :   // a `ResolvedLiteral` -- a folded array-of-int64 would skip the</span>
+<span id="L239"><span class="lineNum">     239</span>              :   // ResolvedCast entirely and the test would fail with &quot;expected</span>
+<span id="L240"><span class="lineNum">     240</span>              :   // RESOLVED_CAST, got RESOLVED_LITERAL&quot;.</span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">           1 :   stmt = Analyze(&quot;SELECT CAST([id] AS ARRAY&lt;STRING&gt;) FROM people&quot;);</span></span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedExpr* expr = QueryFirstSelectExpr(stmt);</span></span>
+<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">           1 :   ASSERT_NE(expr, nullptr);</span></span>
+<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">           1 :   ASSERT_EQ(expr-&gt;node_kind(), ::googlesql::RESOLVED_CAST);</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L247"><span class="lineNum">     247</span>              :   // `[id]` is a non-const ARRAY constructor; it lowers through</span>
+<span id="L248"><span class="lineNum">     248</span>              :   // `$make_array` to DuckDB's bracket syntax.</span>
+<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">           1 :   EXPECT_EQ(t.EmitCast(expr-&gt;GetAs&lt;::googlesql::ResolvedCast&gt;()),</span></span>
+<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">           1 :             &quot;CAST([\&quot;id\&quot;] AS VARCHAR[])&quot;);</span></span>
+<span id="L251"><span class="lineNum">     251</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L252"><span class="lineNum">     252</span>              : </span>
+<span id="L253"><span class="lineNum">     253</span>              : }  // namespace transpiler</span>
+<span id="L254"><span class="lineNum">     254</span>              : }  // namespace duckdb</span>
+<span id="L255"><span class="lineNum">     255</span>              : }  // namespace engine</span>
+<span id="L256"><span class="lineNum">     256</span>              : }  // namespace backend</span>
+<span id="L257"><span class="lineNum">     257</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

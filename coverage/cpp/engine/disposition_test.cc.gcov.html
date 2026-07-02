@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -64,77 +64,78 @@
 <span id="L2"><span class="lineNum">       2</span>              : </span>
 <span id="L3"><span class="lineNum">       3</span>              : #include &lt;set&gt;</span>
 <span id="L4"><span class="lineNum">       4</span>              : #include &lt;string&gt;</span>
-<span id="L5"><span class="lineNum">       5</span>              : </span>
-<span id="L6"><span class="lineNum">       6</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
-<span id="L7"><span class="lineNum">       7</span>              : #include &quot;gtest/gtest.h&quot;</span>
-<span id="L8"><span class="lineNum">       8</span>              : </span>
-<span id="L9"><span class="lineNum">       9</span>              : namespace bigquery_emulator {</span>
-<span id="L10"><span class="lineNum">      10</span>              : namespace backend {</span>
-<span id="L11"><span class="lineNum">      11</span>              : namespace engine {</span>
-<span id="L12"><span class="lineNum">      12</span>              : namespace {</span>
-<span id="L13"><span class="lineNum">      13</span>              : </span>
-<span id="L14"><span class="lineNum">      14</span>              : // The full closed set of Disposition values. Centralised so each</span>
-<span id="L15"><span class="lineNum">      15</span>              : // test below can iterate over the same vector instead of</span>
-<span id="L16"><span class="lineNum">      16</span>              : // hand-listing the enum members. Adding a new enum value here AND</span>
-<span id="L17"><span class="lineNum">      17</span>              : // updating `kDispositionCount` triggers every assertion below to</span>
-<span id="L18"><span class="lineNum">      18</span>              : // exercise the new value as well.</span>
-<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC tlaBgGNC">           3 : const std::vector&lt;Disposition&gt;&amp; AllDispositions() {</span></span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           3 :   static const auto* kAll = new std::vector&lt;Disposition&gt;{</span></span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbNative,</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbRewrite,</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbUdf,</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           3 :       Disposition::kSemanticExecutor,</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           3 :       Disposition::kControlOp,</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           3 :       Disposition::kLocalStub,</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           3 :       Disposition::kUnsupported,</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           3 :   };</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           3 :   return *kAll;</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           3 : }</span></span>
-<span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 : TEST(DispositionTest, ToStringRoundsTripCanonicalSpellings) {</span></span>
-<span id="L33"><span class="lineNum">      33</span>              :   // The spellings here must match the YAML disposition column AND</span>
-<span id="L34"><span class="lineNum">      34</span>              :   // the SHAPE_TRACKER.md `status` column verbatim; the parity</span>
-<span id="L35"><span class="lineNum">      35</span>              :   // checker (`tools/check_disposition_parity`) consumes the same</span>
-<span id="L36"><span class="lineNum">      36</span>              :   // strings.</span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbNative), &quot;duckdb_native&quot;);</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbRewrite), &quot;duckdb_rewrite&quot;);</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbUdf), &quot;duckdb_udf&quot;);</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kSemanticExecutor),</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :             &quot;semantic_executor&quot;);</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kControlOp), &quot;control_op&quot;);</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kLocalStub), &quot;local_stub&quot;);</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kUnsupported), &quot;unsupported&quot;);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L46"><span class="lineNum">      46</span>              : </span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 : TEST(DispositionTest, ToStringIsTotalAndUnique) {</span></span>
-<span id="L48"><span class="lineNum">      48</span>              :   // Every enum value maps to a non-empty, distinct lowercase</span>
-<span id="L49"><span class="lineNum">      49</span>              :   // identifier-safe string. An accidental duplicate would silently</span>
-<span id="L50"><span class="lineNum">      50</span>              :   // make `tools/check_disposition_parity` treat two routes as the</span>
-<span id="L51"><span class="lineNum">      51</span>              :   // same.</span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           1 :   std::set&lt;std::string&gt; seen;</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           7 :   for (Disposition d : AllDispositions()) {</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           7 :     absl::string_view s = DispositionToString(d);</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           7 :     SCOPED_TRACE(s);</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           7 :     EXPECT_FALSE(s.empty());</span></span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           7 :     EXPECT_NE(s, &quot;unknown&quot;);</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           7 :     seen.insert(std::string(s));</span></span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           7 :   }</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :   EXPECT_EQ(seen.size(), AllDispositions().size());</span></span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L62"><span class="lineNum">      62</span>              : </span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 : TEST(DispositionTest, EnumCountMatchesAllDispositions) {</span></span>
-<span id="L64"><span class="lineNum">      64</span>              :   // `kDispositionCount` is the build-time anchor the parity checker</span>
-<span id="L65"><span class="lineNum">      65</span>              :   // and the generated `node_dispositions_table.inc` test consult.</span>
-<span id="L66"><span class="lineNum">      66</span>              :   // Whenever a new disposition lands, this assertion is the canary</span>
-<span id="L67"><span class="lineNum">      67</span>              :   // that fires first; bumping `kDispositionCount` then forces</span>
-<span id="L68"><span class="lineNum">      68</span>              :   // updates everywhere else that iterates over the closed set.</span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           1 :   EXPECT_EQ(static_cast&lt;int&gt;(AllDispositions().size()), kDispositionCount);</span></span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L71"><span class="lineNum">      71</span>              : </span>
-<span id="L72"><span class="lineNum">      72</span>              : }  // namespace</span>
-<span id="L73"><span class="lineNum">      73</span>              : }  // namespace engine</span>
-<span id="L74"><span class="lineNum">      74</span>              : }  // namespace backend</span>
-<span id="L75"><span class="lineNum">      75</span>              : }  // namespace bigquery_emulator</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &lt;vector&gt;</span>
+<span id="L6"><span class="lineNum">       6</span>              : </span>
+<span id="L7"><span class="lineNum">       7</span>              : #include &quot;absl/strings/string_view.h&quot;</span>
+<span id="L8"><span class="lineNum">       8</span>              : #include &quot;gtest/gtest.h&quot;</span>
+<span id="L9"><span class="lineNum">       9</span>              : </span>
+<span id="L10"><span class="lineNum">      10</span>              : namespace bigquery_emulator {</span>
+<span id="L11"><span class="lineNum">      11</span>              : namespace backend {</span>
+<span id="L12"><span class="lineNum">      12</span>              : namespace engine {</span>
+<span id="L13"><span class="lineNum">      13</span>              : namespace {</span>
+<span id="L14"><span class="lineNum">      14</span>              : </span>
+<span id="L15"><span class="lineNum">      15</span>              : // The full closed set of Disposition values. Centralised so each</span>
+<span id="L16"><span class="lineNum">      16</span>              : // test below can iterate over the same vector instead of</span>
+<span id="L17"><span class="lineNum">      17</span>              : // hand-listing the enum members. Adding a new enum value here AND</span>
+<span id="L18"><span class="lineNum">      18</span>              : // updating `kDispositionCount` triggers every assertion below to</span>
+<span id="L19"><span class="lineNum">      19</span>              : // exercise the new value as well.</span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC tlaBgGNC">           3 : const std::vector&lt;Disposition&gt;&amp; AllDispositions() {</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           3 :   static const auto* kAll = new std::vector&lt;Disposition&gt;{</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbNative,</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbRewrite,</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           3 :       Disposition::kDuckdbUdf,</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           3 :       Disposition::kSemanticExecutor,</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           3 :       Disposition::kControlOp,</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           3 :       Disposition::kLocalStub,</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           3 :       Disposition::kUnsupported,</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           3 :   };</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           3 :   return *kAll;</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           3 : }</span></span>
+<span id="L32"><span class="lineNum">      32</span>              : </span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 : TEST(DispositionTest, ToStringRoundsTripCanonicalSpellings) {</span></span>
+<span id="L34"><span class="lineNum">      34</span>              :   // The spellings here must match the YAML disposition column AND</span>
+<span id="L35"><span class="lineNum">      35</span>              :   // the SHAPE_TRACKER.md `status` column verbatim; the parity</span>
+<span id="L36"><span class="lineNum">      36</span>              :   // checker (`tools/check_disposition_parity`) consumes the same</span>
+<span id="L37"><span class="lineNum">      37</span>              :   // strings.</span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbNative), &quot;duckdb_native&quot;);</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbRewrite), &quot;duckdb_rewrite&quot;);</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kDuckdbUdf), &quot;duckdb_udf&quot;);</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kSemanticExecutor),</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :             &quot;semantic_executor&quot;);</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kControlOp), &quot;control_op&quot;);</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kLocalStub), &quot;local_stub&quot;);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :   EXPECT_EQ(DispositionToString(Disposition::kUnsupported), &quot;unsupported&quot;);</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L47"><span class="lineNum">      47</span>              : </span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 : TEST(DispositionTest, ToStringIsTotalAndUnique) {</span></span>
+<span id="L49"><span class="lineNum">      49</span>              :   // Every enum value maps to a non-empty, distinct lowercase</span>
+<span id="L50"><span class="lineNum">      50</span>              :   // identifier-safe string. An accidental duplicate would silently</span>
+<span id="L51"><span class="lineNum">      51</span>              :   // make `tools/check_disposition_parity` treat two routes as the</span>
+<span id="L52"><span class="lineNum">      52</span>              :   // same.</span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           1 :   std::set&lt;std::string&gt; seen;</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           7 :   for (Disposition d : AllDispositions()) {</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           7 :     absl::string_view s = DispositionToString(d);</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           7 :     SCOPED_TRACE(s);</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           7 :     EXPECT_FALSE(s.empty());</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           7 :     EXPECT_NE(s, &quot;unknown&quot;);</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           7 :     seen.insert(std::string(s));</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           7 :   }</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           1 :   EXPECT_EQ(seen.size(), AllDispositions().size());</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L63"><span class="lineNum">      63</span>              : </span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 : TEST(DispositionTest, EnumCountMatchesAllDispositions) {</span></span>
+<span id="L65"><span class="lineNum">      65</span>              :   // `kDispositionCount` is the build-time anchor the parity checker</span>
+<span id="L66"><span class="lineNum">      66</span>              :   // and the generated `node_dispositions_table.inc` test consult.</span>
+<span id="L67"><span class="lineNum">      67</span>              :   // Whenever a new disposition lands, this assertion is the canary</span>
+<span id="L68"><span class="lineNum">      68</span>              :   // that fires first; bumping `kDispositionCount` then forces</span>
+<span id="L69"><span class="lineNum">      69</span>              :   // updates everywhere else that iterates over the closed set.</span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           1 :   EXPECT_EQ(static_cast&lt;int&gt;(AllDispositions().size()), kDispositionCount);</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L72"><span class="lineNum">      72</span>              : </span>
+<span id="L73"><span class="lineNum">      73</span>              : }  // namespace</span>
+<span id="L74"><span class="lineNum">      74</span>              : }  // namespace engine</span>
+<span id="L75"><span class="lineNum">      75</span>              : }  // namespace backend</span>
+<span id="L76"><span class="lineNum">      76</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

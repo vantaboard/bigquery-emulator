@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">42.9&nbsp;%</td>
@@ -192,10 +192,10 @@
 <span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           4 :     return absl::StrCat(id.project_id, &quot;/&quot;, id.dataset_id, &quot;/&quot;, id.table_id);</span></span>
 <span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           4 :   }</span></span>
 <span id="L132"><span class="lineNum">     132</span>              : </span>
-<span id="L133"><span class="lineNum">     133</span>              :   std::map&lt;std::string, std::vector&lt;storage::DatasetId&gt;&gt; datasets_;</span>
-<span id="L134"><span class="lineNum">     134</span>              :   std::map&lt;std::string, std::vector&lt;storage::TableId&gt;&gt; tables_;</span>
-<span id="L135"><span class="lineNum">     135</span>              :   std::map&lt;std::string, schema::TableSchema&gt; schemas_;</span>
-<span id="L136"><span class="lineNum">     136</span>              :   std::map&lt;std::string, std::vector&lt;storage::RoutineRecord&gt;&gt; routines_;</span>
+<span id="L133"><span class="lineNum">     133</span>              :   std::map&lt;std::string, std::vector&lt;storage::DatasetId&gt;&gt; datasets_{};</span>
+<span id="L134"><span class="lineNum">     134</span>              :   std::map&lt;std::string, std::vector&lt;storage::TableId&gt;&gt; tables_{};</span>
+<span id="L135"><span class="lineNum">     135</span>              :   std::map&lt;std::string, schema::TableSchema&gt; schemas_{};</span>
+<span id="L136"><span class="lineNum">     136</span>              :   std::map&lt;std::string, std::vector&lt;storage::RoutineRecord&gt;&gt; routines_{};</span>
 <span id="L137"><span class="lineNum">     137</span>              : };</span>
 <span id="L138"><span class="lineNum">     138</span>              : </span>
 <span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 : TEST(CatalogNamesTest, PopulateFromStorageIncludesTablesColumnsAndRoutines) {</span></span>

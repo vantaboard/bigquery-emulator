@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">96.2&nbsp;%</td>
-            <td class="headerCovTableEntry">158</td>
-            <td class="headerCovTableEntry">152</td>
+            <td class="headerCovTableEntry">159</td>
+            <td class="headerCovTableEntry">153</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -289,22 +289,23 @@
 <span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           5 :                     &quot;CREATE OR REPLACE VIEW ds_tenant.v AS SELECT id FROM &quot;</span></span>
 <span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           5 :                     &quot;ds_base.source&quot;)</span></span>
 <span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           5 :                     .ok());</span></span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           5 :     GoogleSqlCatalog* reg_catalog = GetOrCreateRegistrationCatalog(</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           5 :         kProject, storage_.get(), &amp;reg_tf, language, &quot;ds_tenant&quot;);</span></span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           5 :     ASSERT_NE(reg_catalog, nullptr);</span></span>
-<span id="L233"><span class="lineNum">     233</span>              : </span>
-<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           5 :     CatalogBundle query_catalog = MakeCatalog(&quot;ds_tenant&quot;);</span></span>
-<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* view = nullptr;</span></span>
-<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(</span></span>
-<span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           5 :         query_catalog.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
-<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           5 :     ASSERT_NE(view, nullptr);</span></span>
-<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           5 :   }</span></span>
-<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L241"><span class="lineNum">     241</span>              : </span>
-<span id="L242"><span class="lineNum">     242</span>              : }  // namespace</span>
-<span id="L243"><span class="lineNum">     243</span>              : }  // namespace catalog</span>
-<span id="L244"><span class="lineNum">     244</span>              : }  // namespace backend</span>
-<span id="L245"><span class="lineNum">     245</span>              : }  // namespace bigquery_emulator</span>
+<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           5 :     GoogleSqlCatalog* reg_catalog = nullptr;</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           5 :     reg_catalog = GetOrCreateRegistrationCatalog(</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           5 :         kProject, storage_.get(), &amp;reg_tf, language, &quot;ds_tenant&quot;);</span></span>
+<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           5 :     ASSERT_NE(reg_catalog, nullptr);</span></span>
+<span id="L234"><span class="lineNum">     234</span>              : </span>
+<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           5 :     CatalogBundle query_catalog = MakeCatalog(&quot;ds_tenant&quot;);</span></span>
+<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">           5 :     const ::googlesql::Table* view = nullptr;</span></span>
+<span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           5 :     EXPECT_TRUE(</span></span>
+<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           5 :         query_catalog.catalog-&gt;FindTable({&quot;ds_tenant&quot;, &quot;v&quot;}, &amp;view).ok());</span></span>
+<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           5 :     ASSERT_NE(view, nullptr);</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           5 :   }</span></span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L242"><span class="lineNum">     242</span>              : </span>
+<span id="L243"><span class="lineNum">     243</span>              : }  // namespace</span>
+<span id="L244"><span class="lineNum">     244</span>              : }  // namespace catalog</span>
+<span id="L245"><span class="lineNum">     245</span>              : }  // namespace backend</span>
+<span id="L246"><span class="lineNum">     246</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

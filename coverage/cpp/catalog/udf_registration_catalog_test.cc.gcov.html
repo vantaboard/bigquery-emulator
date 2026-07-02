@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">93.0&nbsp;%</td>
-            <td class="headerCovTableEntry">86</td>
-            <td class="headerCovTableEntry">80</td>
+            <td class="headerCovTableEntryHi">93.2&nbsp;%</td>
+            <td class="headerCovTableEntry">88</td>
+            <td class="headerCovTableEntry">82</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -176,41 +176,43 @@
 <span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 :   ::googlesql::TypeFactory reg_tf;</span></span>
 <span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :   const ::googlesql::LanguageOptions language = MakeLanguageOptions();</span></span>
 <span id="L116"><span class="lineNum">     116</span>              : </span>
-<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :   GoogleSqlCatalog* first = GetOrCreateRegistrationCatalog(</span></span>
-<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           1 :       kProject, storage_.get(), &amp;reg_tf, language, &quot;ds&quot;);</span></span>
-<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 :   ASSERT_NE(first, nullptr);</span></span>
-<span id="L120"><span class="lineNum">     120</span>              : </span>
-<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">           1 :   const ::googlesql::Procedure* before = nullptr;</span></span>
-<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(first-&gt;FindProcedure({&quot;ds&quot;, &quot;echo&quot;}, &amp;before).ok());</span></span>
-<span id="L123"><span class="lineNum">     123</span>              : </span>
-<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterProcedureFromSql(</span></span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :                   &quot;CREATE OR REPLACE PROCEDURE ds.echo(OUT arr ARRAY&lt;INT64&gt;) &quot;</span></span>
-<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 :                   &quot;BEGIN SET arr = GENERATE_ARRAY(1, 3); END;&quot;)</span></span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
-<span id="L128"><span class="lineNum">     128</span>              : </span>
-<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">           1 :   const StoredSQLProcedure* in_registry =</span></span>
-<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           1 :       FindProjectProcedure(kProject, &quot;echo&quot;);</span></span>
-<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           2 :   ASSERT_NE(in_registry, nullptr)</span></span>
-<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;procedure must be in project registry after RegisterProjectProcedure&quot;;</span></span>
-<span id="L133"><span class="lineNum">     133</span>              : </span>
-<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">           1 :   GoogleSqlCatalog* second = GetOrCreateRegistrationCatalog(</span></span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :       kProject, storage_.get(), &amp;reg_tf, language, &quot;ds&quot;);</span></span>
-<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :   ASSERT_NE(second, nullptr);</span></span>
-<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :   EXPECT_EQ(second, first);</span></span>
-<span id="L138"><span class="lineNum">     138</span>              : </span>
-<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   const ::googlesql::Procedure* after = nullptr;</span></span>
-<span id="L140"><span class="lineNum">     140</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(second-&gt;FindProcedure({&quot;ds&quot;, &quot;echo&quot;}, &amp;after).ok())</span></span>
-<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;reused registration catalog must replay procedures registered &quot;</span></span>
-<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">           2 :          &quot;after first construction&quot;;</span></span>
-<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           1 :   ASSERT_NE(after, nullptr);</span></span>
-<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">           1 :   EXPECT_EQ(after, in_registry);</span></span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   EXPECT_EQ(after-&gt;Name(), &quot;echo&quot;);</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L147"><span class="lineNum">     147</span>              : </span>
-<span id="L148"><span class="lineNum">     148</span>              : }  // namespace</span>
-<span id="L149"><span class="lineNum">     149</span>              : }  // namespace catalog</span>
-<span id="L150"><span class="lineNum">     150</span>              : }  // namespace backend</span>
-<span id="L151"><span class="lineNum">     151</span>              : }  // namespace bigquery_emulator</span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :   GoogleSqlCatalog* first = nullptr;</span></span>
+<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           1 :   first = GetOrCreateRegistrationCatalog(</span></span>
+<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           1 :       kProject, storage_.get(), &amp;reg_tf, language, &quot;ds&quot;);</span></span>
+<span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">           1 :   ASSERT_NE(first, nullptr);</span></span>
+<span id="L121"><span class="lineNum">     121</span>              : </span>
+<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           1 :   const ::googlesql::Procedure* before = nullptr;</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           1 :   EXPECT_FALSE(first-&gt;FindProcedure({&quot;ds&quot;, &quot;echo&quot;}, &amp;before).ok());</span></span>
+<span id="L124"><span class="lineNum">     124</span>              : </span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(RegisterProcedureFromSql(</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">           1 :                   &quot;CREATE OR REPLACE PROCEDURE ds.echo(OUT arr ARRAY&lt;INT64&gt;) &quot;</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           1 :                   &quot;BEGIN SET arr = GENERATE_ARRAY(1, 3); END;&quot;)</span></span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           1 :                   .ok());</span></span>
+<span id="L129"><span class="lineNum">     129</span>              : </span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           1 :   const StoredSQLProcedure* in_registry =</span></span>
+<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           1 :       FindProjectProcedure(kProject, &quot;echo&quot;);</span></span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">           2 :   ASSERT_NE(in_registry, nullptr)</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;procedure must be in project registry after RegisterProjectProcedure&quot;;</span></span>
+<span id="L134"><span class="lineNum">     134</span>              : </span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           1 :   GoogleSqlCatalog* second = nullptr;</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">           1 :   second = GetOrCreateRegistrationCatalog(</span></span>
+<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           1 :       kProject, storage_.get(), &amp;reg_tf, language, &quot;ds&quot;);</span></span>
+<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">           1 :   ASSERT_NE(second, nullptr);</span></span>
+<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           1 :   EXPECT_EQ(second, first);</span></span>
+<span id="L140"><span class="lineNum">     140</span>              : </span>
+<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">           1 :   const ::googlesql::Procedure* after = nullptr;</span></span>
+<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">           2 :   ASSERT_TRUE(second-&gt;FindProcedure({&quot;ds&quot;, &quot;echo&quot;}, &amp;after).ok())</span></span>
+<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           2 :       &lt;&lt; &quot;reused registration catalog must replay procedures registered &quot;</span></span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">           2 :          &quot;after first construction&quot;;</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           1 :   ASSERT_NE(after, nullptr);</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           1 :   EXPECT_EQ(after, in_registry);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           1 :   EXPECT_EQ(after-&gt;Name(), &quot;echo&quot;);</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L149"><span class="lineNum">     149</span>              : </span>
+<span id="L150"><span class="lineNum">     150</span>              : }  // namespace</span>
+<span id="L151"><span class="lineNum">     151</span>              : }  // namespace catalog</span>
+<span id="L152"><span class="lineNum">     152</span>              : }  // namespace backend</span>
+<span id="L153"><span class="lineNum">     153</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>

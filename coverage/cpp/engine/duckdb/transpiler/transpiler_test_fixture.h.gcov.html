@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -395,7 +395,7 @@
 <span id="L333"><span class="lineNum">     333</span> <span class="tlaGNC">          88 :     ASSERT_FALSE(emitted.empty()) &lt;&lt; &quot;transpiler returned empty SQL for:\n&quot;</span></span>
 <span id="L334"><span class="lineNum">     334</span> <span class="tlaGNC">          88 :                                   &lt;&lt; source_sql;</span></span>
 <span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">          44 :     SCOPED_TRACE(emitted);</span></span>
-<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">          44 :     ::duckdb_result result;</span></span>
+<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">          44 :     ::duckdb_result result{};</span></span>
 <span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">          44 :     const auto rc = ::duckdb_query(conn_, emitted.c_str(), &amp;result);</span></span>
 <span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">          44 :     if (rc != ::DuckDBSuccess) {</span></span>
 <span id="L339"><span class="lineNum">     339</span> <span class="tlaUNC tlaBgUNC">           0 :       const char* err = ::duckdb_result_error(&amp;result);</span></span>

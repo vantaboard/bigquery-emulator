@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">96.0&nbsp;%</td>
-            <td class="headerCovTableEntry">353</td>
-            <td class="headerCovTableEntry">339</td>
+            <td class="headerCovTableEntry">354</td>
+            <td class="headerCovTableEntry">340</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-06-28 21:58:55</td>
+            <td class="headerValue">2026-07-02 02:07:43</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -392,102 +392,103 @@
 <span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">           1 :   ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions();</span></span>
 <span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">           1 :   ASSERT_TRUE(</span></span>
 <span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">           1 :       options.AddQueryParameter(&quot;wallet&quot;, type_factory_-&gt;get_string()).ok());</span></span>
-<span id="L333"><span class="lineNum">     333</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = AnalyzeWith(R&quot;sql(</span></span>
-<span id="L334"><span class="lineNum">     334</span> <span class="tlaGNC">           1 : SELECT</span></span>
-<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">           1 :   COUNT(1) AS transactions,</span></span>
-<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">           1 :   SUM(amount) AS total_paid,</span></span>
-<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">           1 :   COUNT(DISTINCT destination) AS distinct_recipients</span></span>
-<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">           1 : FROM transactions</span></span>
-<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">           1 : WHERE timestamp &gt; TIMESTAMP('2015-01-01')</span></span>
-<span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">           1 :   AND origin = @wallet</span></span>
-<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">           1 : )sql&quot;,</span></span>
-<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">           1 :                                                            options);</span></span>
-<span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;queryClusteredTable sample must transpile&quot;;</span></span>
-<span id="L347"><span class="lineNum">     347</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;COUNT(1)&quot;), std::string::npos);</span></span>
-<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;SUM(\&quot;amount\&quot;)&quot;), std::string::npos);</span></span>
-<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;COUNT(DISTINCT&quot;), std::string::npos);</span></span>
-<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L351"><span class="lineNum">     351</span>              : </span>
-<span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileDateAddIntervalColumnRef) {</span></span>
-<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
-<span id="L354"><span class="lineNum">     354</span> <span class="tlaGNC">           1 :       &quot;SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id &quot;</span></span>
-<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">           1 :       &quot;DAY)) AS yr FROM people&quot;);</span></span>
-<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L357"><span class="lineNum">     357</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L358"><span class="lineNum">     358</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L359"><span class="lineNum">     359</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
-<span id="L360"><span class="lineNum">     360</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_date_add&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L361"><span class="lineNum">     361</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_extract&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L362"><span class="lineNum">     362</span> <span class="tlaGNC">           2 :   EXPECT_EQ(sql.find(&quot; DAY&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L364"><span class="lineNum">     364</span>              : </span>
-<span id="L365"><span class="lineNum">     365</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileDateFuncsBenchShape) {</span></span>
-<span id="L366"><span class="lineNum">     366</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
-<span id="L367"><span class="lineNum">     367</span> <span class="tlaGNC">           1 :       &quot;SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id &quot;</span></span>
-<span id="L368"><span class="lineNum">     368</span> <span class="tlaGNC">           1 :       &quot;DAY)) AS yr, COUNT(*) AS cnt FROM people GROUP BY yr ORDER BY yr&quot;);</span></span>
-<span id="L369"><span class="lineNum">     369</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L370"><span class="lineNum">     370</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L371"><span class="lineNum">     371</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L372"><span class="lineNum">     372</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
-<span id="L373"><span class="lineNum">     373</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_date_add&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L374"><span class="lineNum">     374</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_extract&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L375"><span class="lineNum">     375</span> <span class="tlaGNC">           2 :   EXPECT_EQ(sql.find(&quot; DAY&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L376"><span class="lineNum">     376</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L377"><span class="lineNum">     377</span>              : </span>
-<span id="L378"><span class="lineNum">     378</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileFloatSumCastsAggregateToDouble) {</span></span>
-<span id="L379"><span class="lineNum">     379</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
-<span id="L380"><span class="lineNum">     380</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT SUM(CAST(id AS FLOAT64)) AS total FROM people&quot;);</span></span>
-<span id="L381"><span class="lineNum">     381</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L382"><span class="lineNum">     382</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L383"><span class="lineNum">     383</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L384"><span class="lineNum">     384</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
-<span id="L385"><span class="lineNum">     385</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;SUM(&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L386"><span class="lineNum">     386</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L387"><span class="lineNum">     387</span>              : </span>
-<span id="L388"><span class="lineNum">     388</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileUnnestArrayBenchShape) {</span></span>
-<span id="L389"><span class="lineNum">     389</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
-<span id="L390"><span class="lineNum">     390</span> <span class="tlaGNC">           1 :       &quot;SELECT COUNT(*) AS cnt, SUM(x) AS total FROM arr_table, &quot;</span></span>
-<span id="L391"><span class="lineNum">     391</span> <span class="tlaGNC">           1 :       &quot;UNNEST(arr_table.arr) AS x&quot;);</span></span>
-<span id="L392"><span class="lineNum">     392</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L393"><span class="lineNum">     393</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L394"><span class="lineNum">     394</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L395"><span class="lineNum">     395</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
-<span id="L396"><span class="lineNum">     396</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;unnest(&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L397"><span class="lineNum">     397</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;__bq_l&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L398"><span class="lineNum">     398</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;\&quot;cnt\&quot;&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L399"><span class="lineNum">     399</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L400"><span class="lineNum">     400</span>              : </span>
-<span id="L401"><span class="lineNum">     401</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestSelect) {</span></span>
-<span id="L402"><span class="lineNum">     402</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
-<span id="L403"><span class="lineNum">     403</span> <span class="tlaGNC">           1 :       &quot;SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
-<span id="L404"><span class="lineNum">     404</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
-<span id="L405"><span class="lineNum">     405</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L406"><span class="lineNum">     406</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L407"><span class="lineNum">     407</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L408"><span class="lineNum">     408</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;cross join unnest select must transpile&quot;;</span></span>
-<span id="L409"><span class="lineNum">     409</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L410"><span class="lineNum">     410</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L411"><span class="lineNum">     411</span>              : </span>
-<span id="L412"><span class="lineNum">     412</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestComputedSelect) {</span></span>
-<span id="L413"><span class="lineNum">     413</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
-<span id="L414"><span class="lineNum">     414</span> <span class="tlaGNC">           1 :       &quot;SELECT n + (m - 1) * 1000000 AS id &quot;</span></span>
-<span id="L415"><span class="lineNum">     415</span> <span class="tlaGNC">           1 :       &quot;FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
-<span id="L416"><span class="lineNum">     416</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
-<span id="L417"><span class="lineNum">     417</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
-<span id="L418"><span class="lineNum">     418</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
-<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
-<span id="L420"><span class="lineNum">     420</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;computed cross join unnest must transpile&quot;;</span></span>
-<span id="L421"><span class="lineNum">     421</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
-<span id="L422"><span class="lineNum">     422</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L423"><span class="lineNum">     423</span>              : </span>
-<span id="L424"><span class="lineNum">     424</span>              : }  // namespace transpiler</span>
-<span id="L425"><span class="lineNum">     425</span>              : }  // namespace duckdb</span>
-<span id="L426"><span class="lineNum">     426</span>              : }  // namespace engine</span>
-<span id="L427"><span class="lineNum">     427</span>              : }  // namespace backend</span>
-<span id="L428"><span class="lineNum">     428</span>              : }  // namespace bigquery_emulator</span>
+<span id="L333"><span class="lineNum">     333</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = nullptr;</span></span>
+<span id="L334"><span class="lineNum">     334</span> <span class="tlaGNC">           1 :   stmt = AnalyzeWith(R&quot;sql(</span></span>
+<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">           1 : SELECT</span></span>
+<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">           1 :   COUNT(1) AS transactions,</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">           1 :   SUM(amount) AS total_paid,</span></span>
+<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">           1 :   COUNT(DISTINCT destination) AS distinct_recipients</span></span>
+<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">           1 : FROM transactions</span></span>
+<span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">           1 : WHERE timestamp &gt; TIMESTAMP('2015-01-01')</span></span>
+<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">           1 :   AND origin = @wallet</span></span>
+<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">           1 : )sql&quot;,</span></span>
+<span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">           1 :                      options);</span></span>
+<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L347"><span class="lineNum">     347</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;queryClusteredTable sample must transpile&quot;;</span></span>
+<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;COUNT(1)&quot;), std::string::npos);</span></span>
+<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;SUM(\&quot;amount\&quot;)&quot;), std::string::npos);</span></span>
+<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">           1 :   EXPECT_NE(sql.find(&quot;COUNT(DISTINCT&quot;), std::string::npos);</span></span>
+<span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L352"><span class="lineNum">     352</span>              : </span>
+<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileDateAddIntervalColumnRef) {</span></span>
+<span id="L354"><span class="lineNum">     354</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">           1 :       &quot;SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id &quot;</span></span>
+<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">           1 :       &quot;DAY)) AS yr FROM people&quot;);</span></span>
+<span id="L357"><span class="lineNum">     357</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L358"><span class="lineNum">     358</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L359"><span class="lineNum">     359</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L360"><span class="lineNum">     360</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
+<span id="L361"><span class="lineNum">     361</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_date_add&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L362"><span class="lineNum">     362</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_extract&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">           2 :   EXPECT_EQ(sql.find(&quot; DAY&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L364"><span class="lineNum">     364</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L365"><span class="lineNum">     365</span>              : </span>
+<span id="L366"><span class="lineNum">     366</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileDateFuncsBenchShape) {</span></span>
+<span id="L367"><span class="lineNum">     367</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L368"><span class="lineNum">     368</span> <span class="tlaGNC">           1 :       &quot;SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id &quot;</span></span>
+<span id="L369"><span class="lineNum">     369</span> <span class="tlaGNC">           1 :       &quot;DAY)) AS yr, COUNT(*) AS cnt FROM people GROUP BY yr ORDER BY yr&quot;);</span></span>
+<span id="L370"><span class="lineNum">     370</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L371"><span class="lineNum">     371</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L372"><span class="lineNum">     372</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L373"><span class="lineNum">     373</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
+<span id="L374"><span class="lineNum">     374</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_date_add&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L375"><span class="lineNum">     375</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;bq_extract&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L376"><span class="lineNum">     376</span> <span class="tlaGNC">           2 :   EXPECT_EQ(sql.find(&quot; DAY&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L377"><span class="lineNum">     377</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L378"><span class="lineNum">     378</span>              : </span>
+<span id="L379"><span class="lineNum">     379</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileFloatSumCastsAggregateToDouble) {</span></span>
+<span id="L380"><span class="lineNum">     380</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt =</span></span>
+<span id="L381"><span class="lineNum">     381</span> <span class="tlaGNC">           1 :       Analyze(&quot;SELECT SUM(CAST(id AS FLOAT64)) AS total FROM people&quot;);</span></span>
+<span id="L382"><span class="lineNum">     382</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L383"><span class="lineNum">     383</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L384"><span class="lineNum">     384</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L385"><span class="lineNum">     385</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
+<span id="L386"><span class="lineNum">     386</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;SUM(&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L387"><span class="lineNum">     387</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L388"><span class="lineNum">     388</span>              : </span>
+<span id="L389"><span class="lineNum">     389</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileUnnestArrayBenchShape) {</span></span>
+<span id="L390"><span class="lineNum">     390</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L391"><span class="lineNum">     391</span> <span class="tlaGNC">           1 :       &quot;SELECT COUNT(*) AS cnt, SUM(x) AS total FROM arr_table, &quot;</span></span>
+<span id="L392"><span class="lineNum">     392</span> <span class="tlaGNC">           1 :       &quot;UNNEST(arr_table.arr) AS x&quot;);</span></span>
+<span id="L393"><span class="lineNum">     393</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L394"><span class="lineNum">     394</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L395"><span class="lineNum">     395</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L396"><span class="lineNum">     396</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;transpile failed&quot;;</span></span>
+<span id="L397"><span class="lineNum">     397</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;unnest(&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L398"><span class="lineNum">     398</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;__bq_l&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L399"><span class="lineNum">     399</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;\&quot;cnt\&quot;&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L400"><span class="lineNum">     400</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L401"><span class="lineNum">     401</span>              : </span>
+<span id="L402"><span class="lineNum">     402</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestSelect) {</span></span>
+<span id="L403"><span class="lineNum">     403</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L404"><span class="lineNum">     404</span> <span class="tlaGNC">           1 :       &quot;SELECT n, m FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
+<span id="L405"><span class="lineNum">     405</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
+<span id="L406"><span class="lineNum">     406</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L407"><span class="lineNum">     407</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L408"><span class="lineNum">     408</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L409"><span class="lineNum">     409</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;cross join unnest select must transpile&quot;;</span></span>
+<span id="L410"><span class="lineNum">     410</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L411"><span class="lineNum">     411</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L412"><span class="lineNum">     412</span>              : </span>
+<span id="L413"><span class="lineNum">     413</span> <span class="tlaGNC">           1 : TEST_F(TranspilerTest, TranspileCrossJoinUnnestComputedSelect) {</span></span>
+<span id="L414"><span class="lineNum">     414</span> <span class="tlaGNC">           1 :   const ::googlesql::ResolvedStatement* stmt = Analyze(</span></span>
+<span id="L415"><span class="lineNum">     415</span> <span class="tlaGNC">           1 :       &quot;SELECT n + (m - 1) * 1000000 AS id &quot;</span></span>
+<span id="L416"><span class="lineNum">     416</span> <span class="tlaGNC">           1 :       &quot;FROM UNNEST(GENERATE_ARRAY(1, 10)) AS n &quot;</span></span>
+<span id="L417"><span class="lineNum">     417</span> <span class="tlaGNC">           1 :       &quot;CROSS JOIN UNNEST(GENERATE_ARRAY(1, 2)) AS m&quot;);</span></span>
+<span id="L418"><span class="lineNum">     418</span> <span class="tlaGNC">           1 :   ASSERT_NE(stmt, nullptr);</span></span>
+<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">           1 :   TestTranspiler t;</span></span>
+<span id="L420"><span class="lineNum">     420</span> <span class="tlaGNC">           1 :   std::string sql = t.Transpile(stmt);</span></span>
+<span id="L421"><span class="lineNum">     421</span> <span class="tlaGNC">           2 :   ASSERT_FALSE(sql.empty()) &lt;&lt; &quot;computed cross join unnest must transpile&quot;;</span></span>
+<span id="L422"><span class="lineNum">     422</span> <span class="tlaGNC">           2 :   EXPECT_NE(sql.find(&quot;CROSS JOIN&quot;), std::string::npos) &lt;&lt; sql;</span></span>
+<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L424"><span class="lineNum">     424</span>              : </span>
+<span id="L425"><span class="lineNum">     425</span>              : }  // namespace transpiler</span>
+<span id="L426"><span class="lineNum">     426</span>              : }  // namespace duckdb</span>
+<span id="L427"><span class="lineNum">     427</span>              : }  // namespace engine</span>
+<span id="L428"><span class="lineNum">     428</span>              : }  // namespace backend</span>
+<span id="L429"><span class="lineNum">     429</span>              : }  // namespace bigquery_emulator</span>
         </pre>
               </td>
             </tr>
