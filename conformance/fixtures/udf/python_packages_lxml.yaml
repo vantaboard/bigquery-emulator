@@ -1,5 +1,8 @@
 # Python UDF with declared packages evaluates when importable.
+# Skipped when lxml is absent on the host interpreter (optional_dependencies).
 name: udf_python_packages_lxml
+optional_dependencies:
+  - lxml
 description: |
   LANGUAGE python UDF with packages=['lxml'] evaluates when lxml is present in
   the configured interpreter (host python3-lxml or a provisioned venv).

@@ -225,6 +225,12 @@ func runOne(ctx context.Context, fx *Fixture, p Profile, opts Options) Result {
 		Status:  StatusFail,
 	}
 
+	if reason := optionalDependencySkipReason(fx.OptionalDependencies); reason != "" {
+		result.Status = StatusSkip
+		result.Message = reason
+		return markDuration(result, started)
+	}
+
 	env, startErr := StartEmulator(ctx, opts.Harness, p)
 	if startErr != nil {
 		result.Message = "start emulator: " + startErr.Error()

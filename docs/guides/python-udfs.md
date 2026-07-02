@@ -48,6 +48,16 @@ export BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1   # required opt-in
 task python-udf:provision -- lxml pandas
 ```
 
+With no package arguments, `task python-udf:provision` scans
+`$BIGQUERY_EMULATOR_DATA_DIR/catalog.duckdb` (`__bqemu_routines`) for the
+union of `packages` declared on registered `LANGUAGE python` routines and
+installs that set into the managed venv.
+
+```bash
+export BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1
+task python-udf:provision
+```
+
 This creates or updates `$BIGQUERY_EMULATOR_DATA_DIR/python-udf-env` and runs
 `pip install` only inside that provisioning step.
 

@@ -77,6 +77,12 @@ type Fixture struct {
 	// refuses --update-baselines rewrites on such fixtures.
 	VerifiedProduction bool `yaml:"verified_production,omitempty"`
 
+	// OptionalDependencies lists host packages (e.g. Python modules) that
+	// must be importable for the fixture to run. When any are missing the
+	// runner reports SKIP instead of FAIL so host-dependent fixtures stay
+	// green on machines without optional deps installed.
+	OptionalDependencies []string `yaml:"optional_dependencies,omitempty"`
+
 	// Expected pins either the expected row set or the expected
 	// HTTP error envelope. Exactly one of the two must be set.
 	Expected Expectation `yaml:"expected"`

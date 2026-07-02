@@ -2,14 +2,16 @@
 #
 # Usage:
 #   BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1 task python-udf:provision -- lxml
-#   BIGQUERY_EMULATOR_DATA_DIR=/var/lib/bq task python-udf:provision -- pandas
+#   BIGQUERY_EMULATOR_DATA_DIR=/var/lib/bq task python-udf:provision
+#     (no args: install union of packages from __bqemu_routines)
 version: "3"
 
 tasks:
   provision:
     desc: |
       Create or update $BIGQUERY_EMULATOR_DATA_DIR/python-udf-env and pip-install
-      packages. Requires BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1 (never runs at query time).
+      packages. With no args, installs the union from registered Python routines
+      in catalog.duckdb (__bqemu_routines). Requires BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1.
     cmds:
       - |
         set -eo pipefail
