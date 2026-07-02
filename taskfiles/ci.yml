@@ -4,8 +4,8 @@
 #
 # CI splits the C++ engine compile + cc_test into
 # `.github/workflows/build-engine.yml` (producer) and consumes the artifact in
-# `ci / build-and-test` via `workflow_run`. Locally this task still runs
-# build + test sequentially.
+# `ci / build-and-test` and `ci / gateway-e2e` via `workflow_run`. Locally
+# this task still runs build + test sequentially.
 #
 # Usage: task ci (or task ci:run)
 #        task ci:cpp-analysis (the slow C++ lane on its own)
@@ -42,6 +42,21 @@ tasks:
       - task: :lint:cpp:test
       - task: cpp-analysis
       - task: :emulator:build
+      - task: gateway-e2e
+
+  gateway-e2e:
+    desc: Integration tests for gateway/e2e (requires staged emulator_main)
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        if [[ ! -x bin/emulator_main ]]; then
+          echo "gateway-e2e: bin/emulator_main missing; run task emulator:build-engine-bazel first" >&2
+          exit 1
+        fi
+        export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
+        go test -tags=integration ./gateway/e2e/... -count=1
 
   cpp-analysis:
     desc: C++ analysis lane (cppcheck + diff-based clang-tidy, mirror of CI)
