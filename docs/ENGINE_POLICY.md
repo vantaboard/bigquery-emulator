@@ -282,7 +282,7 @@ services the Go sample suites exercise:
 | Public service | Posture |
 |---|---|
 | `google.cloud.bigquery.storage.v1.BigQueryRead` / `BigQueryWrite` | Gateway shim → engine internal Storage Read/Write |
-| `google.cloud.bigquery.connection.v1.ConnectionService` | Shallow list/create/get stubs (`gateway/handlers/bqconnection/`) |
+| `google.cloud.bigquery.connection.v1.ConnectionService` | CRUD + persistence under `$data_dir/external/connections/_registry/` (`gateway/handlers/bqconnection/`); `EXTERNAL_QUERY` is fixture-backed only |
 | `google.cloud.bigquery.reservation.v1.ReservationService` | Empty list stubs (`gateway/handlers/bqreservation/`) |
 | `google.cloud.bigquery.analyticshub.v1.AnalyticsHubService` | In-memory exchange/listing CRUD (`gateway/handlers/bqanalyticshub/`) |
 | `google.cloud.bigquery.v2.*` (Dataset/Table/Job/Project/Routine) | Thin gRPC adapters over existing REST/catalog handlers (`gateway/handlers/bqv2grpc/`) |
@@ -290,6 +290,21 @@ services the Go sample suites exercise:
 Set `BIGQUERY_ANALYTICSHUB_GRPC_ENDPOINT` to the same host:port when
 samples dial Analytics Hub separately. BigQuery v2 preview clients reuse
 `BIGQUERY_STORAGE_GRPC_ENDPOINT` via `bqopts.BigQueryV2GRPCClientOptions()`.
+
+## External query and federated sources
+
+`EXTERNAL_QUERY(connection, query)` is **fixture-backed only** — the emulator
+never opens live federation sockets to Cloud SQL, Spanner, or AlloyDB. Snapshot
+layout, manifest format, and operator workflow are documented in
+[`docs/guides/external-query.md`](guides/external-query.md).
+
+| Surface | Posture | Conformance |
+|---|---|---|
+| `EXTERNAL_QUERY` TVF | `semantic_executor`; schema + rows from `$data_dir/external/connections/<id>/` | `conformance/fixtures/external/external_query_fixture.yaml`, `external_query_missing_fixture.yaml` |
+| Connection API metadata | Persisted JSON registry; property blocks round-trip | `gateway/handlers/bqconnection/grpc_test.go` |
+| BigLake tables (`biglakeConfiguration`) | `501 notImplemented` with ENGINE_POLICY link | — |
+| Object tables (`objectTableOptions` / `OBJECT_TABLE`) | `501 notImplemented` with ENGINE_POLICY link | — |
+| External datasets (`externalDatasetReference`) | `501 notImplemented` with ENGINE_POLICY link | — |
 
 ## Google Sheets external tables
 

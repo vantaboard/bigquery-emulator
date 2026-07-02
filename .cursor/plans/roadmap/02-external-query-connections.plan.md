@@ -4,19 +4,19 @@ overview: Land fixture-backed EXTERNAL_QUERY as a TVF in the analyzer catalog, d
 todos:
   - id: fixture-contract
     content: "Define the $data_dir/external/connections/ fixture contract: per-connection result files (schema + rows) keyed by query hash or alias"
-    status: pending
+    status: completed
   - id: analyzer-tvf
     content: Register EXTERNAL_QUERY as a TVF in the per-query analyzer catalog so analysis succeeds and routes to the semantic executor
-    status: pending
+    status: completed
   - id: engine-eval
     content: Evaluate EXTERNAL_QUERY on the semantic executor by materializing the fixture result as a row source
-    status: pending
+    status: completed
   - id: connection-crud
     content: Deepen bqconnection CRUD (update/delete, properties round-trip) against sourceconfig, persisted under $data_dir
-    status: pending
+    status: completed
   - id: posture-rows
     content: Pin BigLake / object tables / Spanner external datasets as explicit unsupported-with-envelope rows in ENGINE_POLICY
-    status: pending
+    status: completed
 isProject: false
 ---
 

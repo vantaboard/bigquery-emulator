@@ -1016,10 +1016,10 @@ ephemeral `tableDefinitions` for Sheets/GCS. See
   `gcs_uri_resolver.cc`)
 - ✅ Google Sheets external tables (`gateway/external/sheets.go`; conformance
   `external/google_sheets_class_data.yaml`)
-- ⏳ Cloud-resource **connections** and federated / external-dataset query
-  paths (`EXTERNAL_QUERY`, BigLake, object tables, Spanner external datasets)
-  — bqconnection CRUD wired to config model; `EXTERNAL_QUERY` engine stub
-  still pending
+- ✅ Cloud-resource **connections** and fixture-backed `EXTERNAL_QUERY`
+  (`$data_dir/external/connections/`; `docs/guides/external-query.md`;
+  conformance `external/external_query_fixture.yaml`). BigLake, object tables,
+  and Spanner external datasets return explicit `501 notImplemented` envelopes.
 - ✅ Ephemeral `tableDefinitions` for Sheets and GCS sources
 
 ## Non-goals
