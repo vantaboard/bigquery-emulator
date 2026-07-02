@@ -4577,28 +4577,28 @@ func buildMatrix(dir string) (string, error) <span class="cov2" title="5">{
 // helper stays pure-string.
 func collectMatrixRows(fixtures []*runner.Fixture, dir string) []matrixRow <span class="cov2" title="5">{
         rows := make([]matrixRow, 0, len(fixtures))
-        for _, f := range fixtures </span><span class="cov9" title="1280">{
+        for _, f := range fixtures </span><span class="cov9" title="1285">{
                 rel, err := filepath.Rel(dir, f.Path)
                 if err != nil </span><span class="cov0" title="0">{
                         rel = f.Path
                 }</span>
-                <span class="cov9" title="1280">shape := filepath.ToSlash(
+                <span class="cov9" title="1285">shape := filepath.ToSlash(
                         strings.TrimSuffix(rel, filepath.Ext(rel)),
                 )
                 route := f.Expected.Route
                 if route == "" &amp;&amp; len(f.Expected.RouteAllowlist) &gt; 0 </span><span class="cov0" title="0">{
                         route = "[" + strings.Join(f.Expected.RouteAllowlist, ", ") + "]"
                 }</span>
-                <span class="cov9" title="1280">if route == "" </span><span class="cov7" title="255">{
+                <span class="cov9" title="1285">if route == "" </span><span class="cov7" title="255">{
                         route = "(unassigned)"
                 }</span>
-                <span class="cov9" title="1280">rows = append(rows, matrixRow{
+                <span class="cov9" title="1285">rows = append(rows, matrixRow{
                         shape:  shape,
                         route:  route,
                         strict: f.Expected.RouteStrictDefault(),
                 })</span>
         }
-        <span class="cov2" title="5">sort.SliceStable(rows, func(i, j int) bool </span><span class="cov10" title="1595">{ return rows[i].shape &lt; rows[j].shape }</span>)
+        <span class="cov2" title="5">sort.SliceStable(rows, func(i, j int) bool </span><span class="cov10" title="1600">{ return rows[i].shape &lt; rows[j].shape }</span>)
         <span class="cov2" title="5">return rows</span>
 }
 
@@ -4607,7 +4607,7 @@ func collectMatrixRows(fixtures []*runner.Fixture, dir string) []matrixRow <span
 // and to make the renderer trivially diffable in tests.
 func renderMatrix(rows []matrixRow) string <span class="cov2" title="5">{
         counts := map[string]int{}
-        for _, r := range rows </span><span class="cov9" title="1280">{
+        for _, r := range rows </span><span class="cov9" title="1285">{
                 counts[r.route]++
         }</span>
         <span class="cov2" title="5">var b strings.Builder
@@ -4648,12 +4648,12 @@ func writeSummary(b *strings.Builder, counts map[string]int, total int) <span cl
 
 func writePerFixture(b *strings.Builder, rows []matrixRow) <span class="cov2" title="5">{
         b.WriteString("\n## Per-fixture\n\n| Shape | Route | Strict |\n|---|---|---|\n")
-        for _, r := range rows </span><span class="cov9" title="1280">{
+        for _, r := range rows </span><span class="cov9" title="1285">{
                 strict := "true"
                 if !r.strict </span><span class="cov6" title="65">{
                         strict = "false"
                 }</span>
-                <span class="cov9" title="1280">fmt.Fprintf(b, "| `%s` | `%s` | %s |\n", r.shape, r.route, strict)</span>
+                <span class="cov9" title="1285">fmt.Fprintf(b, "| `%s` | `%s` | %s |\n", r.shape, r.route, strict)</span>
         }
 }
 
@@ -8332,31 +8332,31 @@ var defaultProfiles = []string{ProfileDuckDB}
 // Load parses a single YAML file into a Fixture. It validates the
 // shape (required fields, exclusivity of expectation, known profile
 // names) so callers can rely on the returned Fixture being usable.
-func Load(path string) (*Fixture, error) <span class="cov8" title="276">{
+func Load(path string) (*Fixture, error) <span class="cov8" title="278">{
         // #nosec G304 -- path is fixture-discovery output controlled by
         // --fixtures flag in a CLI dev tool.
         data, err := os.ReadFile(path)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("read %s: %w", path, err)
         }</span>
-        <span class="cov8" title="276">return loadBytes(data, path)</span>
+        <span class="cov8" title="278">return loadBytes(data, path)</span>
 }
 
 // loadBytes is the test seam for Load. Tests construct YAML in memory
 // and pass it through here; production code goes via Load (which is a
 // thin file-read wrapper).
-func loadBytes(data []byte, path string) (*Fixture, error) <span class="cov8" title="293">{
+func loadBytes(data []byte, path string) (*Fixture, error) <span class="cov8" title="295">{
         var f Fixture
         dec := yaml.NewDecoder(strings.NewReader(string(data)))
         dec.KnownFields(true)
         if err := dec.Decode(&amp;f); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("parse %s: %w", path, err)
         }</span>
-        <span class="cov8" title="293">f.Path = path
+        <span class="cov8" title="295">f.Path = path
         if err := f.normalize(); err != nil </span><span class="cov4" title="10">{
                 return nil, fmt.Errorf("validate %s: %w", path, err)
         }</span>
-        <span class="cov8" title="283">return &amp;f, nil</span>
+        <span class="cov8" title="285">return &amp;f, nil</span>
 }
 
 // LoadDir walks a directory (recursively) and returns every loadable
@@ -8378,7 +8378,7 @@ func LoadDir(pathOrDir string) ([]*Fixture, error) <span class="cov1" title="1">
                 <span class="cov0" title="0">return []*Fixture{f}, nil</span>
         }
         <span class="cov1" title="1">var fixtures []*Fixture
-        walkErr := filepath.Walk(pathOrDir, func(p string, fi os.FileInfo, walkErr error) error </span><span class="cov8" title="295">{
+        walkErr := filepath.Walk(pathOrDir, func(p string, fi os.FileInfo, walkErr error) error </span><span class="cov8" title="296">{
                 if walkErr != nil </span><span class="cov0" title="0">{
                         return walkErr
                 }</span>
@@ -8390,88 +8390,88 @@ func LoadDir(pathOrDir string) ([]*Fixture, error) <span class="cov1" title="1">
                 // pattern. Explicitly loading the fixture file with
                 // `Load(...)` still works (the runner / matrix walker
                 // can opt in by passing the file path directly).
-                <span class="cov8" title="295">if fi.IsDir() </span><span class="cov6" title="36">{
+                <span class="cov8" title="296">if fi.IsDir() </span><span class="cov6" title="36">{
                         base := filepath.Base(p)
                         if base != filepath.Base(pathOrDir) &amp;&amp; strings.HasPrefix(base, "_") </span><span class="cov1" title="1">{
                                 return filepath.SkipDir
                         }</span>
                         <span class="cov5" title="35">return nil</span>
                 }
-                <span class="cov8" title="259">ext := strings.ToLower(filepath.Ext(p))
+                <span class="cov8" title="260">ext := strings.ToLower(filepath.Ext(p))
                 if ext != ".yaml" &amp;&amp; ext != ".yml" </span><span class="cov2" title="3">{
                         return nil
                 }</span>
-                <span class="cov8" title="256">f, err := Load(p)
+                <span class="cov8" title="257">f, err := Load(p)
                 if err != nil </span><span class="cov0" title="0">{
                         return err
                 }</span>
-                <span class="cov8" title="256">fixtures = append(fixtures, f)
+                <span class="cov8" title="257">fixtures = append(fixtures, f)
                 return nil</span>
         })
         <span class="cov1" title="1">if walkErr != nil </span><span class="cov0" title="0">{
                 return nil, walkErr
         }</span>
-        <span class="cov1" title="1">sort.Slice(fixtures, func(i, j int) bool </span><span class="cov8" title="267">{
+        <span class="cov1" title="1">sort.Slice(fixtures, func(i, j int) bool </span><span class="cov8" title="268">{
                 return fixtures[i].Path &lt; fixtures[j].Path
         }</span>)
         <span class="cov1" title="1">return fixtures, nil</span>
 }
 
 // normalize applies defaults and validates required fields.
-func (f *Fixture) normalize() error <span class="cov8" title="293">{
+func (f *Fixture) normalize() error <span class="cov8" title="295">{
         if strings.TrimSpace(f.Name) == "" </span><span class="cov0" title="0">{
                 return errors.New("name is required")
         }</span>
-        <span class="cov8" title="293">if strings.TrimSpace(f.Query) == "" </span><span class="cov0" title="0">{
+        <span class="cov8" title="295">if strings.TrimSpace(f.Query) == "" </span><span class="cov0" title="0">{
                 return errors.New("query is required")
         }</span>
-        <span class="cov8" title="293">if f.ProjectID == "" </span><span class="cov4" title="17">{
+        <span class="cov8" title="295">if f.ProjectID == "" </span><span class="cov4" title="17">{
                 f.ProjectID = "proj-conformance-" + sanitizeID(f.Name)
         }</span>
-        <span class="cov8" title="293">if len(f.Profiles) == 0 </span><span class="cov8" title="292">{
+        <span class="cov8" title="295">if len(f.Profiles) == 0 </span><span class="cov8" title="294">{
                 f.Profiles = append([]string(nil), defaultProfiles...)
         }</span>
-        <span class="cov8" title="293">known := make(map[string]bool, len(KnownProfiles()))
-        for _, p := range KnownProfiles() </span><span class="cov8" title="293">{
+        <span class="cov8" title="295">known := make(map[string]bool, len(KnownProfiles()))
+        for _, p := range KnownProfiles() </span><span class="cov8" title="295">{
                 known[p.Name] = true
         }</span>
-        <span class="cov8" title="293">for _, p := range f.Profiles </span><span class="cov8" title="293">{
+        <span class="cov8" title="295">for _, p := range f.Profiles </span><span class="cov8" title="295">{
                 if !known[p] </span><span class="cov1" title="1">{
                         return fmt.Errorf("unknown profile %q (known: %s)",
                                 p, strings.Join(profileNames(), ", "))
                 }</span>
         }
-        <span class="cov8" title="292">if err := f.validateExpectation(); err != nil </span><span class="cov3" title="8">{
+        <span class="cov8" title="294">if err := f.validateExpectation(); err != nil </span><span class="cov3" title="8">{
                 return err
         }</span>
-        <span class="cov8" title="284">for i, step := range f.Setup </span><span class="cov9" title="605">{
+        <span class="cov8" title="286">for i, step := range f.Setup </span><span class="cov9" title="605">{
                 if err := step.validate(); err != nil </span><span class="cov1" title="1">{
                         return fmt.Errorf("setup[%d]: %w", i, err)
                 }</span>
         }
-        <span class="cov8" title="283">return nil</span>
+        <span class="cov8" title="285">return nil</span>
 }
 
-func (f *Fixture) validateExpectation() error <span class="cov8" title="292">{
-        if f.Expected.Match == "" </span><span class="cov8" title="278">{
+func (f *Fixture) validateExpectation() error <span class="cov8" title="294">{
+        if f.Expected.Match == "" </span><span class="cov8" title="280">{
                 f.Expected.Match = MatchOrdered
         }</span>
-        <span class="cov8" title="292">switch f.Expected.Match </span>{
-        case MatchOrdered, MatchUnordered, MatchSchemaOnly:<span class="cov8" title="291"></span>
+        <span class="cov8" title="294">switch f.Expected.Match </span>{
+        case MatchOrdered, MatchUnordered, MatchSchemaOnly:<span class="cov8" title="293"></span>
         default:<span class="cov1" title="1">
                 return fmt.Errorf(
                         "expected.match=%q is not one of ordered, unordered, schema_only",
                         f.Expected.Match)</span>
         }
 
-        <span class="cov8" title="291">hasRows := f.Expected.Rows != nil
+        <span class="cov8" title="293">hasRows := f.Expected.Rows != nil
         hasSchema := len(f.Expected.Schema) &gt; 0
         hasErr := f.Expected.Error != nil
         if hasErr &amp;&amp; (hasRows || hasSchema) </span><span class="cov1" title="1">{
                 return errors.New(
                         "expected: error cannot be combined with rows or schema")
         }</span>
-        <span class="cov8" title="290">switch f.Expected.Match </span>{
+        <span class="cov8" title="292">switch f.Expected.Match </span>{
         case MatchSchemaOnly:<span class="cov4" title="9">
                 // schema_only fixtures must either declare an explicit
                 // schema: block OR a rows: block (whose first row's keys
@@ -8481,46 +8481,46 @@ func (f *Fixture) validateExpectation() error <span class="cov8" title="292">{
                         return errors.New(
                                 "expected: match=schema_only requires schema or rows (column names)")
                 }</span>
-        default:<span class="cov8" title="281">
+        default:<span class="cov8" title="283">
                 // ordered / unordered must set rows: or error:.
                 if !hasRows &amp;&amp; !hasErr </span><span class="cov1" title="1">{
                         return errors.New("expected: must set either rows or error")
                 }</span>
         }
-        <span class="cov8" title="288">if hasErr </span><span class="cov5" title="23">{
+        <span class="cov8" title="290">if hasErr </span><span class="cov5" title="23">{
                 e := f.Expected.Error
                 if e.Code == 0 &amp;&amp; e.MessageContains == "" </span><span class="cov1" title="1">{
                         return errors.New("expected.error: must set at least one of code or message_contains")
                 }</span>
         }
-        <span class="cov8" title="287">if err := f.Expected.validateRoute(); err != nil </span><span class="cov2" title="3">{
+        <span class="cov8" title="289">if err := f.Expected.validateRoute(); err != nil </span><span class="cov2" title="3">{
                 return err
         }</span>
-        <span class="cov8" title="284">return nil</span>
+        <span class="cov8" title="286">return nil</span>
 }
 
 // validateRoute enforces the spelling rules on the route assertion
 // fields so a typo in `expected.route` or
 // `expected.route_allowlist` fails the load instead of silently
 // allowing a route the fixture writer did not intend.
-func (e *Expectation) validateRoute() error <span class="cov8" title="287">{
+func (e *Expectation) validateRoute() error <span class="cov8" title="289">{
         if e.Route != "" &amp;&amp; !isKnownRouteName(e.Route) </span><span class="cov1" title="1">{
                 return fmt.Errorf(
                         "expected.route=%q is not a known disposition (one of %s)",
                         e.Route, strings.Join(KnownRouteNames(), ", "))
         }</span>
-        <span class="cov8" title="286">for i, r := range e.RouteAllowlist </span><span class="cov3" title="5">{
+        <span class="cov8" title="288">for i, r := range e.RouteAllowlist </span><span class="cov3" title="5">{
                 if !isKnownRouteName(r) </span><span class="cov1" title="1">{
                         return fmt.Errorf(
                                 "expected.route_allowlist[%d]=%q is not a known disposition (one of %s)",
                                 i, r, strings.Join(KnownRouteNames(), ", "))
                 }</span>
         }
-        <span class="cov8" title="285">if e.RouteStrictDefault() &amp;&amp; len(e.RouteAllowlist) &gt; 0 </span><span class="cov1" title="1">{
+        <span class="cov8" title="287">if e.RouteStrictDefault() &amp;&amp; len(e.RouteAllowlist) &gt; 0 </span><span class="cov1" title="1">{
                 return errors.New(
                         "expected.route_allowlist must not be set when route_strict=true (use route_strict=false)")
         }</span>
-        <span class="cov8" title="284">return nil</span>
+        <span class="cov8" title="286">return nil</span>
 }
 
 // RouteStrictDefault reports the runner's interpretation of the
@@ -8528,8 +8528,8 @@ func (e *Expectation) validateRoute() error <span class="cov8" title="287">{
 // key (the safe default), the explicit value otherwise. Exposed for
 // the runner comparison and the matrix walker so neither has to
 // duplicate the pointer-vs-default logic.
-func (e *Expectation) RouteStrictDefault() bool <span class="cov8" title="296">{
-        if e.RouteStrict == nil </span><span class="cov8" title="270">{
+func (e *Expectation) RouteStrictDefault() bool <span class="cov8" title="298">{
+        if e.RouteStrict == nil </span><span class="cov8" title="272">{
                 return true
         }</span>
         <span class="cov5" title="26">return *e.RouteStrict</span>
@@ -9178,11 +9178,11 @@ var profiles = []Profile{
 // KnownProfiles returns a defensive copy of the known profile table.
 // The slice is alphabetized by name so the matrix iteration order is
 // stable.
-func KnownProfiles() []Profile <span class="cov10" title="596">{
+func KnownProfiles() []Profile <span class="cov10" title="600">{
         out := make([]Profile, len(profiles))
         copy(out, profiles)
         sort.Slice(out, func(i, j int) bool </span><span class="cov0" title="0">{ return out[i].Name &lt; out[j].Name }</span>)
-        <span class="cov10" title="596">return out</span>
+        <span class="cov10" title="600">return out</span>
 }
 
 // LookupProfile resolves a profile name to its Profile entry. Returns
@@ -9348,7 +9348,7 @@ func KnownRouteNames() []string <span class="cov3" title="6">{
 
 // isKnownRouteName reports whether `s` is one of the canonical
 // disposition names.
-func isKnownRouteName(s string) bool <span class="cov10" title="234">{
+func isKnownRouteName(s string) bool <span class="cov10" title="236">{
         return slices.Contains(knownRoutes, s)
 }</span>
 </pre>
@@ -41981,20 +41981,20 @@ func (s *Store) New(req SeedRequest) *Operation <span class="cov7" title="8">{
 
 // Get returns a snapshot of the operation with the given ID.
 // Returns nil when no such operation exists.
-func (s *Store) Get(id string) *Operation <span class="cov8" title="11">{
+func (s *Store) Get(id string) *Operation <span class="cov8" title="13">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
         if !ok </span><span class="cov3" title="2">{
                 return nil
         }</span>
-        <span class="cov7" title="9">return cloneOperation(op)</span>
+        <span class="cov8" title="11">return cloneOperation(op)</span>
 }
 
 // MarkRunning records that the orchestrator has started processing
 // the operation. No-op (returns false) when the operation doesn't
 // exist or has already left PENDING.
-func (s *Store) MarkRunning(id string) bool <span class="cov7" title="7">{
+func (s *Store) MarkRunning(id string) bool <span class="cov6" title="7">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
@@ -42041,7 +42041,7 @@ func (s *Store) MarkFailed(id, errMsg string) bool <span class="cov3" title="2">
 // The struct is small and Result is repointed (we never mutate a
 // Result after passing it through MarkResult), so a shallow copy is
 // sufficient.
-func cloneOperation(op *Operation) *Operation <span class="cov10" title="17">{
+func cloneOperation(op *Operation) *Operation <span class="cov10" title="19">{
         cp := *op
         return &amp;cp
 }</span>
@@ -46515,12 +46515,12 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
         <span class="cov1" title="2">scanner := bufio.NewScanner(strings.NewReader(string(out)))
         scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
         var files []string
-        for scanner.Scan() </span><span class="cov8" title="10560">{
+        for scanner.Scan() </span><span class="cov8" title="10646">{
                 line := strings.TrimSpace(scanner.Text())
                 if line == "" </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov8" title="10560">files = append(files, line)</span>
+                <span class="cov8" title="10646">files = append(files, line)</span>
         }
         <span class="cov1" title="2">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("scan ls-files: %w", err)
@@ -46533,7 +46533,7 @@ func gitLsFiles(dir string) ([]string, error) <span class="cov1" title="2">{
 // the ownership boundary cannot drift silently.
 func filterFirstParty(all []string) []string <span class="cov2" title="5">{
         var out []string
-        for _, p := range all </span><span class="cov8" title="10593">{
+        for _, p := range all </span><span class="cov8" title="10679">{
                 // Normalise forward slashes early. `git ls-files` always
                 // uses `/` on every platform git supports, but a stray
                 // backslash from a hand-built test fixture or a Windows
@@ -46541,19 +46541,19 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
                 // so replace backslashes directly. (filepath.ToSlash is
                 // a no-op on linux.)
                 p = strings.ReplaceAll(p, `\`, "/")
-                if !hasCPPExtension(p) </span><span class="cov8" title="9674">{
+                if !hasCPPExtension(p) </span><span class="cov8" title="9678">{
                         continue</span>
                 }
-                <span class="cov6" title="919">if !underAnyPrefix(p, firstPartyIncludeRoots) </span><span class="cov2" title="10">{
+                <span class="cov6" title="1001">if !underAnyPrefix(p, firstPartyIncludeRoots) </span><span class="cov2" title="10">{
                         continue</span>
                 }
-                <span class="cov6" title="909">if underAnyPrefix(p, firstPartyExcludePrefixes) </span><span class="cov0" title="0">{
+                <span class="cov6" title="991">if underAnyPrefix(p, firstPartyExcludePrefixes) </span><span class="cov0" title="0">{
                         continue</span>
                 }
-                <span class="cov6" title="909">if _, dropped := firstPartyExcludePaths[p]; dropped </span><span class="cov1" title="1">{
+                <span class="cov6" title="991">if _, dropped := firstPartyExcludePaths[p]; dropped </span><span class="cov1" title="1">{
                         continue</span>
                 }
-                <span class="cov6" title="908">out = append(out, p)</span>
+                <span class="cov6" title="990">out = append(out, p)</span>
         }
         <span class="cov2" title="5">sort.Strings(out)
         return out</span>
@@ -46564,26 +46564,26 @@ func filterFirstParty(all []string) []string <span class="cov2" title="5">{
 // case-sensitive because every first-party file in this repo
 // already uses lowercase extensions and the surrounding tooling
 // (clang-format, clang-tidy) follows the same convention.
-func hasCPPExtension(path string) bool <span class="cov8" title="10593">{
-        for _, ext := range firstPartyExtensions </span><span class="cov10" title="59830">{
-                if strings.HasSuffix(path, ext) </span><span class="cov6" title="919">{
+func hasCPPExtension(path string) bool <span class="cov8" title="10679">{
+        for _, ext := range firstPartyExtensions </span><span class="cov10" title="60038">{
+                if strings.HasSuffix(path, ext) </span><span class="cov6" title="1001">{
                         return true
                 }</span>
         }
-        <span class="cov8" title="9674">return false</span>
+        <span class="cov8" title="9678">return false</span>
 }
 
 // underAnyPrefix returns true when `path` lives under at least one
 // of the supplied directory prefixes. Prefixes must end with `/`
 // so a directory named like `backend2/` cannot match
 // `backend/`.
-func underAnyPrefix(path string, prefixes []string) bool <span class="cov7" title="1828">{
-        for _, prefix := range prefixes </span><span class="cov7" title="2036">{
-                if strings.HasPrefix(path, prefix) </span><span class="cov6" title="909">{
+func underAnyPrefix(path string, prefixes []string) bool <span class="cov7" title="1992">{
+        for _, prefix := range prefixes </span><span class="cov7" title="2200">{
+                if strings.HasPrefix(path, prefix) </span><span class="cov6" title="991">{
                         return true
                 }</span>
         }
-        <span class="cov6" title="919">return false</span>
+        <span class="cov6" title="1001">return false</span>
 }
 
 // IsTestFile returns true for paths that look like first-party C++
@@ -46595,9 +46595,21 @@ func underAnyPrefix(path string, prefixes []string) bool <span class="cov7" titl
 // `std::cout` in fixture printers) consult this helper rather than
 // hard-coding a path list, so an `*_test.cc` added to a new
 // directory is treated correctly without an extra edit here.
-func IsTestFile(path string) bool <span class="cov6" title="830">{
+func IsTestFile(path string) bool <span class="cov6" title="912">{
         base := filepath.Base(path)
         return strings.HasSuffix(base, "_test.cc") || strings.HasSuffix(base, "_test.cpp")
+}</span>
+
+// IsClangTidyTranslationUnit returns true for `.cc` / `.cpp` / `.cxx`
+// files that clang-tidy should analyze as standalone translation units.
+// Headers are excluded: `compile_commands.json` lists only source
+// files, so linting a header synthesizes a TU without Bazel's include
+// paths and produces bogus `clang-diagnostic-error` findings (notably
+// on `*_test_fixture.h` and other header-only helpers).
+func IsClangTidyTranslationUnit(path string) bool <span class="cov2" title="4">{
+        return strings.HasSuffix(path, ".cc") ||
+                strings.HasSuffix(path, ".cpp") ||
+                strings.HasSuffix(path, ".cxx")
 }</span>
 
 // runList is the `cpp-lint list` subcommand. It prints the
@@ -46607,6 +46619,7 @@ func IsTestFile(path string) bool <span class="cov6" title="830">{
 func runList(args []string, stdout, stderr io.Writer) error <span class="cov1" title="2">{
         fs := flagSet("list", stderr)
         withTests := fs.Bool("tests", true, "include *_test.cc files in the output")
+        tidyOnly := fs.Bool("tidy", false, "emit only .cc/.cpp/.cxx translation units (for clang-tidy)")
         if err := fs.Parse(args); err != nil </span><span class="cov0" title="0">{
                 return errUsage
         }</span>
@@ -46627,11 +46640,14 @@ func runList(args []string, stdout, stderr io.Writer) error <span class="cov1" t
                 return err
         }</span>
         <span class="cov1" title="2">files = filterExistingOnDisk(root, files)
-        for _, f := range files </span><span class="cov6" title="894">{
+        for _, f := range files </span><span class="cov6" title="976">{
                 if !*withTests &amp;&amp; IsTestFile(f) </span><span class="cov4" title="85">{
                         continue</span>
                 }
-                <span class="cov6" title="809">_, _ = fmt.Fprintln(stdout, f)</span>
+                <span class="cov6" title="891">if *tidyOnly &amp;&amp; !IsClangTidyTranslationUnit(f) </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov6" title="891">_, _ = fmt.Fprintln(stdout, f)</span>
         }
         <span class="cov1" title="2">return nil</span>
 }
@@ -46668,8 +46684,8 @@ func readSources() ([]string, string, error) <span class="cov0" title="0">{
 // clang-format would fail on the missing paths anyway.
 func filterExistingOnDisk(root string, files []string) []string <span class="cov1" title="2">{
         out := make([]string, 0, len(files))
-        for _, rel := range files </span><span class="cov6" title="894">{
-                if _, err := os.Stat(resolveAgainstRoot(root, rel)); err == nil </span><span class="cov6" title="894">{
+        for _, rel := range files </span><span class="cov6" title="976">{
+                if _, err := os.Stat(resolveAgainstRoot(root, rel)); err == nil </span><span class="cov6" title="976">{
                         out = append(out, rel)
                 }</span>
         }
@@ -46700,7 +46716,7 @@ func setRepoRoot(dir string) func() <span class="cov1" title="3">{
 // because every downstream consumer expects repo-relative output;
 // the repo root is only spliced back in when the check needs to
 // open the file from disk.
-func resolveAgainstRoot(root, rel string) string <span class="cov6" title="895">{
+func resolveAgainstRoot(root, rel string) string <span class="cov6" title="977">{
         return filepath.Join(root, filepath.FromSlash(rel))
 }</span>
 
@@ -47012,7 +47028,7 @@ func summarizeByFile(findings []tidyFinding, failedFiles map[string]struct{}) []
         for _, s := range byFile </span><span class="cov7" title="5">{
                 out = append(out, *s)
         }</span>
-        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov6" title="4">{ return out[i].File &lt; out[j].File }</span>)
+        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov5" title="3">{ return out[i].File &lt; out[j].File }</span>)
         <span class="cov3" title="2">return out</span>
 }
 
