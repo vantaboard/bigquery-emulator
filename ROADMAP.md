@@ -588,8 +588,9 @@ public-facing policy.
   decorators and snapshot clone route through control ops
   (`control_op_time_travel.cc`, `duckdb_storage_version_log.*`).
   (`ANALYZE` and `UNDROP TABLE` were removed — neither is a BigQuery
-  statement; `UNDROP SCHEMA` is the only real BigQuery undrop form and
-  is not yet implemented.) Wildcard tables
+  statement; `UNDROP SCHEMA` restores soft-deleted datasets from
+  `.tombstones/__dataset__/` and is wired through `RunUndrop` plus
+  REST `datasets.undelete`.) Wildcard tables
   (`dataset.prefix_*`) resolve in the virtual catalog with
   `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
   Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA` remain
@@ -826,7 +827,7 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 
 | ENGINE_POLICY family | Today | Planned | Plan work |
 |---|---|---|---|
-| BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `unsupported` | **stub** | [BigQuery ML](#bigquery-ml) |
+| BigQuery ML inference (`ML.PREDICT`, `ML.FORECAST`, `ML.EVALUATE`) | `local_stub` | **stub** (landed) | [BigQuery ML](#bigquery-ml) |
 | BigQuery ML `CREATE MODEL` | `local_stub` | stub (stays) | [BigQuery ML](#bigquery-ml) |
 | Differential privacy / anonymized aggregation | `local_stub` | **stub** (landed) | [Privacy-preserving aggregates](#privacy-preserving-aggregates) |
 | `SESSION_USER` (`session_user`) | `local_stub` | **stub** (landed) | [Deferred built-in functions](#deferred-built-in-functions) |
@@ -838,8 +839,8 @@ Every row is ⏳ planned. **Planned work is one of two kinds:**
 | Catalog column refs (`ResolvedCatalogColumnRef`, non-graph) | `unsupported` | sharpened (not reachable) | [Catalog / sequence helpers](#catalog--sequence-helpers) |
 | Python UDFs (`CREATE FUNCTION ... LANGUAGE python`) | `local_impl` | **real** | [Python UDFs](#python-udfs) |
 | `LOAD DATA <gs://...>` (cloud storage) | `unsupported` | **real** | [External data sources](#external-data-sources) |
-| `UNDROP SCHEMA` | `unsupported` | **real** | [DML / DDL](#dml--ddl) (`RunUndrop` today) |
-| SQL Tools API (format/parse/complete/analyze) | ✅ landed | **real** | [SQL Tools API](#sql-tools-api) (M4 query editor) |
+| `UNDROP SCHEMA` | `control_op` | **real** (landed) | [DML / DDL](#dml--ddl) (`RunUndrop` + `datasets.undelete`) |
+| SQL Tools API (format/parse/complete/analyze) | ✅ landed | **real** (landed) | [SQL Tools API](#sql-tools-api) (M4 query editor) |
 
 > **Graph / GQL (`GRAPH_TABLE`, GQL subqueries, `ResolvedGraph*Scan`) is
 > NOT planned.** It is effectively a whole second query language and is

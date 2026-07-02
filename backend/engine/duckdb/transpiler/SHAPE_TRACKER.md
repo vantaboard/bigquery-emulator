@@ -68,7 +68,7 @@ semantic-executor / control-op code) so the doc stays honest.
 | `ResolvedExportDataStmt`                      | `control_op`        | `EXPORT DATA` local writers (CSV/JSON/Parquet via DuckDB `COPY`) through `RunExportData`; `gs://` URIs surface unsupported. Pinned by `conformance/fixtures/ddl/export_load_round_trip.yaml`. |
 | `ResolvedCreateSnapshotTableStmt`             | `control_op`        | `CREATE SNAPSHOT TABLE ... CLONE` materializes a point-in-time copy through `RunCreateSnapshotTable` (`control_op_time_travel.cc`). Pinned by `conformance/fixtures/time_travel/snapshot_clone_round_trip.yaml`. |
 | `ResolvedCloneDataStmt`                       | `control_op`        | Internal `CLONE DATA` shape copies rows from `clone_from` into an existing target table via `RunCloneData`. |
-| `ResolvedUndropStmt`                          | `control_op`        | BigQuery defines `UNDROP SCHEMA` only (no `UNDROP TABLE`); both forms surface `UNIMPLEMENTED` via `RunUndrop` until schema undrop lands. |
+| `ResolvedUndropStmt`                          | `control_op`        | `UNDROP SCHEMA` restores dataset tombstones via `RunUndrop`; `UNDROP TABLE` is not a BigQuery statement and stays rejected. |
 | `ResolvedDropSnapshotTableStmt`               | `control_op`        | `DROP SNAPSHOT TABLE` routes through `RunDropTable` (snapshot tables are storage-backed tables locally). |
 
 ## Relational scans

@@ -44,7 +44,7 @@ omit the host and use `{x}` for path variables.
 | `datasets.update` | `PUT /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetUpdate`][datasets] |
 | `datasets.patch` | `PATCH /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetPatch`][datasets] |
 | `datasets.delete` | `DELETE /bigquery/v2/projects/{projectId}/datasets/{datasetId}` | done | [`gateway/handlers/datasets.go::DatasetDelete`][datasets] |
-| `datasets.undelete` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete` | wired | [`gateway/handlers/datasets.go::DatasetUndelete`][datasets] |
+| `datasets.undelete` | `POST /bigquery/v2/projects/{projectId}/datasets/{datasetId}:undelete` | done | [`gateway/handlers/datasets.go::DatasetUndelete`][datasets] |
 
 **Dataset metadata:** REST-only fields (`friendlyName`, `description`,
 `labels`, `defaultCollation`, `defaultTableExpirationMs`,

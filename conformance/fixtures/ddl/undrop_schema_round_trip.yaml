@@ -1,0 +1,18 @@
+# undrop_schema_round_trip: DROP SCHEMA CASCADE then UNDROP SCHEMA.
+name: ddl_undrop_schema_round_trip
+description: |
+  CREATE TABLE + INSERT -> DROP SCHEMA CASCADE -> UNDROP SCHEMA ->
+  SELECT round-trips rows through dataset tombstones.
+project_id: proj-undrop-schema
+dataset_id: ds_undrop
+setup:
+  - dataset: ds_undrop
+  - sql: CREATE TABLE ds_undrop.items (id INT64, name STRING)
+  - sql: INSERT INTO ds_undrop.items (id, name) VALUES (1, 'ada')
+  - sql: DROP SCHEMA ds_undrop CASCADE
+  - sql: UNDROP SCHEMA ds_undrop
+query: SELECT id, name FROM ds_undrop.items ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: 1, name: ada}

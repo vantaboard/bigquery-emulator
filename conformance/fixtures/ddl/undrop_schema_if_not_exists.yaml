@@ -1,0 +1,13 @@
+# undrop_schema_if_not_exists: UNDROP SCHEMA IF NOT EXISTS on live dataset.
+name: ddl_undrop_schema_if_not_exists
+description: |
+  When the dataset already exists, UNDROP SCHEMA IF NOT EXISTS is a
+  no-op and does not surface an error.
+project_id: proj-undrop-ifne
+dataset_id: ds_live
+setup:
+  - dataset: ds_live
+query: UNDROP SCHEMA IF NOT EXISTS ds_live
+expected:
+  route: control_op
+  rows: []

@@ -197,6 +197,23 @@ func TestDatasetDeleteNotFound(t *testing.T) {
 	}
 }
 
+func TestDatasetUndeleteForwardsRPC(t *testing.T) {
+	fake := &fakeCatalogClient{}
+	req := newDatasetReq(http.MethodPost, testDatasetID+":undelete", "")
+	rec := httptest.NewRecorder()
+	DatasetCustomMethodPOST(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if fake.lastUndeleteDataset == nil {
+		t.Fatal("Catalog.UndeleteDataset was not called")
+	}
+	if got := fake.lastUndeleteDataset.GetDataset().GetDatasetId(); got != testDatasetID {
+		t.Errorf("dataset_id = %q, want %q", got, testDatasetID)
+	}
+}
+
 // TestDatasetGetSynthesizesResource pins gateway-only behavior: when
 // Catalog is nil the handler returns a synthesized resource derived
 // from the path parameters (legacy unit-test posture).

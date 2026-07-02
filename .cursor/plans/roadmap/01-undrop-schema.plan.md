@@ -4,16 +4,16 @@ overview: Implement BigQuery's only undrop form locally by extending the existin
 todos:
   - id: dataset-tombstone
     content: "Extend tombstone machinery to dataset scope: DROP SCHEMA moves all tables + dataset metadata into .tombstones/, restorable by newest timestamp"
-    status: pending
+    status: completed
   - id: run-undrop
     content: Implement RunUndrop for schema_object_kind() == SCHEMA against the dataset tombstone; keep UNDROP TABLE rejecting (not a BigQuery statement)
-    status: pending
+    status: completed
   - id: rest-undelete
     content: Wire gateway DatasetUndelete (501 stub today) to the same engine path via a Catalog RPC
-    status: pending
+    status: completed
   - id: fixtures-registry
     content: Conformance fixtures (drop→undrop round-trip, IF NOT EXISTS, expired/no-tombstone error) + node_dispositions/SHAPE_TRACKER/ENGINE_POLICY/ROADMAP updates
-    status: pending
+    status: completed
 isProject: false
 ---
 
