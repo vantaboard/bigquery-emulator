@@ -1,3 +1,4 @@
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -174,48 +175,73 @@ absl::StatusOr<RoutineRecord> ParseRoutineRecordJson(absl::string_view json,
   return rec;
 }
 
+namespace {
+
+bool AdvancePastWhitespaceAndComma(absl::string_view array_json, size_t& pos) {
+  while (pos < array_json.size() &&
+         (array_json[pos] == ' ' || array_json[pos] == ',' ||
+          array_json[pos] == '\n')) {
+    ++pos;
+  }
+  return pos < array_json.size() && array_json[pos] != ']';
+}
+
+std::optional<absl::string_view> ExtractBalancedObject(
+    absl::string_view array_json, size_t& pos) {
+  if (pos >= array_json.size() || array_json[pos] != '{') {
+    return std::nullopt;
+  }
+  size_t depth = 0;
+  bool in_string = false;
+  const size_t start = pos;
+  for (; pos < array_json.size(); ++pos) {
+    const char c = array_json[pos];
+    if (in_string) {
+      if (c == '\\' && pos + 1 < array_json.size()) {
+        ++pos;
+        continue;
+      }
+      if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+      continue;
+    }
+    if (c == '{') {
+      ++depth;
+    } else if (c == '}') {
+      --depth;
+      if (depth == 0) {
+        return array_json.substr(start, pos - start + 1);
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
 std::vector<absl::string_view> SplitTopLevelJsonObjects(
     absl::string_view array_json) {
   std::vector<absl::string_view> out;
   size_t pos = array_json.find('[');
-  if (pos == absl::string_view::npos) return out;
+  if (pos == absl::string_view::npos) {
+    return out;
+  }
   ++pos;
-  while (pos < array_json.size()) {
-    while (pos < array_json.size() &&
-           (array_json[pos] == ' ' || array_json[pos] == ',' ||
-            array_json[pos] == '\n')) {
-      ++pos;
+  while (AdvancePastWhitespaceAndComma(array_json, pos)) {
+    if (array_json[pos] != '{') {
+      break;
     }
-    if (pos >= array_json.size() || array_json[pos] == ']') break;
-    if (array_json[pos] != '{') break;
-    size_t depth = 0;
-    bool in_string = false;
-    const size_t start = pos;
-    for (; pos < array_json.size(); ++pos) {
-      const char c = array_json[pos];
-      if (in_string) {
-        if (c == '\\' && pos + 1 < array_json.size()) {
-          ++pos;
-          continue;
-        }
-        if (c == '"') in_string = false;
-        continue;
-      }
-      if (c == '"') {
-        in_string = true;
-        continue;
-      }
-      if (c == '{') {
-        ++depth;
-      } else if (c == '}') {
-        --depth;
-        if (depth == 0) {
-          out.push_back(array_json.substr(start, pos - start + 1));
-          ++pos;
-          break;
-        }
-      }
+    auto object = ExtractBalancedObject(array_json, pos);
+    if (!object.has_value()) {
+      break;
     }
+    out.push_back(*object);
+    ++pos;
   }
   return out;
 }

@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,108 +18,142 @@ namespace storage {
 namespace duckdb {
 namespace tombstone_registry_internal {
 
+namespace {
+
+std::optional<absl::string_view> JsonArraySlice(absl::string_view entry,
+                                                absl::string_view key) {
+  const size_t key_pos = entry.find(key);
+  if (key_pos == absl::string_view::npos) {
+    return std::nullopt;
+  }
+  const size_t open = entry.find('[', key_pos);
+  const size_t close = entry.find(']', open);
+  if (open == absl::string_view::npos || close == absl::string_view::npos) {
+    return std::nullopt;
+  }
+  return entry.substr(open, close - open + 1);
+}
+
+std::int64_t ParseJsonInt64Field(absl::string_view json,
+                                 absl::string_view needle) {
+  const size_t pos = json.find(needle);
+  if (pos == absl::string_view::npos) {
+    return 0;
+  }
+  std::int64_t value = 0;
+  (void)absl::SimpleAtoi(json.substr(pos + needle.size()), &value);
+  return value;
+}
+
+RowAccessPolicyRecord ParseRowAccessPolicy(absl::string_view policy_json) {
+  RowAccessPolicyRecord policy;
+  auto policy_id_or = ParseJsonStringField(policy_json, "policy_id");
+  auto filter_or = ParseJsonStringField(policy_json, "filter_predicate");
+  if (!policy_id_or.ok() || !filter_or.ok()) {
+    return policy;
+  }
+  policy.policy_id = *policy_id_or;
+  policy.filter_predicate = *filter_or;
+  if (auto grantees_slice = JsonArraySlice(policy_json, "\"grantees\"")) {
+    policy.grantees = ParseQuotedJsonStringArray(*grantees_slice);
+  }
+  policy.creation_time_ms =
+      ParseJsonInt64Field(policy_json, "\"creation_time_ms\":");
+  policy.last_modified_time_ms =
+      ParseJsonInt64Field(policy_json, "\"last_modified_time_ms\":");
+  return policy;
+}
+
+void AppendRowAccessPolicies(absl::string_view entry, TableGovernance& gov) {
+  auto policies_slice = JsonArraySlice(entry, "\"row_access_policies\"");
+  if (!policies_slice.has_value()) {
+    return;
+  }
+  for (absl::string_view policy_json :
+       SplitTopLevelJsonObjects(*policies_slice)) {
+    RowAccessPolicyRecord policy = ParseRowAccessPolicy(policy_json);
+    if (policy.policy_id.empty()) {
+      continue;
+    }
+    gov.row_access_policies.push_back(std::move(policy));
+  }
+}
+
+std::optional<std::pair<std::string, ColumnGovernanceRecord>> ParseColumnEntry(
+    absl::string_view col_json) {
+  auto column_or = ParseJsonStringField(col_json, "column");
+  if (!column_or.ok()) {
+    return std::nullopt;
+  }
+  ColumnGovernanceRecord col_gov;
+  if (auto tags_slice = JsonArraySlice(col_json, "\"policy_tags\"")) {
+    col_gov.policy_tags = ParseQuotedJsonStringArray(*tags_slice);
+  }
+  if (auto mask_or = ParseJsonStringField(col_json, "mask_kind");
+      mask_or.ok()) {
+    col_gov.mask_kind = MaskKindFromString(*mask_or);
+  }
+  if (auto grantees_slice = JsonArraySlice(col_json, "\"mask_grantees\"")) {
+    col_gov.mask_grantees = ParseQuotedJsonStringArray(*grantees_slice);
+  }
+  if (auto default_or = ParseJsonStringField(col_json, "default_mask_value");
+      default_or.ok()) {
+    col_gov.default_mask_value = *default_or;
+  }
+  return std::pair<std::string, ColumnGovernanceRecord>{*column_or,
+                                                        std::move(col_gov)};
+}
+
+void AppendColumnGovernance(absl::string_view entry, TableGovernance& gov) {
+  auto columns_slice = JsonArraySlice(entry, "\"columns\"");
+  if (!columns_slice.has_value()) {
+    return;
+  }
+  for (absl::string_view col_json : SplitTopLevelJsonObjects(*columns_slice)) {
+    auto parsed = ParseColumnEntry(col_json);
+    if (!parsed.has_value()) {
+      continue;
+    }
+    gov.columns.emplace_back(std::move(parsed->first),
+                             std::move(parsed->second));
+  }
+}
+
+absl::Status PersistGovernance(DuckDBStorage::Impl* impl,
+                               const TableId& tid,
+                               const TableGovernance& gov) {
+  if (!gov.row_access_policies.empty()) {
+    absl::Status saved = SaveRowAccessPolicies(impl, tid, gov);
+    if (!saved.ok()) {
+      return saved;
+    }
+  }
+  for (const auto& [col, col_gov] : gov.columns) {
+    absl::Status col_saved = SaveColumnGovernance(impl, tid, col, col_gov);
+    if (!col_saved.ok()) {
+      return col_saved;
+    }
+  }
+  return absl::OkStatus();
+}
+
+}  // namespace
+
 absl::Status RestoreGovernanceFromSnapshotLocked(DuckDBStorage::Impl* impl,
                                                  const DatasetId& ds,
                                                  absl::string_view json) {
   for (absl::string_view entry : SplitTopLevelJsonObjects(json)) {
     auto table_id_or = ParseJsonStringField(entry, "table_id");
-    if (!table_id_or.ok()) return table_id_or.status();
+    if (!table_id_or.ok()) {
+      return table_id_or.status();
+    }
     TableId tid{ds.project_id, ds.dataset_id, *table_id_or};
     TableGovernance gov;
-    const size_t rap_pos = entry.find("\"row_access_policies\"");
-    if (rap_pos != absl::string_view::npos) {
-      const size_t open = entry.find('[', rap_pos);
-      const size_t close = entry.find(']', open);
-      if (open != absl::string_view::npos && close != absl::string_view::npos) {
-        for (absl::string_view policy_json :
-             SplitTopLevelJsonObjects(entry.substr(open, close - open + 1))) {
-          auto policy_id_or = ParseJsonStringField(policy_json, "policy_id");
-          auto filter_or =
-              ParseJsonStringField(policy_json, "filter_predicate");
-          if (!policy_id_or.ok() || !filter_or.ok()) continue;
-          RowAccessPolicyRecord policy;
-          policy.policy_id = *policy_id_or;
-          policy.filter_predicate = *filter_or;
-          const size_t grantees_pos = policy_json.find("\"grantees\"");
-          if (grantees_pos != absl::string_view::npos) {
-            const size_t g_open = policy_json.find('[', grantees_pos);
-            const size_t g_close = policy_json.find(']', g_open);
-            if (g_open != absl::string_view::npos &&
-                g_close != absl::string_view::npos) {
-              policy.grantees = ParseQuotedJsonStringArray(
-                  policy_json.substr(g_open, g_close - g_open + 1));
-            }
-          }
-          std::int64_t created = 0;
-          std::int64_t modified = 0;
-          const std::string created_needle = "\"creation_time_ms\":";
-          const size_t cpos = policy_json.find(created_needle);
-          if (cpos != absl::string_view::npos) {
-            (void)absl::SimpleAtoi(
-                policy_json.substr(cpos + created_needle.size()), &created);
-          }
-          const std::string modified_needle = "\"last_modified_time_ms\":";
-          const size_t mpos = policy_json.find(modified_needle);
-          if (mpos != absl::string_view::npos) {
-            (void)absl::SimpleAtoi(
-                policy_json.substr(mpos + modified_needle.size()), &modified);
-          }
-          policy.creation_time_ms = created;
-          policy.last_modified_time_ms = modified;
-          gov.row_access_policies.push_back(std::move(policy));
-        }
-      }
-    }
-    const size_t col_pos = entry.find("\"columns\"");
-    if (col_pos != absl::string_view::npos) {
-      const size_t open = entry.find('[', col_pos);
-      const size_t close = entry.find(']', open);
-      if (open != absl::string_view::npos && close != absl::string_view::npos) {
-        for (absl::string_view col_json :
-             SplitTopLevelJsonObjects(entry.substr(open, close - open + 1))) {
-          auto column_or = ParseJsonStringField(col_json, "column");
-          if (!column_or.ok()) continue;
-          ColumnGovernanceRecord col_gov;
-          const size_t tags_pos = col_json.find("\"policy_tags\"");
-          if (tags_pos != absl::string_view::npos) {
-            const size_t t_open = col_json.find('[', tags_pos);
-            const size_t t_close = col_json.find(']', t_open);
-            if (t_open != absl::string_view::npos &&
-                t_close != absl::string_view::npos) {
-              col_gov.policy_tags = ParseQuotedJsonStringArray(
-                  col_json.substr(t_open, t_close - t_open + 1));
-            }
-          }
-          auto mask_or = ParseJsonStringField(col_json, "mask_kind");
-          if (mask_or.ok()) {
-            col_gov.mask_kind = MaskKindFromString(*mask_or);
-          }
-          const size_t mg_pos = col_json.find("\"mask_grantees\"");
-          if (mg_pos != absl::string_view::npos) {
-            const size_t m_open = col_json.find('[', mg_pos);
-            const size_t m_close = col_json.find(']', m_open);
-            if (m_open != absl::string_view::npos &&
-                m_close != absl::string_view::npos) {
-              col_gov.mask_grantees = ParseQuotedJsonStringArray(
-                  col_json.substr(m_open, m_close - m_open + 1));
-            }
-          }
-          auto default_or =
-              ParseJsonStringField(col_json, "default_mask_value");
-          if (default_or.ok()) {
-            col_gov.default_mask_value = *default_or;
-          }
-          gov.columns.emplace_back(*column_or, std::move(col_gov));
-        }
-      }
-    }
-    if (!gov.row_access_policies.empty()) {
-      absl::Status saved = SaveRowAccessPolicies(impl, tid, gov);
-      if (!saved.ok()) return saved;
-    }
-    for (const auto& [col, col_gov] : gov.columns) {
-      absl::Status col_saved = SaveColumnGovernance(impl, tid, col, col_gov);
-      if (!col_saved.ok()) return col_saved;
+    AppendRowAccessPolicies(entry, gov);
+    AppendColumnGovernance(entry, gov);
+    absl::Status persisted = PersistGovernance(impl, tid, gov);
+    if (!persisted.ok()) {
+      return persisted;
     }
   }
   return absl::OkStatus();

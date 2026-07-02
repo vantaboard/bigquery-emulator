@@ -700,7 +700,7 @@ tasks:
           # "googlesql/public/*.h file not found" (the tree is a build
           # output, not part of the unpacked tarball).
           task bazel:build \
-            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto @googlesql//:_all_hdrs //backend/catalog:python_udf_registry //backend/catalog:emulator_external_query_tvf_extensions //backend/engine/semantic:external_query_fixture"
+            TARGETS="//proto:emulator_cc_proto //proto:storage_read_cc_proto //proto:storage_write_cc_proto //proto:emulator_cc_grpc @googlesql//:_all_hdrs //backend/catalog:python_udf_registry //backend/catalog:emulator_external_query_tvf_extensions //backend/engine/semantic:external_query_fixture //frontend/handlers:catalog_handler"
           python3 tools/lint/cpp/compile_db.py \
             "${target_args[@]}" \
             --bazel-config "$aquery_cfg" \
