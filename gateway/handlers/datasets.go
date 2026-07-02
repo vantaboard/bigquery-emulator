@@ -248,6 +248,9 @@ func DatasetUpdate(deps Dependencies) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		if rejectUnsupportedDatasetPosture(w, &ds) {
+			return
+		}
 		deps.Metadata.PutDataset(projectID, datasetID, ds)
 		writeJSON(w, http.StatusOK, datasetResource(projectID, datasetID, ds))
 	}
@@ -275,6 +278,9 @@ func DatasetPatch(deps Dependencies) http.HandlerFunc {
 		}
 		ds, ok := decodeDatasetBody(w, r)
 		if !ok {
+			return
+		}
+		if rejectUnsupportedDatasetPosture(w, &ds) {
 			return
 		}
 		deps.Metadata.MergeDataset(projectID, datasetID, ds)
@@ -308,7 +314,8 @@ func DatasetDelete(deps Dependencies) http.HandlerFunc {
 				ProjectId: projectID,
 				DatasetId: datasetID,
 			},
-			DeleteContents: deleteContents,
+			DeleteContents:    deleteContents,
+			RestMetadataJson: deps.Metadata.RestMetadataJSON(projectID, datasetID),
 		})
 		if grpcToHTTPError(w, err) {
 			return
@@ -333,7 +340,7 @@ func DatasetUndelete(deps Dependencies) http.HandlerFunc {
 			NotImplemented(w, r)
 			return
 		}
-		_, err := deps.Catalog.UndeleteDataset(r.Context(), &enginepb.UndeleteDatasetRequest{
+		resp, err := deps.Catalog.UndeleteDataset(r.Context(), &enginepb.UndeleteDatasetRequest{
 			Dataset: &enginepb.DatasetRef{
 				ProjectId: projectID,
 				DatasetId: datasetID,
@@ -341,6 +348,10 @@ func DatasetUndelete(deps Dependencies) http.HandlerFunc {
 		})
 		if grpcToHTTPError(w, err) {
 			return
+		}
+		if resp != nil && resp.GetRestMetadataJson() != "" {
+			deps.Metadata.RestoreDatasetRestMetadataJSON(
+				projectID, datasetID, resp.GetRestMetadataJson())
 		}
 		ds, ok := deps.Metadata.GetDataset(projectID, datasetID)
 		if !ok {

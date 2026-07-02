@@ -390,6 +390,9 @@ func TableUpdate(deps Dependencies) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		if rejectUnsupportedTablePosture(w, &t) {
+			return
+		}
 		deps.Metadata.PutTable(projectID, datasetID, tableID, t)
 		SyncColumnGovernanceFromSchema(r.Context(), deps, projectID, datasetID, tableID, t.Schema)
 		writeJSON(w, http.StatusOK, tableResource(projectID, datasetID, tableID, t))
@@ -408,6 +411,9 @@ func TablePatch(deps Dependencies) http.HandlerFunc {
 		projectID, datasetID, tableID := tableIDFromPath(r)
 		t, ok := decodeTableBody(w, r)
 		if !ok {
+			return
+		}
+		if rejectUnsupportedTablePosture(w, &t) {
 			return
 		}
 		deps.Metadata.MergeTable(projectID, datasetID, tableID, t)
