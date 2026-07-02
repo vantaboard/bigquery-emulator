@@ -981,8 +981,14 @@ from bqutils `known_failing/` to `passing/`.
   (bq dry-run rejects aggregate + table-valued `LANGUAGE python` forms;
   pinned by `conformance/fixtures/udf/python_udaf_rejected.yaml` and
   `python_tvf_rejected.yaml`)
-- ⏳ Arbitrary `packages` pip installs remain unsupported (pre-installed
-  stdlib + `lxml` when present on the host interpreter)
+- ✅ Bounded `packages` support — declared packages round-trip on
+  `routines.get` (`pythonOptions.packages`); resolve against
+  `BIGQUERY_EMULATOR_PYTHON` → `$data_dir/python-udf-env/` → host `python3`;
+  preflight `importlib` miss surfaces a structured error; operator provisioning
+  via `task python-udf:provision` (`BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1` only).
+  See [`docs/guides/python-udfs.md`](docs/guides/python-udfs.md). Pinned by
+  `conformance/fixtures/udf/python_packages_lxml.yaml` and
+  `python_packages_missing.yaml`.
 
 ### External data sources
 

@@ -1,0 +1,19 @@
+# Missing declared package surfaces a BigQuery-shaped error, not a traceback.
+name: udf_python_packages_missing
+description: |
+  Preflight importlib check fails with a structured error naming the package and
+  pointing at task python-udf:provision before the UDF body runs.
+project_id: proj-udf-python-packages-missing
+setup:
+  - sql: |-
+      CREATE FUNCTION py_missing(x INT64) RETURNS INT64
+      LANGUAGE python
+      OPTIONS (packages=['bqemu_nonexistent_pkg_xyz'])
+      AS "return x"
+query: SELECT py_missing(1) AS out
+expected:
+  route: semantic_executor
+  route_strict: false
+  error:
+    code: 400
+    message_contains: bqemu_nonexistent_pkg_xyz

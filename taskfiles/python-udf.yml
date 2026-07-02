@@ -1,0 +1,20 @@
+# Python UDF environment provisioning (operator-only; never mid-query).
+#
+# Usage:
+#   BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1 task python-udf:provision -- lxml
+#   BIGQUERY_EMULATOR_DATA_DIR=/var/lib/bq task python-udf:provision -- pandas
+version: "3"
+
+tasks:
+  provision:
+    desc: |
+      Create or update $BIGQUERY_EMULATOR_DATA_DIR/python-udf-env and pip-install
+      packages. Requires BIGQUERY_EMULATOR_PYTHON_ALLOW_PIP=1 (never runs at query time).
+    cmds:
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        chmod +x scripts/provision_python_udf_env.sh
+        # shellcheck disable=SC2068
+        ./scripts/provision_python_udf_env.sh $@

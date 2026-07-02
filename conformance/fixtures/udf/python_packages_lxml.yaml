@@ -1,0 +1,22 @@
+# Python UDF with declared packages evaluates when importable.
+name: udf_python_packages_lxml
+description: |
+  LANGUAGE python UDF with packages=['lxml'] evaluates when lxml is present in
+  the configured interpreter (host python3-lxml or a provisioned venv).
+project_id: proj-udf-python-packages-lxml
+setup:
+  - sql: |-
+      CREATE FUNCTION py_tag(x STRING) RETURNS STRING
+      LANGUAGE python
+      OPTIONS (entry_point='do_tag', packages=['lxml'])
+      AS r"""
+      from lxml import etree
+      def do_tag(x):
+        root = etree.fromstring(x)
+        return root.tag
+      """
+query: SELECT py_tag('<item/>') AS out
+expected:
+  route: semantic_executor
+  rows:
+    - {out: "item"}

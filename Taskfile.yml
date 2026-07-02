@@ -25,6 +25,7 @@ includes:
   coverage: ./taskfiles/coverage.yml
   bench: ./taskfiles/bench.yml
   docs: ./taskfiles/docs.yml
+  python-udf: ./taskfiles/python-udf.yml
 
 tasks:
   default:

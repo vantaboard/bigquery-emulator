@@ -4,16 +4,16 @@ overview: Bounded support for the CREATE FUNCTION packages option — resolve de
 todos:
   - id: parse-persist-packages
     content: Parse the packages OPTIONS list at CREATE FUNCTION time, persist it with the routine, surface it in routines.get
-    status: pending
+    status: completed
   - id: env-resolution
     content: "Resolve packages against a local env: BIGQUERY_EMULATOR_PYTHON venv first, then an optional offline wheel dir; never call live PyPI by default"
-    status: pending
+    status: completed
   - id: missing-package-envelope
     content: Missing package at call time surfaces a BigQuery-shaped error naming the package and the provisioning command
-    status: pending
+    status: completed
   - id: docs-fixtures
     content: docs/guides provisioning walkthrough + conformance fixture using a stdlib-adjacent package (lxml) + ROADMAP/ENGINE_POLICY updates
-    status: pending
+    status: completed
 isProject: false
 ---
 
