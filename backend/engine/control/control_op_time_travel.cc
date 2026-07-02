@@ -11,6 +11,8 @@
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
 #include "backend/engine/control/control_op_internal.h"
+#include "backend/engine/coordinator/routine_rehydrate.h"
+#include "backend/engine/coordinator/view_rehydrate.h"
 #include "backend/engine/duckdb/duckdb_executor_time_travel.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
@@ -282,6 +284,29 @@ absl::StatusOr<storage::DatasetId> NamePathToDatasetId(
       " segments"));
 }
 
+absl::Status RehydrateDatasetCatalog(storage::Storage& storage,
+                                     const storage::DatasetId& id) {
+  auto routines_or = storage.ListRoutines(id);
+  if (!routines_or.ok()) return routines_or.status();
+  for (const storage::RoutineRecord& rec : *routines_or) {
+    if (rec.is_temp) continue;
+    absl::Status reg =
+        engine::coordinator::RehydrateRoutineRecord(&storage, rec);
+    if (!reg.ok()) return reg;
+  }
+  auto views_or = storage.ListAllViews();
+  if (!views_or.ok()) return views_or.status();
+  for (const storage::ViewRecord& rec : *views_or) {
+    if (rec.id.project_id != id.project_id ||
+        rec.id.dataset_id != id.dataset_id) {
+      continue;
+    }
+    absl::Status reg = engine::coordinator::RehydrateViewRecord(&storage, rec);
+    if (!reg.ok()) return reg;
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::Status RunDropSchema(storage::Storage& storage,
@@ -336,7 +361,11 @@ absl::Status RunUndrop(storage::Storage& storage,
       NamePathToDatasetId(stmt->name_path(), project_id);
   if (!target.ok()) return target.status();
   absl::Status restored = storage.RestoreDataset(*target);
-  if (restored.ok()) return absl::OkStatus();
+  if (restored.ok()) {
+    absl::Status rehydrated = RehydrateDatasetCatalog(storage, *target);
+    if (!rehydrated.ok()) return rehydrated;
+    return absl::OkStatus();
+  }
   if (stmt->is_if_not_exists()) {
     if (restored.code() == absl::StatusCode::kAlreadyExists) {
       return absl::OkStatus();

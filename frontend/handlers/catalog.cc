@@ -215,24 +215,8 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return v;
   }
   const auto id = DatasetIdFromProto(request->dataset());
-  return AbslToGrpcStatus(
-      storage_->DropDataset(id, request->delete_contents()));
-}
-
-::grpc::Status CatalogService::UndeleteDataset(
-    ::grpc::ServerContext* /*context*/,
-    const v1::UndeleteDatasetRequest* request,
-    v1::UndeleteDatasetResponse* /*response*/) {
-  if (storage_ == nullptr) {
-    return ::grpc::Status(::grpc::StatusCode::INTERNAL,
-                          "CatalogService: storage backend is not configured");
-  }
-  if (auto v = ValidateDatasetRef(request->dataset(), "UndeleteDataset");
-      !v.ok()) {
-    return v;
-  }
-  return AbslToGrpcStatus(
-      storage_->RestoreDataset(DatasetIdFromProto(request->dataset())));
+  return AbslToGrpcStatus(storage_->DropDataset(
+      id, request->delete_contents(), request->rest_metadata_json()));
 }
 
 ::grpc::Status CatalogService::ListDatasets(

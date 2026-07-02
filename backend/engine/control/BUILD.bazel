@@ -44,6 +44,8 @@ cc_library(
         "//backend/catalog:view_registry",
         "//backend/engine",
         "//backend/engine/coordinator:executor",
+        "//backend/engine/coordinator:routine_rehydrate",
+        "//backend/engine/coordinator:view_rehydrate",
         "//backend/engine/duckdb:arrow_to_bq",
         "//backend/engine/duckdb:duckdb_executor_time_travel",
         "//backend/engine/duckdb/transpiler:transpiler",
