@@ -201,6 +201,12 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
   }
 
+  if (setenv("BIGQUERY_EMULATOR_DATA_DIR", flags.data_dir.c_str(), 0) != 0) {
+    std::fprintf(stderr,
+                 "[emulator_main] warning: failed to set "
+                 "BIGQUERY_EMULATOR_DATA_DIR\n");
+  }
+
   auto storage_or =
       bigquery_emulator::backend::storage::duckdb::DuckDBStorage::Open(
           flags.data_dir);

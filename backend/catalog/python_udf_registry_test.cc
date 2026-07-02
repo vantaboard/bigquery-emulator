@@ -7,6 +7,24 @@ namespace backend {
 namespace catalog {
 namespace {
 
+TEST(PythonUdfRegistryTest, ParsePythonUdfFromDdlExtractsPackages) {
+  const char* ddl = R"(
+CREATE FUNCTION py_lxml(x STRING) RETURNS STRING
+LANGUAGE python
+OPTIONS (entry_point='do_lxml', packages=['lxml'])
+AS r"""
+from lxml import etree
+def do_lxml(x):
+  return x
+""")";
+  absl::StatusOr<PythonUdfDefinition> def_or =
+      ParsePythonUdfFromDdl(ddl, "py_lxml");
+  ASSERT_TRUE(def_or.ok()) << def_or.status();
+  ASSERT_EQ(def_or->packages.size(), 1u);
+  EXPECT_EQ(def_or->packages[0], "lxml");
+  EXPECT_EQ(def_or->entry_point, "do_lxml");
+}
+
 TEST(PythonUdfRegistryTest, ParsePythonUdfFromDdlRejectsAggregate) {
   const char* ddl = R"(
 CREATE AGGREGATE FUNCTION weighted_avg(x FLOAT64, w FLOAT64)

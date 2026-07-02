@@ -160,17 +160,37 @@ cc_library(
 
 cc_library(
     name = "python_udf_runtime",
-    srcs = ["python_udf_runtime.cc"],
-    hdrs = ["python_udf_runtime.h"],
+    srcs = [
+        "python_udf_runtime.cc",
+        "python_udf_runtime_internal.cc",
+        "python_udf_runtime_json.cc",
+    ],
+    hdrs = [
+        "python_udf_runtime.h",
+        "python_udf_runtime_internal.h",
+        "python_udf_runtime_json.h",
+    ],
     deps = [
         ":error",
         ":value",
         "//backend/catalog:python_udf_registry",
+        "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
         "@googlesql//googlesql/public:type",
         "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
+    name = "python_udf_runtime_test",
+    srcs = ["python_udf_runtime_test.cc"],
+    deps = [
+        ":python_udf_runtime",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

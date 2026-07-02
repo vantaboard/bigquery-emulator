@@ -291,8 +291,14 @@ cc_library(
 
 cc_library(
     name = "python_udf_registry",
-    srcs = ["python_udf_registry.cc"],
-    hdrs = ["python_udf_registry.h"],
+    srcs = [
+        "python_udf_registry.cc",
+        "python_udf_registry_ddl.cc",
+    ],
+    hdrs = [
+        "python_udf_registry.h",
+        "python_udf_registry_internal.h",
+    ],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
