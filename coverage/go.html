@@ -3505,8 +3505,8 @@ func scanDataDirRoot(dataDir string) (hasCatalog bool, legacyDB []string, readEr
         if err != nil </span><span class="cov0" title="0">{
                 return false, nil, fmt.Sprintf("WARN: cannot read --data-dir %q: %v", dataDir, err)
         }</span>
-        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="13">{
-                if e.IsDir() </span><span class="cov7" title="11">{
+        <span class="cov3" title="3">for _, e := range entries </span><span class="cov7" title="14">{
+                if e.IsDir() </span><span class="cov7" title="12">{
                         continue</span>
                 }
                 <span class="cov2" title="2">name := e.Name()
@@ -41981,20 +41981,20 @@ func (s *Store) New(req SeedRequest) *Operation <span class="cov7" title="8">{
 
 // Get returns a snapshot of the operation with the given ID.
 // Returns nil when no such operation exists.
-func (s *Store) Get(id string) *Operation <span class="cov8" title="13">{
+func (s *Store) Get(id string) *Operation <span class="cov8" title="12">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
         if !ok </span><span class="cov3" title="2">{
                 return nil
         }</span>
-        <span class="cov8" title="11">return cloneOperation(op)</span>
+        <span class="cov8" title="10">return cloneOperation(op)</span>
 }
 
 // MarkRunning records that the orchestrator has started processing
 // the operation. No-op (returns false) when the operation doesn't
 // exist or has already left PENDING.
-func (s *Store) MarkRunning(id string) bool <span class="cov6" title="7">{
+func (s *Store) MarkRunning(id string) bool <span class="cov7" title="7">{
         s.mu.Lock()
         defer s.mu.Unlock()
         op, ok := s.ops[id]
@@ -42041,7 +42041,7 @@ func (s *Store) MarkFailed(id, errMsg string) bool <span class="cov3" title="2">
 // The struct is small and Result is repointed (we never mutate a
 // Result after passing it through MarkResult), so a shallow copy is
 // sufficient.
-func cloneOperation(op *Operation) *Operation <span class="cov10" title="19">{
+func cloneOperation(op *Operation) *Operation <span class="cov10" title="18">{
         cp := *op
         return &amp;cp
 }</span>
@@ -47028,7 +47028,7 @@ func summarizeByFile(findings []tidyFinding, failedFiles map[string]struct{}) []
         for _, s := range byFile </span><span class="cov7" title="5">{
                 out = append(out, *s)
         }</span>
-        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov5" title="3">{ return out[i].File &lt; out[j].File }</span>)
+        <span class="cov3" title="2">sort.Slice(out, func(i, j int) bool </span><span class="cov6" title="4">{ return out[i].File &lt; out[j].File }</span>)
         <span class="cov3" title="2">return out</span>
 }
 
@@ -47210,11 +47210,11 @@ func sortedKeys(m map[string]int) []string <span class="cov8" title="6">{
         for k := range m </span><span class="cov10" title="10">{
                 keys = append(keys, k)
         }</span>
-        <span class="cov8" title="6">sort.Slice(keys, func(i, j int) bool </span><span class="cov6" title="4">{
+        <span class="cov8" title="6">sort.Slice(keys, func(i, j int) bool </span><span class="cov7" title="5">{
                 if m[keys[i]] != m[keys[j]] </span><span class="cov3" title="2">{
                         return m[keys[i]] &gt; m[keys[j]]
                 }</span>
-                <span class="cov3" title="2">return keys[i] &lt; keys[j]</span>
+                <span class="cov5" title="3">return keys[i] &lt; keys[j]</span>
         })
         <span class="cov8" title="6">return keys</span>
 }
