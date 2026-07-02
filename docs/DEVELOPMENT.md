@@ -112,7 +112,7 @@ tarball through `http_archive` (see [`third_party/duckdb/`](https://github.com/v
 
 Linux/amd64 engine ships in release archives. CI exercises native
 `linux/arm64` builds on `ubuntu-24.04-arm` (non-blocking); see
-[`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./docs/dev/googlesql-prebuilt/arm64-feasibility.md).
+[`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./dev/googlesql-prebuilt/arm64-feasibility.md).
 Until arm64 engine releases land, non-amd64 hosts should use the published
 Docker image.
 

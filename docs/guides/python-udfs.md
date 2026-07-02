@@ -82,4 +82,5 @@ export BIGQUERY_EMULATOR_PYTHON="$BIGQUERY_EMULATOR_DATA_DIR/python-udf-env/bin/
   (production BigQuery rejects these shapes; the emulator mirrors that).
 
 See also [`docs/ENGINE_POLICY.md`](../ENGINE_POLICY.md) and
-[`ROADMAP.md`](../ROADMAP.md) §Python UDFs.
+[`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
+§Python UDFs.
