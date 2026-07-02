@@ -20,8 +20,8 @@ TEST(StorageReadInternalTest, TimestampValueToMicrosStringWireForms) {
   };
   for (const Case& c : kCases) {
     SCOPED_TRACE(c.wire);
-    auto got = TimestampValueToMicrosString(
-        backend::storage::Value::String(c.wire));
+    auto got =
+        TimestampValueToMicrosString(backend::storage::Value::String(c.wire));
     ASSERT_TRUE(got.ok()) << got.status();
     EXPECT_EQ(*got, c.want);
   }

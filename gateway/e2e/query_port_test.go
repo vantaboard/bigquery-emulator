@@ -5155,7 +5155,8 @@ WITH Produce AS
 SELECT
   item,
   RANK() OVER (PARTITION BY category ORDER BY purchases DESC) as rank
-FROM Produce WHERE Produce.category = 'vegetable' QUALIFY rank <= 3`,
+FROM Produce WHERE Produce.category = 'vegetable' QUALIFY rank <= 3
+ORDER BY rank, item`,
 			expectedRows: [][]any{
 				{"kale", int64(1)},
 				{"lettuce", int64(2)},
@@ -5210,11 +5211,12 @@ WITH Produce AS
   UNION ALL SELECT 'apple', 8, 'fruit'
   UNION ALL SELECT 'leek', 2, 'vegetable'
   UNION ALL SELECT 'lettuce', 10, 'vegetable')
-SELECT item FROM Produce WHERE Produce.category = 'vegetable' QUALIFY RANK() OVER (PARTITION BY category ORDER BY purchases DESC) <= 3`,
+SELECT item FROM Produce WHERE Produce.category = 'vegetable' QUALIFY RANK() OVER (PARTITION BY category ORDER BY purchases DESC) <= 3
+ORDER BY item`,
 			expectedRows: [][]any{
+				{"cabbage"},
 				{"kale"},
 				{"lettuce"},
-				{"cabbage"},
 			},
 		},
 		{
