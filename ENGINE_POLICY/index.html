@@ -1402,8 +1402,8 @@ summary the unsupported error envelope points at. Per-family posture
 </tr>
 <tr>
 <td><code>UNDROP SCHEMA</code></td>
-<td><code>unsupported</code> (planned)</td>
-<td>BigQuery's only undrop form (<code>UNDROP SCHEMA ...</code>). <code>RunUndrop</code> surfaces <code>UNIMPLEMENTED</code> today; <code>UNDROP TABLE</code> is not a BigQuery statement. See ROADMAP §DML / DDL.</td>
+<td><code>control_op</code> (landed)</td>
+<td>BigQuery's only undrop form (<code>UNDROP SCHEMA ...</code>). <code>UNDROP TABLE</code> is not a BigQuery statement. Dataset tombstones + <code>datasets.undelete</code> share <code>RestoreDataset</code>. See ROADMAP §DML / DDL.</td>
 </tr>
 <tr>
 <td><code>INFORMATION_SCHEMA.*</code> reflection views</td>
