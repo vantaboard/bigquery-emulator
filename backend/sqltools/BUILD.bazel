@@ -5,11 +5,13 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "sql_tools",
     srcs = [
+        "sql_completion_data.cc",
         "sql_tools.cc",
         "sql_tools_complete.cc",
         "sql_tools_complete_helpers.cc",
     ],
     hdrs = [
+        "sql_completion_data.h",
         "sql_tools.h",
         "sql_tools_complete_helpers.h",
     ],
