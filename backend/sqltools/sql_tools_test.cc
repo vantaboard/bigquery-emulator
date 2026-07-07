@@ -1,6 +1,7 @@
 #include "backend/sqltools/sql_tools.h"
 
 #include "backend/sqltools/sql_references.h"
+#include "absl/strings/match.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"
@@ -86,10 +87,90 @@ TEST_F(SqlToolsTest, CompleteAfterSelectIncludesKeywords) {
   for (const CompletionCandidate& candidate : result->candidates) {
     if (candidate.label == "FROM") {
       found_from = true;
+      EXPECT_EQ(candidate.kind, "keyword");
       break;
     }
   }
   EXPECT_TRUE(found_from);
+}
+
+TEST_F(SqlToolsTest, CompleteStatementStartSuggestsOnlyClauseWords) {
+  CatalogNames names;
+  const std::string sql = "S";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  bool found_select = false;
+  bool found_set = false;
+  bool found_safe_cast = false;
+  bool found_some = false;
+  bool found_struct = false;
+  bool found_function = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "SELECT") found_select = true;
+    if (candidate.label == "SET") found_set = true;
+    if (candidate.label == "SAFE_CAST") found_safe_cast = true;
+    if (candidate.label == "SOME") found_some = true;
+    if (candidate.label == "STRUCT") found_struct = true;
+    if (candidate.kind == "function") found_function = true;
+  }
+  EXPECT_TRUE(found_select);
+  EXPECT_TRUE(found_set);
+  EXPECT_FALSE(found_safe_cast);
+  EXPECT_FALSE(found_some);
+  EXPECT_FALSE(found_struct);
+  EXPECT_FALSE(found_function);
+}
+
+TEST_F(SqlToolsTest, CompleteAfterSelectExpressionContextUsesCuratedFunctions) {
+  CatalogNames names;
+  const std::string sql = "SELECT S";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  bool found_safe_add = false;
+  bool found_schema = false;
+  bool found_search = false;
+  bool found_s2_function = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "SAFE_ADD" && candidate.kind == "function") {
+      found_safe_add = true;
+      EXPECT_EQ(candidate.detail, "(X, Y)");
+      EXPECT_EQ(candidate.insert_text, "SAFE_ADD(");
+    }
+    if (candidate.label == "SCHEMA") found_schema = true;
+    if (candidate.label == "SEARCH") found_search = true;
+    if (absl::StartsWithIgnoreCase(candidate.label, "s2_") &&
+        candidate.kind == "function") {
+      found_s2_function = true;
+    }
+  }
+  EXPECT_TRUE(found_safe_add);
+  EXPECT_TRUE(found_schema);
+  EXPECT_TRUE(found_search);
+  EXPECT_FALSE(found_s2_function);
+}
+
+TEST_F(SqlToolsTest, CompleteAfterSemicolonUsesStatementStartBehavior) {
+  CatalogNames names;
+  const std::string sql = "SELECT 1 FROM t; S";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, sql.size(), language_, catalog_.get(), names, "");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  bool found_select = false;
+  bool found_set = false;
+  bool found_function = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "SELECT") found_select = true;
+    if (candidate.label == "SET") found_set = true;
+    if (candidate.kind == "function") found_function = true;
+  }
+  EXPECT_TRUE(found_select);
+  EXPECT_TRUE(found_set);
+  EXPECT_FALSE(found_function);
 }
 
 TEST_F(SqlToolsTest, ParseInvalidSqlReturnsDiagnosticWithSpan) {

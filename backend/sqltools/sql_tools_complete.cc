@@ -10,6 +10,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
+#include "backend/sqltools/sql_completion_data.h"
 #include "backend/sqltools/sql_tools.h"
 #include "backend/sqltools/sql_tools_complete_helpers.h"
 #include "googlesql/public/catalog.h"
@@ -64,6 +65,22 @@ void AppendPrefixMatches(absl::string_view prefix,
               name, std::string(kind), QuoteIdentifierIfNeeded(name), ""});
     }
   }
+}
+
+void AppendClauseWordCandidates(absl::string_view prefix,
+                                std::vector<CompletionCandidate>* out) {
+  for (const ClauseWordEntry& entry : ClauseWords()) {
+    if (prefix.empty() || absl::StartsWithIgnoreCase(entry.name, prefix)) {
+      AppendUniqueCandidate(
+          out,
+          CompletionCandidate{entry.name, "keyword", entry.name, ""});
+    }
+  }
+}
+
+void AppendExpressionKeywordCandidates(absl::string_view prefix,
+                                       std::vector<CompletionCandidate>* out) {
+  AppendPrefixMatches(prefix, "keyword", ExpressionKeywords(), out);
 }
 
 void AppendTableCandidates(absl::string_view prefix,
@@ -144,32 +161,8 @@ void AppendFlatColumnUnion(const CatalogNames& catalog_names,
   }
 }
 
-const std::vector<std::string>& SqlKeywords() {
-  static const std::vector<std::string>* kKeywords =
-      new std::vector<std::string>{
-          "ALL",      "AND",       "ANY",     "ARRAY",   "AS",      "ASC",
-          "BETWEEN",  "BY",        "CASE",    "CAST",    "COLLATE", "CREATE",
-          "CROSS",    "CUBE",      "CURRENT", "DEFAULT", "DELETE",  "DESC",
-          "DISTINCT", "DROP",      "ELSE",    "END",     "EXCEPT",  "EXISTS",
-          "FALSE",    "FOR",       "FROM",    "FULL",    "GROUP",   "GROUPING",
-          "HAVING",   "IF",        "IN",      "INNER",   "INSERT",  "INTERSECT",
-          "INTO",     "IS",        "JOIN",    "LEFT",    "LIKE",    "LIMIT",
-          "MERGE",    "NOT",       "NULL",    "NULLS",   "OF",      "OFFSET",
-          "ON",       "OR",        "ORDER",   "OUTER",   "OVER",    "PARTITION",
-          "PIVOT",    "QUALIFY",   "REGEXP",  "RIGHT",   "ROLLUP",  "ROW",
-          "ROWS",     "SAFE_CAST", "SELECT",  "SET",     "SOME",    "STRUCT",
-          "TABLE",    "THEN",      "TO",      "TRUE",    "UNION",   "UNNEST",
-          "UPDATE",   "USING",     "WHEN",    "WHERE",   "WINDOW",  "WITH",
-          "WITHIN"};
-  return *kKeywords;
-}
-
-void AppendFunctionCandidates(::googlesql::Catalog* catalog,
-                              absl::string_view prefix,
-                              const CatalogNames& catalog_names,
-                              std::vector<CompletionCandidate>* out) {
-  auto* simple = dynamic_cast<::googlesql::SimpleCatalog*>(catalog);
-  if (simple == nullptr) return;
+absl::flat_hash_set<std::string> RegisteredRoutineNames(
+    const CatalogNames& catalog_names) {
   absl::flat_hash_set<std::string> registered_routines;
   for (const CatalogRoutineEntry& routine : catalog_names.routines) {
     registered_routines.insert(absl::AsciiStrToLower(routine.label));
@@ -179,16 +172,50 @@ void AppendFunctionCandidates(::googlesql::Catalog* catalog,
           absl::AsciiStrToLower(routine.fqn.substr(dot + 1)));
     }
   }
+  return registered_routines;
+}
+
+absl::flat_hash_set<std::string> CatalogFunctionNames(
+    ::googlesql::Catalog* catalog) {
+  absl::flat_hash_set<std::string> catalog_functions;
+  auto* simple = dynamic_cast<::googlesql::SimpleCatalog*>(catalog);
+  if (simple == nullptr) return catalog_functions;
   absl::flat_hash_set<const ::googlesql::Function*> functions;
-  if (!simple->GetFunctions(&functions).ok()) return;
+  if (!simple->GetFunctions(&functions).ok()) return catalog_functions;
   for (const ::googlesql::Function* function : functions) {
     if (function == nullptr) continue;
-    const std::string name = function->Name();
-    if (registered_routines.contains(absl::AsciiStrToLower(name))) continue;
-    if (prefix.empty() || absl::StartsWithIgnoreCase(name, prefix)) {
-      AppendUniqueCandidate(
-          out, CompletionCandidate{name, "function", name + "(", "", ""});
+    catalog_functions.insert(absl::AsciiStrToLower(function->Name()));
+  }
+  return catalog_functions;
+}
+
+void AppendCuratedFunctionCandidates(
+    ::googlesql::Catalog* catalog,
+    absl::string_view prefix,
+    const CatalogNames& catalog_names,
+    const std::vector<FunctionInfoEntry>& curated_functions,
+    std::vector<CompletionCandidate>* out) {
+  const absl::flat_hash_set<std::string> registered_routines =
+      RegisteredRoutineNames(catalog_names);
+  const absl::flat_hash_set<std::string> catalog_functions =
+      CatalogFunctionNames(catalog);
+
+  for (const FunctionInfoEntry& function : curated_functions) {
+    const std::string lower_name = absl::AsciiStrToLower(function.name);
+    if (registered_routines.contains(lower_name)) continue;
+    if (!catalog_functions.contains(lower_name)) continue;
+    if (!prefix.empty() && !absl::StartsWithIgnoreCase(function.name, prefix)) {
+      continue;
     }
+    const std::string detail =
+        function.args.empty() ? "" : absl::StrCat("(", function.args, ")");
+    AppendUniqueCandidate(
+        out,
+        CompletionCandidate{function.name,
+                            "function",
+                            function.name + "(",
+                            detail,
+                            ""});
   }
 }
 
@@ -205,9 +232,6 @@ void AppendColumnCandidatesForTable(::googlesql::Catalog* catalog,
   }
   if (path.size() == 1 && !default_dataset.empty()) {
     path.insert(path.begin(), std::string(default_dataset));
-  }
-  if (path.size() == 1 && !project_id.empty()) {
-    // Single unqualified name with no default dataset: try as table in catalog.
   }
   const ::googlesql::Table* table = nullptr;
   if (catalog->FindTable(path, &table).ok() && table != nullptr) {
@@ -259,6 +283,8 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
       return token_status;
     }
     ctx = sql_tools_complete_internal::InferCompletionContext(tokens);
+  } else {
+    ctx.kind = sql_tools_complete_internal::CompletionContextKind::kStatementStart;
   }
 
   std::string prefix;
@@ -269,14 +295,10 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
                                                    &result.replacement_end,
                                                    &prefix);
 
-  if (prefix_sql.empty()) {
-    AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
-    AppendFunctionCandidates(
-        catalog, prefix, catalog_names, &result.candidates);
-    AppendPrefixMatches(
-        prefix, "dataset", catalog_names.datasets, &result.candidates);
-    AppendTableCandidates(prefix, catalog_names.tables, &result.candidates);
-    AppendRoutineCandidates(prefix, catalog_names.routines, &result.candidates);
+  if (prefix_sql.empty() ||
+      ctx.kind ==
+          sql_tools_complete_internal::CompletionContextKind::kStatementStart) {
+    AppendClauseWordCandidates(prefix, &result.candidates);
     std::sort(result.candidates.begin(),
               result.candidates.end(),
               [](const CompletionCandidate& a, const CompletionCandidate& b) {
@@ -290,6 +312,12 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
       AppendPrefixMatches(
           prefix, "dataset", catalog_names.datasets, &result.candidates);
       AppendTableCandidates(prefix, catalog_names.tables, &result.candidates);
+      AppendCuratedFunctionCandidates(catalog,
+                                      prefix,
+                                      catalog_names,
+                                      TvfFunctionInfo(),
+                                      &result.candidates);
+      AppendClauseWordCandidates(prefix, &result.candidates);
       break;
     case sql_tools_complete_internal::CompletionContextKind::kMember:
       AppendColumnCandidatesForTable(catalog,
@@ -303,6 +331,7 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
                                     catalog_names.in_scope_tables,
                                     &result.candidates);
       AppendFlatColumnUnion(catalog_names, prefix, &result.candidates);
+      AppendClauseWordCandidates(prefix, &result.candidates);
       break;
     case sql_tools_complete_internal::CompletionContextKind::kColumn:
       AppendInScopeColumnCandidates(
@@ -310,24 +339,23 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
       AppendFlatColumnUnion(catalog_names, prefix, &result.candidates);
       AppendRoutineCandidates(
           prefix, catalog_names.routines, &result.candidates);
-      AppendFunctionCandidates(
-          catalog, prefix, catalog_names, &result.candidates);
-      AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
+      AppendCuratedFunctionCandidates(catalog,
+                                      prefix,
+                                      catalog_names,
+                                      FunctionInfo(),
+                                      &result.candidates);
+      AppendExpressionKeywordCandidates(prefix, &result.candidates);
+      AppendClauseWordCandidates(prefix, &result.candidates);
       break;
     case sql_tools_complete_internal::CompletionContextKind::kRoutine:
       AppendRoutineCandidates(
           prefix, catalog_names.routines, &result.candidates);
-      AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
+      AppendExpressionKeywordCandidates(prefix, &result.candidates);
+      AppendClauseWordCandidates(prefix, &result.candidates);
       break;
     case sql_tools_complete_internal::CompletionContextKind::kGeneral:
-      AppendPrefixMatches(prefix, "keyword", SqlKeywords(), &result.candidates);
-      AppendFunctionCandidates(
-          catalog, prefix, catalog_names, &result.candidates);
-      AppendPrefixMatches(
-          prefix, "dataset", catalog_names.datasets, &result.candidates);
-      AppendTableCandidates(prefix, catalog_names.tables, &result.candidates);
-      AppendRoutineCandidates(
-          prefix, catalog_names.routines, &result.candidates);
+    case sql_tools_complete_internal::CompletionContextKind::kStatementStart:
+      AppendClauseWordCandidates(prefix, &result.candidates);
       break;
   }
 

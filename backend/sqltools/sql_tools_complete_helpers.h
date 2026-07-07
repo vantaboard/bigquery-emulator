@@ -14,6 +14,7 @@ namespace sql_tools_complete_internal {
 
 enum class CompletionContextKind {
   kGeneral,
+  kStatementStart,
   kTable,
   kColumn,
   kMember,

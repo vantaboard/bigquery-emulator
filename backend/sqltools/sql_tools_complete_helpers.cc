@@ -14,44 +14,26 @@ namespace sqltools {
 namespace sql_tools_complete_internal {
 namespace {
 
+bool IsStatementBoundary(const ::googlesql::ParseToken& token) {
+  return token.GetImage() == ";";
+}
+
 bool IsTableContextKeyword(absl::string_view keyword) {
   static const absl::flat_hash_set<std::string>* kKeywords =
-      new absl::flat_hash_set<std::string>{"FROM",
-                                           "JOIN",
-                                           "INNER",
-                                           "LEFT",
-                                           "RIGHT",
-                                           "FULL",
-                                           "CROSS",
-                                           "INTO",
-                                           "UPDATE",
-                                           "TABLE",
-                                           "MERGE",
-                                           "USING",
-                                           "DELETE",
-                                           "TRUNCATE"};
+      new absl::flat_hash_set<std::string>{
+          "CREATE", "DELETE", "FROM",  "INSERT", "JOIN",   "MERGE",
+          "UPDATE", "USING",
+      };
   return kKeywords->contains(std::string(keyword));
 }
 
 bool IsColumnContextKeyword(absl::string_view keyword) {
   static const absl::flat_hash_set<std::string>* kKeywords =
-      new absl::flat_hash_set<std::string>{"SELECT",
-                                           "WHERE",
-                                           "ON",
-                                           "BY",
-                                           "HAVING",
-                                           "QUALIFY",
-                                           "SET",
-                                           "AND",
-                                           "OR",
-                                           "NOT",
-                                           "WHEN",
-                                           "THEN",
-                                           "ELSE",
-                                           "CASE",
-                                           "GROUP",
-                                           "ORDER",
-                                           "PARTITION"};
+      new absl::flat_hash_set<std::string>{
+          "AND",     "CASE",   "ELSE",   "GROUP",  "HAVING", "NOT",
+          "OMIT",    "ON",     "OR",     "ORDER",  "OVER",   "PARTITION",
+          "QUALIFY", "SELECT", "SET",    "THEN",   "WHEN",   "WHERE",
+      };
   return kKeywords->contains(std::string(keyword));
 }
 
@@ -72,6 +54,9 @@ CompletionContext InferDotCompletionContext(
   CompletionContext ctx;
   bool after_table_intro = false;
   for (int i = idx - 2; i >= 0; --i) {
+    if (IsStatementBoundary(tokens[i])) {
+      break;
+    }
     if (!tokens[i].IsKeyword()) continue;
     const std::string kw = tokens[i].GetKeyword();
     if (IsTableContextKeyword(kw)) {
@@ -94,12 +79,19 @@ CompletionContext InferDotCompletionContext(
 CompletionContext InferKeywordCompletionContext(
     const std::vector<::googlesql::ParseToken>& tokens, int idx) {
   CompletionContext ctx;
-  const std::string last_keyword = tokens[idx].GetKeyword();
-  if (IsTableContextKeyword(last_keyword)) {
-    ctx.kind = CompletionContextKind::kTable;
-    return ctx;
+  if (tokens[idx].IsKeyword()) {
+    const std::string last_keyword = tokens[idx].GetKeyword();
+    if (IsTableContextKeyword(last_keyword)) {
+      ctx.kind = CompletionContextKind::kTable;
+      return ctx;
+    }
   }
+
   for (int i = idx; i >= 0; --i) {
+    if (IsStatementBoundary(tokens[i])) {
+      ctx.kind = CompletionContextKind::kStatementStart;
+      return ctx;
+    }
     if (!tokens[i].IsKeyword()) continue;
     const std::string kw = tokens[i].GetKeyword();
     if (IsRoutineContextKeyword(kw)) {
@@ -115,6 +107,8 @@ CompletionContext InferKeywordCompletionContext(
       return ctx;
     }
   }
+
+  ctx.kind = CompletionContextKind::kStatementStart;
   return ctx;
 }
 
