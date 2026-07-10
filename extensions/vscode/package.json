@@ -1,0 +1,19 @@
+{
+  "name": "bigquery-emulator-vscode-workspace",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "server",
+    "extension",
+    "test"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspace=@bigquery-emulator/vscode-shared && npm run test --workspace=@bigquery-emulator/vscode-server && npm run test --workspace=@bigquery-emulator/vscode-test",
+    "lint": "npm run lint --workspaces --if-present",
+    "package": "npm run build && npm run package --workspace=extension"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

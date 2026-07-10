@@ -144,4 +144,7 @@ bqutils-sync.*/
 # / aggregator / smoke runs, timestamped `<scope>-YYYYMMDD-HHMMSS.log`).
 # Regenerated on demand by the operator; useful for post-mortem of a
 # specific session but never reproducible across runs, so do not check in.
-/.logs/
+# VSCode extension workspace (npm workspaces under extensions/vscode/).
+/extensions/vscode/node_modules/
+/extensions/vscode/**/node_modules/
+/extensions/vscode/**/dist/

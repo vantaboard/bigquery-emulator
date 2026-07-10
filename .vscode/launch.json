@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run BigQuery Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/extensions/vscode/extension"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/extensions/vscode/extension/dist/**/*.js",
+        "${workspaceFolder}/extensions/vscode/server/dist/**/*.js"
+      ],
+      "preLaunchTask": "vscode:build"
+    }
+  ]
+}

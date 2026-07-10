@@ -1,0 +1,16 @@
+{
+  "name": "@bigquery-emulator/vscode-test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bigquery-emulator/vscode-shared": "0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.9",
+    "yaml": "^2.7.0"
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "name": "bigquery-emulator",
+  "displayName": "BigQuery GoogleSQL",
+  "description": "Linting, formatting, completion, and quick fixes for GoogleSQL via the BigQuery emulator SQL Tools API or production BigQuery dry-run.",
+  "version": "0.1.0",
+  "publisher": "vantaboard",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:bigquery"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "bigquery",
+        "aliases": [
+          "BigQuery",
+          "GoogleSQL",
+          "googlesql"
+        ],
+        "extensions": [
+          ".bqsql",
+          ".googlesql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bigquery",
+        "scopeName": "source.sql.bigquery",
+        "path": "./syntaxes/googlesql.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "BigQuery",
+      "properties": {
+        "bigquery.backendMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "emulator",
+            "bigquery"
+          ],
+          "default": "auto",
+          "description": "Language service backend. auto probes the emulator SQL Tools API and falls back to production BigQuery dry-run."
+        },
+        "bigquery.emulatorBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:9050",
+          "description": "Base URL for the BigQuery emulator gateway (REST + SQL Tools)."
+        },
+        "bigquery.sqlToolsToken": {
+          "type": "string",
+          "default": "",
+          "description": "Optional X-BigQuery-Emulator-SqlTools-Token when remote SQL Tools access is enabled."
+        },
+        "bigquery.projectId": {
+          "type": "string",
+          "default": "local-project",
+          "description": "Default BigQuery project id for completion and analysis."
+        },
+        "bigquery.defaultDatasetId": {
+          "type": "string",
+          "default": "",
+          "description": "Default dataset id for unqualified table references."
+        },
+        "bigquery.strictFormat": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use strict SQL Tools formatting (strips comments)."
+        },
+        "bigquery.formatIndentationSpaces": {
+          "type": "number",
+          "default": 2,
+          "description": "Indentation width for SQL Tools formatting."
+        },
+        "bigquery.formatLineLengthLimit": {
+          "type": "number",
+          "default": 80,
+          "description": "Line length limit for SQL Tools formatting."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "bigquery.restartLanguageServer",
+        "title": "BigQuery: Restart Language Server"
+      },
+      {
+        "command": "bigquery.probeBackend",
+        "title": "BigQuery: Probe Active Backend"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "package": "vsce package --no-dependencies",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.1",
+    "typescript": "^5.8.2"
+  }
+}

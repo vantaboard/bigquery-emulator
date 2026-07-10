@@ -26,6 +26,7 @@ includes:
   bench: ./taskfiles/bench.yml
   docs: ./taskfiles/docs.yml
   python-udf: ./taskfiles/python-udf.yml
+  vscode: ./taskfiles/vscode.yml
 
 tasks:
   default:

@@ -1,0 +1,91 @@
+{
+  "name": "GoogleSQL",
+  "scopeName": "source.sql.bigquery",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#numbers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.sql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.sql",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.sql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.sql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.backtick.sql",
+          "begin": "`",
+          "end": "`"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.other.sql",
+          "match": "(?i)\\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|UNION|ALL|DISTINCT|AS|ON|USING|WITH|CREATE|OR|REPLACE|TABLE|VIEW|FUNCTION|PROCEDURE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|IN|IS|NULL|TRUE|FALSE|BETWEEN|LIKE|EXISTS|UNNEST|QUALIFY|WINDOW|OVER|PARTITION BY|SAFE_ADD|COUNTIF|ROW_NUMBER|TIMESTAMP_SUB|JSON_EXTRACT_SCALAR)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.sql",
+          "match": "(?i)\\b[A-Z_][A-Z0-9_]*(?=\\s*\\()"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.sql",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    }
+  }
+}

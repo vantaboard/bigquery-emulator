@@ -1,0 +1,28 @@
+- name: unclosed_function_paren
+  sql: SELECT SAFE_ADD(
+  production:
+    message: 'Syntax error: Expected ")" but got end of script at [1:17]'
+    line: 1
+    column: 17
+  emulator:
+    known_failing: false
+
+- name: missing_from_clause
+  sql: SELECT 1
+  production:
+    message: null
+    line: null
+    column: null
+  emulator:
+    known_failing: false
+
+- name: unrecognized_column
+  sql: |
+    SELECT definitely_missing_column
+    FROM `bigquery-public-data`.samples.shakespeare
+  production:
+    message: 'Unrecognized name: definitely_missing_column at [1:8]'
+    line: 1
+    column: 8
+  emulator:
+    known_failing: true
