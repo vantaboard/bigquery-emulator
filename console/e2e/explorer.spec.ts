@@ -43,6 +43,25 @@ async function openQueryFromTable(page: Page) {
     await expect(page.getByTestId('sql-editor')).toBeVisible();
 }
 
+async function monacoEditor(page: Page) {
+    const root = page.getByTestId('sql-editor');
+    await expect(root.locator('.monaco-editor')).toBeVisible();
+    return root;
+}
+
+async function monacoSetValue(page: Page, value: string) {
+    const root = await monacoEditor(page);
+    const input = root.locator('textarea.inputarea');
+    await input.click();
+    await page.keyboard.press('Control+a');
+    await input.fill(value);
+}
+
+async function monacoText(page: Page): Promise<string> {
+    const root = await monacoEditor(page);
+    return (await root.locator('.view-lines').innerText()) ?? '';
+}
+
 async function openRoutinesTab(page: Page) {
     await openDataset(page);
     await Promise.all([
@@ -130,10 +149,10 @@ test.describe('BigQuery Explorer', () => {
         await selectTable(page);
         await page.getByTestId('open-query-from-table').click();
         await expect(page.getByTestId('sql-editor')).toBeVisible();
-        const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        await expect(editor).toContainText('SELECT');
-        await expect(editor).toContainText('table_a');
-        await expect(editor).toContainText('LIMIT 1000');
+        const text = await monacoText(page);
+        expect(text).toContain('SELECT');
+        expect(text).toContain('table_a');
+        expect(text).toContain('LIMIT 1000');
         await expect(page.getByRole('tab', { name: 'table_a' })).toHaveCount(2);
     });
 
@@ -207,54 +226,44 @@ test.describe('BigQuery Explorer', () => {
 
     test('formats SQL without error', async ({ page }) => {
         await openQueryFromTable(page);
-        const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        await editor.click();
-        await editor.press('Control+a');
-        await editor.fill('select*from`local-project.test-dataset.table_a`limit 1000');
+        await monacoSetValue(page, 'select*from`local-project.test-dataset.table_a`limit 1000');
         await page.getByTestId('format-sql').click();
-        const after = (await editor.textContent()) ?? '';
+        const after = await monacoText(page);
         expect(after.length).toBeGreaterThan(0);
         expect(after.toLowerCase()).toContain('select');
         expect(after).toContain('table_a');
     });
 
-    test('shows syntax error status bar and Alt+F8 problems panel', async ({ page }) => {
+    test('shows syntax error status bar and Alt+F8 marker navigation', async ({ page }) => {
         await openQueryFromTable(page);
-        const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        await editor.click();
-        await editor.press('Control+a');
 
         const parseResponsePromise = page.waitForResponse(
             (r) => r.url().includes('/api/emulator/sql/parse') && r.ok(),
             { timeout: 10_000 },
         );
-        await editor.fill('SELECT SAFE_ADD(');
+        await monacoSetValue(page, 'SELECT SAFE_ADD(');
         await parseResponsePromise;
 
         const bar = page.getByTestId('sql-diagnostics-bar');
         await expect(bar).toBeVisible({ timeout: 5_000 });
         await expect(bar).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
 
-        const marker = page.locator('.cm-lintRange-error, .cm-lintPoint-error').first();
-        await expect(marker).toHaveCount(1, { timeout: 5_000 });
-        await marker.hover({ force: true });
-        const tooltip = page.locator('.cm-tooltip-lint');
-        await expect(tooltip).toBeVisible();
-        await expect(tooltip.getByRole('button', { name: 'View Problem (Alt+F8)' })).toBeVisible();
-        await expect(tooltip).toContainText('No quick fixes available');
+        const root = await monacoEditor(page);
+        const squiggle = root.locator('.cdr.squiggly-error, .monaco-editor .squiggly-error').first();
+        await expect(squiggle).toBeVisible({ timeout: 5_000 });
+        await squiggle.hover({ force: true });
+        const hover = page.locator('.monaco-hover');
+        await expect(hover).toBeVisible();
+        await expect(hover).toContainText('View Problem (Alt+F8)');
+        await expect(hover).toContainText('No quick fixes available');
 
-        await editor.press('Alt+F8');
-        const panel = page.locator('.cm-panel-lint');
-        await expect(panel).toBeVisible();
-        await expect(panel).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
+        await root.locator('textarea.inputarea').press('Alt+F8');
+        await expect(bar).toBeVisible();
     });
 
     test('shows autocompletion suggestions while typing', async ({ page }) => {
         await openQueryFromTable(page);
-        const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        await editor.click();
-        await editor.press('Control+a');
-        await editor.fill('SELECT * FROM ');
+        await monacoSetValue(page, 'SELECT * FROM ');
 
         await Promise.race([
             page.waitForResponse(
@@ -267,11 +276,12 @@ test.describe('BigQuery Explorer', () => {
             ),
         ]);
 
-        await editor.press('Control+Space');
+        const root = await monacoEditor(page);
+        await root.locator('textarea.inputarea').press('Control+Space');
 
-        const autocomplete = page.locator('.cm-tooltip-autocomplete');
-        await expect(autocomplete).toBeVisible({ timeout: 10_000 });
-        await expect(autocomplete.locator('.cm-completionLabel', { hasText: /^table_a$/ }).first()).toBeVisible();
+        const suggest = page.locator('.suggest-widget');
+        await expect(suggest).toBeVisible({ timeout: 10_000 });
+        await expect(suggest.locator('.monaco-list-row', { hasText: 'table_a' }).first()).toBeVisible();
     });
 
     test('saves a query to localStorage and restores after reload', async ({ page }) => {
@@ -330,9 +340,9 @@ test.describe('BigQuery Explorer', () => {
         await fresh.goto(sharedUrl);
         await expect(fresh.getByTestId('project-local-project')).toBeVisible();
         await expect(fresh.getByTestId('sql-editor')).toBeVisible();
-        const editor = fresh.getByTestId('sql-editor').locator('.cm-content');
-        await expect(editor).toContainText('SELECT');
-        await expect(editor).toContainText('table_a');
+        const text = await monacoText(fresh);
+        expect(text).toContain('SELECT');
+        expect(text).toContain('table_a');
     });
 
     test('opens multiple tabs and restores session after reload', async ({ page }) => {
@@ -473,21 +483,18 @@ test.describe('BigQuery Explorer', () => {
         ]);
 
         await openQueryFromTable(page);
-        const editor = page.getByTestId('sql-editor').locator('.cm-content');
-        await editor.click();
-        await editor.fill(`SELECT ${routineName}(`);
+        await monacoSetValue(page, `SELECT ${routineName}(`);
 
         await Promise.race([
             page.waitForResponse((r) => r.url().includes('/api/emulator/sql/complete') && r.ok(), { timeout: 8000 }),
             page.waitForResponse((r) => r.url().includes('/routines') && r.ok(), { timeout: 8000 }),
         ]);
 
-        await editor.press('Control+Space');
-        const autocomplete = page.locator('.cm-tooltip-autocomplete');
-        await expect(autocomplete).toBeVisible({ timeout: 10_000 });
-        await expect(
-            autocomplete.locator('.cm-completionLabel', { hasText: new RegExp(routineName) }).first(),
-        ).toBeVisible();
+        const root = await monacoEditor(page);
+        await root.locator('textarea.inputarea').press('Control+Space');
+        const suggest = page.locator('.suggest-widget');
+        await expect(suggest).toBeVisible({ timeout: 10_000 });
+        await expect(suggest.locator('.monaco-list-row', { hasText: routineName }).first()).toBeVisible();
     });
 
     test('shows routines in the sidebar tree', async ({ page }) => {

@@ -32,7 +32,7 @@ What ships today (v2.0.0):
 - **URL state**: encodes project, dataset, table, results tab, and base64 query ([src/features/explorer/urlState.ts](src/features/explorer/urlState.ts))
 - **Sidebar/layout prefs**: persisted to `localStorage` under `bigqueryExplorerUILayout`
 - **Query formatting**: BigQuery dialect via `sql-formatter`
-- **SQL editor**: CodeMirror with basic SQL highlighting ([src/features/explorer/components/SqlEditor.tsx](src/features/explorer/components/SqlEditor.tsx)) — no parser-based auto-completion yet
+- **SQL editor**: Monaco with BigQuery GoogleSQL LSP in a web worker ([src/features/explorer/components/SqlEditor.tsx](src/features/explorer/components/SqlEditor.tsx)) — diagnostics, completion, formatting, hover
 
 What is **not** implemented:
 
@@ -431,7 +431,7 @@ Runs inside the multi-tab workspace.
 |------------|--------|-------|
 | Run query | **Done** | `POST .../queries` |
 | Format SQL | **Done** today → **Planned** upgrade | Today: `sql-formatter`. Target: emulator `POST /api/emulator/sql/format` when SQL Tools enabled; client fallback otherwise |
-| Syntax highlighting | **Done** | CodeMirror `@codemirror/lang-sql` |
+| Syntax highlighting | **Done** | Monaco Monarch `googlesql` tokenizer + LSP |
 | Parser-based auto-completion | Planned | Primary: `POST /api/emulator/sql/complete` (catalog-aware). Fallback: REST schema + `@codemirror/lang-sql` |
 | Real-time syntax errors | Planned | `POST /api/emulator/sql/parse` diagnostics in editor gutter (debounced) |
 | Results table | **Done** | [ResultsTable.tsx](src/features/explorer/components/ResultsTable.tsx) |
@@ -439,7 +439,7 @@ Runs inside the multi-tab workspace.
 | Reference panel | Planned | REST schema for tab-bound resource; optional `POST /api/emulator/sql/analyze` when upstream ships |
 | Tools menu | Planned | Toggle emulator parser vs client fallback; strict vs lenient format |
 
-When the emulator runs with `--enable-sql-tools-api`, wire format/parse/complete from [SqlEditor.tsx](src/features/explorer/components/SqlEditor.tsx) via a typed client ([`src/lib/sqlTools.ts`](src/lib/sqlTools.ts), planned in M4). Vite/nginx proxy `/api/emulator` to the gateway alongside `/bigquery`. Against real BigQuery or when SQL Tools is disabled, fall back to a slim REST-backed catalog and `sql-formatter`.
+When the emulator runs with `--enable-sql-tools-api`, the Monaco editor talks to the GoogleSQL LSP worker (`@bigquery-emulator/vscode-server/browser`), which calls `POST /api/emulator/sql/{format,parse,complete,analyze}`. Vite/nginx proxy `/api/emulator` to the gateway alongside `/bigquery`. Against real BigQuery or when SQL Tools is disabled, fall back to `sql-formatter` for format.
 
 ---
 

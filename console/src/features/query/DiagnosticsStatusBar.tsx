@@ -1,6 +1,6 @@
 import { AlertCircle } from 'lucide-react';
 
-import type { EditorDiagnostic } from '@/features/query/sqlEditorExtensions';
+import type { EditorDiagnostic } from '@/features/query/languageClient';
 
 interface DiagnosticsStatusBarProps {
     diagnostics: EditorDiagnostic[];

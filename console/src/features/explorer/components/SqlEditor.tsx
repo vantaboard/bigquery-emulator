@@ -1,12 +1,52 @@
-import CodeMirror from '@uiw/react-codemirror';
-import { useMemo, useRef } from 'react';
+import Editor, { loader, type OnMount } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import { useEffect, useMemo, useRef } from 'react';
 
 import {
-    buildSqlEditorExtensions,
+    attachGooglesqlLanguageClient,
     type EditorDiagnostic,
-} from '@/features/query/sqlEditorExtensions';
-import type { SqlCatalog } from '@/features/query/sqlCatalog';
+    type GooglesqlLanguageSession,
+} from '@/features/query/languageClient';
 import { cn } from '@/lib/utils';
+
+loader.config({ monaco });
+
+const LANGUAGE_ID = 'googlesql';
+
+let languageRegistered = false;
+
+function ensureGooglesqlLanguage(): void {
+    if (languageRegistered) {
+        return;
+    }
+    monaco.languages.register({ id: LANGUAGE_ID, extensions: ['.sql', '.bqsql'] });
+    monaco.languages.setMonarchTokensProvider(LANGUAGE_ID, {
+        defaultToken: '',
+        ignoreCase: true,
+        tokenizer: {
+            root: [
+                [/--.*$/, 'comment'],
+                [/\/\*/, 'comment', '@comment'],
+                [/"[^"]*"/, 'string'],
+                [/'[^']*'/, 'string'],
+                [/`[^`]*`/, 'identifier'],
+                [/\b\d+(\.\d+)?\b/, 'number'],
+                [
+                    /\b(SELECT|FROM|WHERE|AND|OR|NOT|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|BY|ORDER|LIMIT|AS|WITH|INSERT|UPDATE|DELETE|CREATE|REPLACE|TABLE|VIEW|FUNCTION|PROCEDURE|RETURNS|BEGIN|END|IF|THEN|ELSE|CASE|WHEN|NULL|TRUE|FALSE|DISTINCT|UNION|ALL|HAVING|PARTITION|OVER|WINDOW|SAFE_ADD|SAFE_CAST)\b/,
+                    'keyword',
+                ],
+            ],
+            comment: [
+                [/[^/*]+/, 'comment'],
+                [/\*\//, 'comment', '@pop'],
+                [/./, 'comment'],
+            ],
+        },
+    });
+    languageRegistered = true;
+}
+
+export type { EditorDiagnostic };
 
 interface SqlEditorProps {
     value: string;
@@ -17,8 +57,8 @@ interface SqlEditorProps {
     defaultDatasetId?: string;
     useEmulatorParser?: boolean;
     sqlToolsAvailable?: boolean;
-    catalog?: SqlCatalog | null;
     onDiagnostics?: (diagnostics: EditorDiagnostic[]) => void;
+    onEditorReady?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
 }
 
 export function SqlEditor({
@@ -30,38 +70,75 @@ export function SqlEditor({
     defaultDatasetId,
     useEmulatorParser = true,
     sqlToolsAvailable = false,
-    catalog = null,
     onDiagnostics,
+    onEditorReady,
 }: SqlEditorProps) {
+    const sessionRef = useRef<GooglesqlLanguageSession | null>(null);
     const onDiagnosticsRef = useRef(onDiagnostics);
     onDiagnosticsRef.current = onDiagnostics;
+    const onEditorReadyRef = useRef(onEditorReady);
+    onEditorReadyRef.current = onEditorReady;
 
-    const extensions = useMemo(
-        () =>
-            buildSqlEditorExtensions({
-                projectId,
-                defaultDatasetId,
-                useEmulatorParser,
-                sqlToolsAvailable,
-                catalog,
-                onDiagnostics: (diagnostics) => onDiagnosticsRef.current?.(diagnostics),
-            }),
-        [projectId, defaultDatasetId, useEmulatorParser, sqlToolsAvailable, catalog],
+    const settings = useMemo(
+        () => ({
+            projectId,
+            defaultDatasetId,
+            emulatorBaseUrl: window.location.origin,
+            useEmulatorParser,
+            sqlToolsAvailable,
+        }),
+        [projectId, defaultDatasetId, useEmulatorParser, sqlToolsAvailable],
     );
 
+    useEffect(() => {
+        void sessionRef.current?.updateSettings(settings);
+    }, [settings]);
+
+    useEffect(() => {
+        return () => {
+            void sessionRef.current?.dispose();
+            sessionRef.current = null;
+        };
+    }, []);
+
+    const handleMount: OnMount = (editor) => {
+        ensureGooglesqlLanguage();
+        onEditorReadyRef.current?.(editor);
+
+        void attachGooglesqlLanguageClient({
+            monaco,
+            editor,
+            languageId: LANGUAGE_ID,
+            settings,
+            onDiagnostics: (diagnostics) => onDiagnosticsRef.current?.(diagnostics),
+        }).then((session) => {
+            sessionRef.current = session;
+        });
+    };
+
     return (
-        <div data-testid="sql-editor">
-            <CodeMirror
-                value={value}
+        <div
+            data-testid="sql-editor"
+            className={cn('overflow-hidden rounded-md border border-[var(--bq-border)]', className)}
+        >
+            <Editor
                 height="220px"
-                theme="dark"
-                readOnly={readOnly}
-                className={cn('overflow-hidden rounded-md border border-[var(--bq-border)]', className)}
-                extensions={extensions}
-                onChange={onChange}
-                basicSetup={{
-                    lineNumbers: true,
-                    foldGutter: false,
+                language={LANGUAGE_ID}
+                theme="vs-dark"
+                value={value}
+                onChange={(next) => onChange(next ?? '')}
+                onMount={handleMount}
+                options={{
+                    readOnly: Boolean(readOnly),
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    wordWrap: 'on',
+                    tabSize: 2,
+                    folding: false,
+                    renderValidationDecorations: 'on',
                 }}
             />
         </div>

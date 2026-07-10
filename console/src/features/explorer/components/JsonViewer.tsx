@@ -1,16 +1,33 @@
-import CodeMirror from '@uiw/react-codemirror';
-import { json } from '@codemirror/lang-json';
+import Editor, { loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 
-export function JsonViewer({ value }: { value: string }) {
+import { cn } from '@/lib/utils';
+
+loader.config({ monaco });
+
+interface JsonViewerProps {
+    value: string;
+    className?: string;
+}
+
+export function JsonViewer({ value, className }: JsonViewerProps) {
     return (
-        <CodeMirror
-            value={value}
-            height="320px"
-            theme="dark"
-            readOnly
-            className="overflow-hidden rounded-md border border-[var(--bq-border)]"
-            extensions={[json()]}
-            basicSetup={{ lineNumbers: true }}
-        />
+        <div className={cn('overflow-hidden rounded-md border border-[var(--bq-border)]', className)}>
+            <Editor
+                height="320px"
+                language="json"
+                theme="vs-dark"
+                value={value}
+                options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    lineNumbers: 'on',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    folding: true,
+                }}
+            />
+        </div>
     );
 }

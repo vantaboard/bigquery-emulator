@@ -106,6 +106,21 @@ The engine binary discovery defaults to looking for `emulator_main` next to
 **Next steps:** [Docker](./docs/DOCKER.md) · [Client libraries](./docs/CLIENTS.md) ·
 [Development setup](./docs/DEVELOPMENT.md) · [Releases](./docs/RELEASES.md)
 
+## Web console
+
+The React BigQuery Studio–style UI lives in [`console/`](./console/) and shares
+this monorepo with the GoogleSQL LSP under [`extensions/vscode/`](./extensions/vscode/).
+The query editor uses Monaco with the LSP in a browser web worker.
+
+```bash
+pnpm install
+task emulator:build-all
+task console:dev:all          # emulator + Vite on :5173
+# or: docker compose --profile console up --build   # UI on :8080
+```
+
+See [`console/README.md`](./console/README.md) for details.
+
 ## Benchmarks
 
 The [`bench/`](./bench/) harness compares query latency and correctness

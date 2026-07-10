@@ -1,86 +1,15 @@
-# Local dev tasks for bigquery-emulator-ui.
-# Primary workflow: native emulator from a sibling checkout + Vite dev server.
-# See README.md → "Develop against a local emulator build".
+# Prefer root tasks: `task console:*` from the monorepo root.
+# This file remains so `task` inside console/ still lists a pointer.
 version: "3"
-
-vars:
-  UI_ROOT:
-    sh: git rev-parse --show-toplevel 2>/dev/null || pwd
-  EMULATOR_ROOT:
-    sh: |
-      root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-      emu="${EMULATOR_ROOT:-$root/../bigquery-emulator}"
-      cd "$root" && cd "$emu" && pwd
-  EMULATOR_HTTP_PORT:
-    sh: echo "${EMULATOR_HTTP_PORT:-9050}"
-  EMULATOR_GRPC_PORT:
-    sh: echo "${EMULATOR_GRPC_PORT:-9060}"
-  PROJECT_ID:
-    sh: echo "${PROJECT_ID:-local-project}"
-  SEED_FILE:
-    sh: |
-      root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-      if [ -n "${SEED_FILE:-}" ]; then
-        echo "${SEED_FILE}"
-      else
-        echo "$root/data/data.yaml"
-      fi
 
 tasks:
   default:
-    desc: List every available task
+    desc: Point at monorepo console tasks
     cmds:
-      - task --list
+      - |
+        echo "Run console tasks from the monorepo root:"
+        echo "  task console:dev:all"
+        echo "  task console:build"
+        echo "  task console:test"
+        echo "  task console:e2e:local"
     silent: true
-
-  emulator:check:
-    desc: Verify the sibling bigquery-emulator checkout is built
-    cmds:
-      - |
-        set -eo pipefail
-        emu="{{.EMULATOR_ROOT}}"
-        if [ ! -d "$emu" ]; then
-          echo "EMULATOR_ROOT not found: $emu" >&2
-          echo "Clone bigquery-emulator as a sibling or set EMULATOR_ROOT." >&2
-          exit 1
-        fi
-        if [ ! -x "$emu/bin/gateway_main" ] || [ ! -x "$emu/bin/emulator_main" ]; then
-          echo "Emulator binaries missing under $emu/bin/" >&2
-          echo "Run once: task emulator:build" >&2
-          exit 1
-        fi
-        echo "ok: $emu"
-
-  emulator:build:
-    desc: Build gateway + engine in the sibling bigquery-emulator checkout
-    cmds:
-      - |
-        set -eo pipefail
-        task -d "{{.EMULATOR_ROOT}}" emulator:build-all
-
-  emulator:run:
-    desc: Run a locally built emulator with UI seed data (SQL Tools when supported)
-    deps: [emulator:check]
-    dir: "{{.UI_ROOT}}"
-    cmds:
-      - bash scripts/emulator-run.sh
-
-  dev:
-    desc: Vite dev server (expects emulator on EMULATOR_HTTP_PORT)
-    dir: "{{.UI_ROOT}}"
-    cmds:
-      - npm run dev
-
-  dev:all:
-    desc: Start local emulator in the background, wait for health, then Vite
-    deps: [emulator:check]
-    dir: "{{.UI_ROOT}}"
-    cmds:
-      - bash scripts/dev-all.sh
-
-  e2e:local:
-    desc: Run Playwright against a native emulator + Vite (not the pinned GHCR image)
-    deps: [emulator:check]
-    dir: "{{.UI_ROOT}}"
-    cmds:
-      - bash scripts/e2e-local.sh {{.CLI_ARGS}}

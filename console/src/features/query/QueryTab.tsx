@@ -26,8 +26,8 @@ import { ReferencePanel } from '@/features/query/ReferencePanel';
 import { DiagnosticsStatusBar } from '@/features/query/DiagnosticsStatusBar';
 import { SaveDestinationModal, type SaveDestination } from '@/features/query/SaveDestinationModal';
 import { SaveNameModal } from '@/features/query/SaveNameModal';
-import { loadSqlCatalog } from '@/features/query/sqlCatalog';
-import type { EditorDiagnostic } from '@/features/query/sqlEditorExtensions';
+import type { EditorDiagnostic } from '@/features/query/languageClient';
+import type { editor as MonacoEditor } from 'monaco-editor';
 
 import { useWorkspace } from '@/features/workspace/store';
 import type { QuerySubTab, QueryTabState } from '@/features/workspace/types';
@@ -52,18 +52,12 @@ export function QueryTab({ tab }: QueryTabProps) {
     const [saveOpen, setSaveOpen] = useState(false);
     const [saveAction, setSaveAction] = useState<SaveAction>(null);
     const [editorDiagnostics, setEditorDiagnostics] = useState<EditorDiagnostic[]>([]);
+    const monacoEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
     const { data: sqlToolsAvailable = false } = useQuery({
         queryKey: ['sql-tools', 'capabilities'],
         queryFn: probeCapabilities,
         staleTime: Infinity,
-    });
-
-    const { data: catalog = null } = useQuery({
-        queryKey: ['sql-catalog', tab.projectId],
-        queryFn: () => loadSqlCatalog(tab.projectId),
-        enabled: Boolean(tab.projectId),
-        staleTime: 60_000,
     });
 
     useEffect(() => {
@@ -125,6 +119,22 @@ export function QueryTab({ tab }: QueryTabProps) {
     };
 
     const onFormat = async () => {
+        const editor = monacoEditorRef.current;
+        if (editor) {
+            const action = editor.getAction('editor.action.formatDocument');
+            if (action) {
+                try {
+                    await action.run();
+                    const formatted = editor.getValue();
+                    updateQueryTab(tab.id, { sql: formatted });
+                    syncShareUrl({ sql: formatted });
+                    return;
+                } catch {
+                    /* fall through */
+                }
+            }
+        }
+
         const useSqlToolsFormat = ui.useEmulatorParser && (sqlToolsAvailable || isSqlToolsAvailable());
         if (useSqlToolsFormat) {
             try {
@@ -296,8 +306,10 @@ export function QueryTab({ tab }: QueryTabProps) {
                                 defaultDatasetId={tab.datasetId}
                                 useEmulatorParser={ui.useEmulatorParser}
                                 sqlToolsAvailable={sqlToolsAvailable}
-                                catalog={catalog}
                                 onDiagnostics={setEditorDiagnostics}
+                                onEditorReady={(editor) => {
+                                    monacoEditorRef.current = editor;
+                                }}
                                 onChange={(v) => {
                                     updateQueryTab(tab.id, { sql: v });
                                     syncShareUrl({ sql: v });
