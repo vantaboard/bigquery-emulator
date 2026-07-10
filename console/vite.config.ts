@@ -19,6 +19,10 @@ export default defineConfig(({ mode }) => {
             format: 'es',
         },
         optimizeDeps: {
+            // Monaco worker URLs use bare filenames (e.g. json.worker.js); the
+            // import-meta-url esbuild plugin treats those as package names during
+            // pre-bundle and fails. Skip pre-bundling monaco-editor in dev.
+            exclude: ['monaco-editor'],
             esbuildOptions: {
                 plugins: [importMetaUrlPlugin],
             },
