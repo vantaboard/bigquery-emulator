@@ -218,6 +218,29 @@ test.describe('BigQuery Explorer', () => {
         expect(after).toContain('table_a');
     });
 
+    test('shows syntax error status bar and Alt+F8 problems panel', async ({ page }) => {
+        await openQueryFromTable(page);
+        const editor = page.getByTestId('sql-editor').locator('.cm-content');
+        await editor.click();
+        await editor.press('Control+a');
+
+        const parseResponsePromise = page.waitForResponse(
+            (r) => r.url().includes('/api/emulator/sql/parse') && r.ok(),
+            { timeout: 10_000 },
+        );
+        await editor.fill('SELECT SAFE_ADD(');
+        await parseResponsePromise;
+
+        const bar = page.getByTestId('sql-diagnostics-bar');
+        await expect(bar).toBeVisible({ timeout: 5_000 });
+        await expect(bar).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
+
+        await editor.press('Alt+F8');
+        const panel = page.locator('.cm-panel-lint');
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
+    });
+
     test('shows autocompletion suggestions while typing', async ({ page }) => {
         await openQueryFromTable(page);
         const editor = page.getByTestId('sql-editor').locator('.cm-content');

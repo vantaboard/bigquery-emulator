@@ -1,8 +1,14 @@
 import { autocompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
-import { linter, type Diagnostic } from '@codemirror/lint';
-import type { Extension } from '@codemirror/state';
+import {
+    lintKeymap,
+    linter,
+    openLintPanel,
+    previousDiagnostic,
+    type Diagnostic,
+} from '@codemirror/lint';
 import { sql } from '@codemirror/lang-sql';
-import type { EditorView } from '@codemirror/view';
+import type { Extension } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
 
 import {
     completeSql,
@@ -15,6 +21,24 @@ import type { SqlCatalog } from './sqlCatalog';
 
 const COMPLETE_DEBOUNCE_MS = 150;
 const PARSE_DEBOUNCE_MS = 400;
+const POSITION_SUFFIX_RE = /\s+at\s+\[\d+:\d+\]\s*$/;
+
+export interface EditorDiagnostic {
+    message: string;
+    severity: Diagnostic['severity'];
+    line: number;
+    column: number;
+}
+
+export function formatDiagnosticMessage(d: Pick<SqlDiagnostic, 'message' | 'line' | 'column'>): string {
+    const message = d.message.replace(/\bend of statement\b/gi, 'end of script');
+
+    if (POSITION_SUFFIX_RE.test(message)) {
+        return message;
+    }
+
+    return `${message} at [${d.line}:${d.column}]`;
+}
 
 function diagnosticSeverity(severity: string): Diagnostic['severity'] {
     if (severity === 'error') return 'error';
@@ -173,7 +197,58 @@ export interface SqlEditorExtensionOptions {
     useEmulatorParser: boolean;
     sqlToolsAvailable: boolean;
     catalog: SqlCatalog | null;
+    onDiagnostics?: (diagnostics: EditorDiagnostic[]) => void;
 }
+
+const lintPanelTheme = EditorView.theme({
+    '.cm-panel-lint': {
+        backgroundColor: 'var(--bq-surface, #1e1e1e)',
+        borderTop: '1px solid #5c2b29',
+        color: '#f28b82',
+        maxHeight: '8rem',
+        overflow: 'auto',
+    },
+    '.cm-panel-lint ul': {
+        margin: 0,
+        padding: '0.25rem 0',
+        listStyle: 'none',
+    },
+    '.cm-panel-lint ul:focus': {
+        outline: 'none',
+    },
+    '.cm-panel-lint [name="close"]': {
+        position: 'absolute',
+        top: '0.25rem',
+        right: '0.5rem',
+        border: 'none',
+        background: 'transparent',
+        color: 'inherit',
+        cursor: 'pointer',
+        fontSize: '1.1rem',
+        lineHeight: 1,
+    },
+    '.cm-panel-lint .cm-diagnostic': {
+        alignItems: 'flex-start',
+        padding: '0.35rem 0.75rem',
+        gap: '0.5rem',
+    },
+    '.cm-panel-lint .cm-diagnosticText': {
+        color: '#f28b82',
+        fontSize: '0.8125rem',
+        lineHeight: 1.4,
+    },
+    '.cm-panel-lint .cm-diagnostic-error::before': {
+        content: '"✕"',
+        color: '#f28b82',
+        fontWeight: 700,
+    },
+});
+
+const diagnosticNavigationKeymap = keymap.of([
+    { key: 'Alt-F8', run: openLintPanel },
+    { key: 'Shift-F8', run: previousDiagnostic },
+    ...lintKeymap,
+]);
 
 export function buildSqlEditorExtensions(opts: SqlEditorExtensionOptions): Extension[] {
     const useSqlTools = opts.useEmulatorParser && opts.sqlToolsAvailable;
@@ -189,9 +264,10 @@ export function buildSqlEditorExtensions(opts: SqlEditorExtensionOptions): Exten
     const lintExt = linter(
         async (view) => {
             const sqlText = view.state.doc.toString();
-            if (!sqlText.trim()) return [];
-
-            if (!useSqlTools) return [];
+            if (!sqlText.trim() || !useSqlTools) {
+                opts.onDiagnostics?.([]);
+                return [];
+            }
 
             const gen = ++parseGeneration;
             await new Promise((resolve) => setTimeout(resolve, PARSE_DEBOUNCE_MS));
@@ -201,23 +277,38 @@ export function buildSqlEditorExtensions(opts: SqlEditorExtensionOptions): Exten
                 const result = await parseSql({ sql: sqlText, offsetUnit: 'utf16' });
                 if (gen !== parseGeneration) return [];
 
+                const editorDiagnostics: EditorDiagnostic[] = result.diagnostics.map((d) => ({
+                    message: formatDiagnosticMessage(d),
+                    severity: diagnosticSeverity(d.severity),
+                    line: d.line,
+                    column: d.column,
+                }));
+                opts.onDiagnostics?.(editorDiagnostics);
+
                 return result.diagnostics.map((d) => {
                     const { from, to } = diagnosticRange(view.state.doc, d);
                     return {
                         from,
                         to,
                         severity: diagnosticSeverity(d.severity),
-                        message: d.message,
+                        message: formatDiagnosticMessage(d),
                     } satisfies Diagnostic;
                 });
             } catch {
+                opts.onDiagnostics?.([]);
                 return [];
             }
         },
         { delay: PARSE_DEBOUNCE_MS },
     );
 
-    return [sql({ schema: catalog.schema, upperCaseKeywords: true }), completionExt, lintExt];
+    return [
+        sql({ schema: catalog.schema, upperCaseKeywords: true }),
+        completionExt,
+        lintExt,
+        lintPanelTheme,
+        diagnosticNavigationKeymap,
+    ];
 }
 
 export function bumpSqlEditorGeneration(completeGeneration: { current: number }): void {

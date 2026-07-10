@@ -23,9 +23,11 @@ import { ResultsTable } from '@/features/explorer/components/ResultsTable';
 import { SqlEditor } from '@/features/explorer/components/SqlEditor';
 import { buildExplorerSearchParams } from '@/features/explorer/urlState';
 import { ReferencePanel } from '@/features/query/ReferencePanel';
+import { DiagnosticsStatusBar } from '@/features/query/DiagnosticsStatusBar';
 import { SaveDestinationModal, type SaveDestination } from '@/features/query/SaveDestinationModal';
 import { SaveNameModal } from '@/features/query/SaveNameModal';
 import { loadSqlCatalog } from '@/features/query/sqlCatalog';
+import type { EditorDiagnostic } from '@/features/query/sqlEditorExtensions';
 
 import { useWorkspace } from '@/features/workspace/store';
 import type { QuerySubTab, QueryTabState } from '@/features/workspace/types';
@@ -49,6 +51,7 @@ export function QueryTab({ tab }: QueryTabProps) {
     const [toolsOpen, setToolsOpen] = useState(false);
     const [saveOpen, setSaveOpen] = useState(false);
     const [saveAction, setSaveAction] = useState<SaveAction>(null);
+    const [editorDiagnostics, setEditorDiagnostics] = useState<EditorDiagnostic[]>([]);
 
     const { data: sqlToolsAvailable = false } = useQuery({
         queryKey: ['sql-tools', 'capabilities'],
@@ -294,11 +297,13 @@ export function QueryTab({ tab }: QueryTabProps) {
                                 useEmulatorParser={ui.useEmulatorParser}
                                 sqlToolsAvailable={sqlToolsAvailable}
                                 catalog={catalog}
+                                onDiagnostics={setEditorDiagnostics}
                                 onChange={(v) => {
                                     updateQueryTab(tab.id, { sql: v });
                                     syncShareUrl({ sql: v });
                                 }}
                             />
+                            <DiagnosticsStatusBar diagnostics={editorDiagnostics} />
                             <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <button
                                     type="button"

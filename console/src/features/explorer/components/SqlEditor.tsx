@@ -1,7 +1,10 @@
 import CodeMirror from '@uiw/react-codemirror';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 
-import { buildSqlEditorExtensions } from '@/features/query/sqlEditorExtensions';
+import {
+    buildSqlEditorExtensions,
+    type EditorDiagnostic,
+} from '@/features/query/sqlEditorExtensions';
 import type { SqlCatalog } from '@/features/query/sqlCatalog';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +18,7 @@ interface SqlEditorProps {
     useEmulatorParser?: boolean;
     sqlToolsAvailable?: boolean;
     catalog?: SqlCatalog | null;
+    onDiagnostics?: (diagnostics: EditorDiagnostic[]) => void;
 }
 
 export function SqlEditor({
@@ -27,7 +31,11 @@ export function SqlEditor({
     useEmulatorParser = true,
     sqlToolsAvailable = false,
     catalog = null,
+    onDiagnostics,
 }: SqlEditorProps) {
+    const onDiagnosticsRef = useRef(onDiagnostics);
+    onDiagnosticsRef.current = onDiagnostics;
+
     const extensions = useMemo(
         () =>
             buildSqlEditorExtensions({
@@ -36,6 +44,7 @@ export function SqlEditor({
                 useEmulatorParser,
                 sqlToolsAvailable,
                 catalog,
+                onDiagnostics: (diagnostics) => onDiagnosticsRef.current?.(diagnostics),
             }),
         [projectId, defaultDatasetId, useEmulatorParser, sqlToolsAvailable, catalog],
     );
