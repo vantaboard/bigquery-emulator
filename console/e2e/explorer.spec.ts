@@ -235,6 +235,14 @@ test.describe('BigQuery Explorer', () => {
         await expect(bar).toBeVisible({ timeout: 5_000 });
         await expect(bar).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
 
+        const marker = page.locator('.cm-lintRange-error, .cm-lintPoint-error').first();
+        await expect(marker).toHaveCount(1, { timeout: 5_000 });
+        await marker.hover({ force: true });
+        const tooltip = page.locator('.cm-tooltip-lint');
+        await expect(tooltip).toBeVisible();
+        await expect(tooltip.getByRole('button', { name: 'View Problem (Alt+F8)' })).toBeVisible();
+        await expect(tooltip).toContainText('No quick fixes available');
+
         await editor.press('Alt+F8');
         const panel = page.locator('.cm-panel-lint');
         await expect(panel).toBeVisible();

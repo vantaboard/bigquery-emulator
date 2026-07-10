@@ -40,6 +40,40 @@ export function formatDiagnosticMessage(d: Pick<SqlDiagnostic, 'message' | 'line
     return `${message} at [${d.line}:${d.column}]`;
 }
 
+export function createDiagnosticRenderMessage(message: string): (view: EditorView) => Node {
+    return (view) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'cm-bq-diagnosticMessage';
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'cm-bq-diagnosticMessage-text';
+        messageEl.textContent = message;
+
+        const footer = document.createElement('div');
+        footer.className = 'cm-bq-diagnosticMessage-footer';
+
+        const viewProblem = document.createElement('button');
+        viewProblem.type = 'button';
+        viewProblem.className = 'cm-bq-diagnosticMessage-viewProblem';
+        viewProblem.textContent = 'View Problem (Alt+F8)';
+        viewProblem.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+        });
+        viewProblem.addEventListener('click', (event) => {
+            event.preventDefault();
+            openLintPanel(view);
+        });
+
+        const noFixes = document.createElement('span');
+        noFixes.className = 'cm-bq-diagnosticMessage-noFixes';
+        noFixes.textContent = 'No quick fixes available';
+
+        footer.append(viewProblem, noFixes);
+        wrapper.append(messageEl, footer);
+        return wrapper;
+    };
+}
+
 function diagnosticSeverity(severity: string): Diagnostic['severity'] {
     if (severity === 'error') return 'error';
     if (severity === 'warning') return 'warning';
@@ -201,6 +235,57 @@ export interface SqlEditorExtensionOptions {
 }
 
 const lintPanelTheme = EditorView.theme({
+    '.cm-tooltip-lint': {
+        backgroundColor: 'var(--bq-surface, #1e1e1e)',
+        border: '1px solid #5c2b29',
+        borderRadius: '2px',
+        padding: 0,
+        maxWidth: '36rem',
+    },
+    '.cm-tooltip-lint .cm-diagnostic': {
+        alignItems: 'stretch',
+        padding: 0,
+    },
+    '.cm-tooltip-lint .cm-diagnostic-error::before': {
+        display: 'none',
+    },
+    '.cm-bq-diagnosticMessage-text': {
+        padding: '0.5rem 0.75rem',
+        color: '#e8eaed',
+        fontSize: '0.8125rem',
+        lineHeight: 1.4,
+        borderLeft: '3px solid #f28b82',
+    },
+    '.cm-bq-diagnosticMessage-footer': {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1rem',
+        borderTop: '1px solid #3c4043',
+        padding: '0.35rem 0.75rem',
+        backgroundColor: '#2d2e30',
+    },
+    '.cm-bq-diagnosticMessage-viewProblem': {
+        border: 'none',
+        background: 'transparent',
+        color: '#8ab4f8',
+        cursor: 'pointer',
+        font: 'inherit',
+        fontSize: '0.75rem',
+        padding: 0,
+        textAlign: 'left',
+    },
+    '.cm-bq-diagnosticMessage-viewProblem:hover': {
+        textDecoration: 'underline',
+    },
+    '.cm-bq-diagnosticMessage-noFixes': {
+        color: '#9aa0a6',
+        fontSize: '0.75rem',
+        whiteSpace: 'nowrap',
+    },
+    '.cm-panel-lint .cm-bq-diagnosticMessage-footer': {
+        display: 'none',
+    },
     '.cm-panel-lint': {
         backgroundColor: 'var(--bq-surface, #1e1e1e)',
         borderTop: '1px solid #5c2b29',
@@ -287,11 +372,13 @@ export function buildSqlEditorExtensions(opts: SqlEditorExtensionOptions): Exten
 
                 return result.diagnostics.map((d) => {
                     const { from, to } = diagnosticRange(view.state.doc, d);
+                    const message = formatDiagnosticMessage(d);
                     return {
                         from,
                         to,
                         severity: diagnosticSeverity(d.severity),
-                        message: formatDiagnosticMessage(d),
+                        message,
+                        renderMessage: createDiagnosticRenderMessage(message),
                     } satisfies Diagnostic;
                 });
             } catch {
