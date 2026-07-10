@@ -25,3 +25,15 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Monaco hover uses VS Code CSS variables; define fallbacks for the console shell. */
+.monaco-editor .monaco-hover {
+  z-index: 100;
+  color: #cccccc;
+  background-color: #252526;
+  border-color: #454545;
+}
+
+.monaco-editor .monaco-hover .hover-row .actions {
+  background-color: #2d2d30;
+}

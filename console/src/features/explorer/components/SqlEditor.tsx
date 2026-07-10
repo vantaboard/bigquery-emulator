@@ -145,7 +145,7 @@ export function SqlEditor({
     return (
         <div
             data-testid="sql-editor"
-            className={cn('overflow-hidden rounded-md border border-[var(--bq-border)]', className)}
+            className={cn('overflow-visible rounded-md border border-[var(--bq-border)]', className)}
         >
             <Editor
                 height="220px"
@@ -166,6 +166,11 @@ export function SqlEditor({
                     tabSize: 2,
                     folding: false,
                     renderValidationDecorations: 'on',
+                    // Native EditContext breaks mouse-target hover in Chromium; use the
+                    // classic text area so diagnostic hovers resolve reliably.
+                    editContext: false,
+                    fixedOverflowWidgets: true,
+                    overflowWidgetsDomNode: document.body,
                     hover: { enabled: true, sticky: true, delay: 100 },
                     lightbulb: { enabled: 'on' },
                     quickSuggestions: { other: true, comments: false, strings: false },

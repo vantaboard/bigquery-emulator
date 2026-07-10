@@ -369,34 +369,6 @@ export async function attachGooglesqlLanguageClient(options: {
                 const primary = atPos.sort(
                     (a, b) => b.severity - a.severity,
                 )[0]!;
-                let quickFixLine = 'No quick fixes available';
-                if (settings.useEmulatorParser) {
-                    try {
-                        const actions = (await connection.sendRequest('textDocument/codeAction', {
-                            textDocument: { uri },
-                            range: {
-                                start: {
-                                    line: primary.startLineNumber - 1,
-                                    character: primary.startColumn - 1,
-                                },
-                                end: {
-                                    line: primary.endLineNumber - 1,
-                                    character: primary.endColumn - 1,
-                                },
-                            },
-                            context: {
-                                diagnostics: markersToLspDiagnostics(monaco, atPos),
-                                only: ['quickfix'],
-                            },
-                        })) as LspCodeAction[] | null;
-
-                        if (actions?.length) {
-                            quickFixLine = actions.map((action) => action.title).join('\n');
-                        }
-                    } catch {
-                        /* keep placeholder */
-                    }
-                }
 
                 return {
                     range: new monaco.Range(
@@ -407,7 +379,7 @@ export async function attachGooglesqlLanguageClient(options: {
                     ),
                     contents: [
                         {
-                            value: `${primary.message}\n\nView Problem (Alt+F8)\n\n${quickFixLine}`,
+                            value: `${primary.message}\n\nView Problem (Alt+F8)\n\nNo quick fixes available`,
                         },
                     ],
                 };
