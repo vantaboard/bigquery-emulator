@@ -89,6 +89,8 @@ export function SqlEditor({
         }),
         [projectId, defaultDatasetId, useEmulatorParser, sqlToolsAvailable],
     );
+    const settingsRef = useRef(settings);
+    settingsRef.current = settings;
 
     useEffect(() => {
         void sessionRef.current?.updateSettings(settings);
@@ -111,9 +113,16 @@ export function SqlEditor({
             languageId: LANGUAGE_ID,
             settings,
             onDiagnostics: (diagnostics) => onDiagnosticsRef.current?.(diagnostics),
-        }).then((session) => {
-            sessionRef.current = session;
-        });
+        })
+            .then((session) => {
+                sessionRef.current = session;
+                // Probe may finish after mount; apply the latest settings once the
+                // LSP session exists (the mount-time useEffect often runs too early).
+                void session.updateSettings(settingsRef.current);
+            })
+            .catch((err: unknown) => {
+                console.error('Failed to attach BigQuery language client', err);
+            });
     };
 
     return (
@@ -139,6 +148,9 @@ export function SqlEditor({
                     tabSize: 2,
                     folding: false,
                     renderValidationDecorations: 'on',
+                    quickSuggestions: { other: true, comments: false, strings: false },
+                    suggestOnTriggerCharacters: true,
+                    wordBasedSuggestions: 'off',
                 }}
             />
         </div>

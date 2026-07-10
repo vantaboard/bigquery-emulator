@@ -199,9 +199,9 @@ export async function attachGooglesqlLanguageClient(options: {
     });
 
     const completionProvider = monaco.languages.registerCompletionItemProvider(languageId, {
-        triggerCharacters: ['.', '`', '_'],
+        triggerCharacters: ['.', '`', '_', '('],
         provideCompletionItems: async (_model, position) => {
-            if (!settings.useEmulatorParser || !settings.sqlToolsAvailable) {
+            if (!settings.useEmulatorParser) {
                 return { suggestions: [] };
             }
             try {

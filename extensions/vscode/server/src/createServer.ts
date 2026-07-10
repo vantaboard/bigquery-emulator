@@ -63,7 +63,7 @@ export function createServer(connection: Connection, options: CreateServerOption
         textDocumentSync: TextDocumentSyncKind.Incremental,
         completionProvider: {
           resolveProvider: false,
-          triggerCharacters: ['.', '`', '_'],
+          triggerCharacters: ['.', '`', '_', '('],
         },
         documentFormattingProvider: true,
         codeActionProvider: {
