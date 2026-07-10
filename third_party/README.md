@@ -690,7 +690,7 @@ Repo-owned multi-step flows that mirror reported customer usage through the
 real **`google-cloud-bigquery` Python client** — not upstream sample snippets.
 Each scenario sets up datasets/tables via the client, runs a realistic workflow,
 and asserts post-state rows/scalars. Expected values are pinned to production
-BigQuery oracles under `conformance/differential/oracle/` (plan 01).
+BigQuery oracles under `conformance/differential/oracle/`.
 
 | Scenario module | Flow | Production oracle / fixture |
 |-----------------|------|----------------------------|

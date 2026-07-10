@@ -1,6 +1,6 @@
 # R11: SELECT DISTINCT over UNNEST after ROW_NUMBER dedup window
 # Reported: v0.6.0 email thread (Chris Karvouniaris)
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 name: select_distinct_unnest_after_analytic_dedup
 verified_production: true
 description: |

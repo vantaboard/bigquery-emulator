@@ -30,7 +30,7 @@ At the top of every pinning artifact, include:
 ```yaml
 # R{N}: <one-line symptom>
 # Reported: <version or "email thread">
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 ```
 
 Assign the next free `R` tag from the index, or reuse an existing tag when
@@ -50,4 +50,6 @@ repro to green CI — flip to passing when the fix lands.
 
 ## Origin
 
-Backfill and policy: `.cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md`
+This policy comes from backfilling permanent regression fixtures for every
+defect reported in the v0.3.0 → v0.5.0 email thread; the resulting index is
+[`conformance/REGRESSIONS.md`](../conformance/REGRESSIONS.md).

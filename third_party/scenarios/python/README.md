@@ -11,4 +11,4 @@ task thirdparty:scenarios
 ```
 
 Expected values are production-validated via `conformance/differential/` oracles
-(plan 01) and documented inline in each test module.
+and documented inline in each test module.

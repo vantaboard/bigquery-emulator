@@ -13,7 +13,7 @@ import (
 
 // TestRoutineQualifiedCall verifies CREATE FUNCTION followed by
 // dataset-qualified and fully-qualified SELECT calls return the
-// expected scalar (plan 10 UI repro).
+// expected scalar (repro of a routine-resolution gap reported via the UI).
 func TestRoutineQualifiedCall(t *testing.T) {
 	dataDir := t.TempDir()
 	env, err := launchEmulator(dataDir)

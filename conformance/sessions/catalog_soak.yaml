@@ -2,7 +2,8 @@ name: catalog_soak
 description: |
   End-to-end soak: adversarial CREATE/REPLACE/DROP VIEW plus dataset ACL
   PATCH cycles against one persistent engine. Each iteration asserts the
-  subprocess stays alive (expect_alive). Guards plan 03 crash-safety.
+  subprocess stays alive (expect_alive). Guards engine crash-safety
+  on client-reachable catalog paths.
 project_id: proj-session-catalog-soak
 steps:
   - dataset: ds_main

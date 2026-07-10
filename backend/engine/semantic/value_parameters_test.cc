@@ -1,4 +1,5 @@
-// Matrix coverage for ParseParameterValue wire forms (plan 04).
+// Matrix coverage for ParseParameterValue wire forms (query-parameter
+// wire-form matrix).
 #include "absl/time/time.h"
 #include "backend/engine/semantic/value.h"
 #include "googlesql/public/numeric_value.h"

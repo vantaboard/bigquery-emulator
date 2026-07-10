@@ -2,10 +2,9 @@
 #include "googlesql/public/types/array_type.h"
 
 // R9: Anti-join over QUALIFY-deduped views — DuckDB binder "column id not
-// found". Plan:
-// .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
-// See also:
-// .cursor/plans/conformance-hardening/06-transpiler-binding-property-tests.plan.md
+// found". Indexed in conformance/REGRESSIONS.md. Part of the transpiler
+// binding property-test suite: generated query compositions must always
+// transpile to SQL that binds in DuckDB.
 
 namespace bigquery_emulator {
 namespace backend {

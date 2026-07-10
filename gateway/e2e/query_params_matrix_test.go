@@ -12,7 +12,8 @@ import (
 )
 
 // TestQueryParameterWireMatrix exercises scalar query-parameter wire forms
-// end-to-end through the REST jobs.query path (plan 04).
+// end-to-end through the REST jobs.query path (query-parameter
+// wire-form matrix).
 func TestQueryParameterWireMatrix(t *testing.T) {
 	env := startEmulator(t)
 	base := env.URL() + "/bigquery/v2/projects/proj-params-matrix"

@@ -1,8 +1,8 @@
-# linux/arm64 engine — feasibility note (plan 05)
+# linux/arm64 engine — feasibility note
 
 This document records the toolchain spike for shipping a native
-`emulator_main` on `linux/arm64`. It is the written output of plan
-05 step 1 whether or not the engine build is green yet.
+`emulator_main` on `linux/arm64`. It captures the spike's findings
+whether or not the engine build is green yet.
 
 ## Summary (2026-07)
 
@@ -74,7 +74,7 @@ consumers can gate mismatches via `validate_artifact.py`.
 - **Runner cost** — cold arm64 engine builds share the ~2 h profile of amd64;
   reuse Bazel disk caches (`engine-arm64-v1`, `googlesql-prebuilt-arm64`).
 
-## What landed in plan 05 (infra)
+## What landed (infra)
 
 - DuckDB arm64 `http_archive` + `select()` in `//third_party/duckdb`.
 - `--config=googlesql-prebuilt-arm64` in `.bazelrc`.
@@ -82,7 +82,7 @@ consumers can gate mismatches via `validate_artifact.py`.
 - `googlesql-prebuilt.yml` amd64 + arm64 matrix producer.
 - `build-engine.yml` non-blocking `build-engine-arm64` job.
 
-## Follow-ups (not in plan 05)
+## Follow-ups (deferred)
 
 1. First successful arm64 prebuilt publish → set `GOOGLESQL_PREBUILT_*_ARM64` repo vars.
 2. Green `build-engine-arm64` for several weeks → make job blocking; add conformance matrix leg.
@@ -91,7 +91,6 @@ consumers can gate mismatches via `validate_artifact.py`.
 
 ## References
 
-- Plan: `.cursor/plans/roadmap/05-linux-arm64-engine.plan.md`
 - Prebuilt upgrade rules (sibling `@googlesql_prebuilt_linux_arm64`):
   [`upgrade-rules.md`](./upgrade-rules.md)
 - DuckDB pin (both arch SHA-256): [`../../../third_party/duckdb/VERSION`](../../../third_party/duckdb/VERSION)

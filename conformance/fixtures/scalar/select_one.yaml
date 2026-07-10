@@ -5,8 +5,8 @@
 # `docs/ENGINE_POLICY.md`). The output row
 # is shaped identically to what the DuckDB fast path would have
 # produced for the same query, so the conformance differ does not
-# branch on route. Plan 16
-# (`docs/ENGINE_POLICY.md`) landed the
+# branch on route. The engine routing policy
+# (`docs/ENGINE_POLICY.md`) commits to the
 # hard route-label assertion this fixture pins below
 # (`expected.route: semantic_executor`).
 name: scalar_select_one

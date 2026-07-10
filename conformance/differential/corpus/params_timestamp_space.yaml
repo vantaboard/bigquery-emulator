@@ -1,4 +1,4 @@
-# Plan 04 parameter matrix: space-separated TIMESTAMP wire form.
+# Query-parameter wire-form matrix: space-separated TIMESTAMP wire form.
 name: params_timestamp_space
 description: |
   BigQuery accepts TIMESTAMP query parameters with a space between date and time.

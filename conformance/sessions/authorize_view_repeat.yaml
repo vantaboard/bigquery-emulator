@@ -1,6 +1,6 @@
 # R4: Engine abort on duplicate catalog name during view replay.
 # Reported: v0.4.x (email thread)
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 name: authorize_view_repeat
 description: |
   Engine abort when CREATE OR REPLACE VIEW plus

@@ -1,6 +1,6 @@
 # R12: TIMESTAMP wire string with short +00 offset
 # Reported: v0.6.0 email thread (Chris Karvouniaris)
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 name: timestamp_short_offset_wire
 verified_production: true
 description: |

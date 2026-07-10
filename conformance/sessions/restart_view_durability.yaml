@@ -1,6 +1,6 @@
 # R5: Views not persisted across container restart (client tables.insert path).
 # Reported: v0.5.0 (email thread)
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 name: restart_view_durability
 description: |
   Regression for R5: a view created via REST tables.insert (view.query body —

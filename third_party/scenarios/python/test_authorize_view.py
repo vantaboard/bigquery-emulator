@@ -1,8 +1,8 @@
 """Authorize a view on a source dataset across multiple tenants.
 
 Mirrors the reported ``client.update_dataset(..., ['access_entries'])`` flow
-that previously aborted the engine when repeated (plan 03 /
-``conformance/sessions/authorize_view_repeat.yaml``).
+that previously aborted the engine when repeated (crash-safety guard;
+see ``conformance/sessions/authorize_view_repeat.yaml``).
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # R2: View created via client returns 0 rows (session lane).
 # Reported: v0.4.x (email thread)
-# Plan: .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
+# Index: conformance/REGRESSIONS.md
 name: view_select_after_create_via_client_path
 description: |
   Client-shaped flow: create a view via REST tables.insert (view.query body),

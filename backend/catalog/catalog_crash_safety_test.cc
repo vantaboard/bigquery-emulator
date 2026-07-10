@@ -6,9 +6,8 @@
 // lazily through FindProjectView; these tests assert catalog construction and
 // registration never abort on adversarial duplicate names or replay cycles.
 //
-// Plan:
-// .cursor/plans/conformance-hardening/07-reported-bug-regression-fixtures.plan.md
-// See also: .cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md
+// Indexed in conformance/REGRESSIONS.md; crash-safety posture in
+// .cursor/rules/no-fatal-on-client-state.mdc.
 
 #include <cstdlib>
 #include <filesystem>

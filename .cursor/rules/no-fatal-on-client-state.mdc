@@ -45,4 +45,6 @@ When leaving a fatal, add a one-line comment explaining why the condition is
 - `conformance/sessions/authorize_view_repeat.yaml` — reported duplicate-catalog
   abort repro
 
-Origin: `.cursor/plans/conformance-hardening/03-engine-crash-safety.plan.md`
+Origin: engine crash-safety hardening — reported aborts on client-driven
+catalog state (duplicate view names during replay) showed request-reachable
+fatals take down every tenant of the emulator process.
