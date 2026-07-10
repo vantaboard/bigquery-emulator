@@ -254,6 +254,8 @@ test.describe('BigQuery Explorer', () => {
         await page.waitForTimeout(400);
         const hover = page.locator('.monaco-hover').filter({ hasText: 'Syntax error' });
         await expect(hover.first()).toBeVisible({ timeout: 10_000 });
+        const hoverText = await hover.first().innerText();
+        expect(hoverText.match(/Syntax error/g)?.length ?? 0).toBe(1);
         await expect(hover.first()).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
         await expect(hover.first()).toContainText('View Problem (Alt+F8)');
         await expect(hover.first()).toContainText('No quick fixes available');

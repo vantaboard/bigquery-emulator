@@ -12,6 +12,14 @@
   --bq-accent: #3b82f6;
   --bq-text: #e8eef7;
   --bq-muted: #94a3b8;
+
+  /* Monaco hover widget (also used when fixedOverflowWidgets lifts it out of the editor). */
+  --vscode-editorHoverWidget-foreground: #e8e8e8;
+  --vscode-editorHoverWidget-background: #2b2b2b;
+  --vscode-editorHoverWidget-border: #555555;
+  --vscode-editorHoverWidget-statusBarBackground: #252526;
+  --vscode-textLink-foreground: #4daafc;
+  --vscode-textLink-activeForeground: #3794ff;
 }
 
 body {
@@ -26,14 +34,24 @@ body {
   min-height: 100vh;
 }
 
-/* Monaco hover uses VS Code CSS variables; define fallbacks for the console shell. */
+/* Diagnostic hover: match production BigQuery — distinct panel, visible border. */
+.monaco-hover,
 .monaco-editor .monaco-hover {
-  z-index: 100;
-  color: #cccccc;
-  background-color: #252526;
-  border-color: #454545;
+  z-index: 1000;
+  color: var(--vscode-editorHoverWidget-foreground) !important;
+  background-color: var(--vscode-editorHoverWidget-background) !important;
+  border: 1px solid var(--vscode-editorHoverWidget-border) !important;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }
 
+/* Our markdown hover includes message + footer; hide built-in marker duplicates. */
+.monaco-hover .marker.hover-contents,
+.monaco-editor .monaco-hover .marker.hover-contents {
+  display: none !important;
+}
+
+.monaco-hover .hover-row .actions,
 .monaco-editor .monaco-hover .hover-row .actions {
-  background-color: #2d2d30;
+  display: none !important;
 }

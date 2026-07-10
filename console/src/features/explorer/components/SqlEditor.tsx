@@ -170,7 +170,6 @@ export function SqlEditor({
                     // classic text area so diagnostic hovers resolve reliably.
                     editContext: false,
                     fixedOverflowWidgets: true,
-                    overflowWidgetsDomNode: document.body,
                     hover: { enabled: true, sticky: true, delay: 100 },
                     lightbulb: { enabled: 'on' },
                     quickSuggestions: { other: true, comments: false, strings: false },

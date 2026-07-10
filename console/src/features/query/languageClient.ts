@@ -379,7 +379,7 @@ export async function attachGooglesqlLanguageClient(options: {
                     ),
                     contents: [
                         {
-                            value: `${primary.message}\n\nView Problem (Alt+F8)\n\nNo quick fixes available`,
+                            value: `${primary.message}\n\nView Problem (Alt+F8)    No quick fixes available`,
                         },
                     ],
                 };
