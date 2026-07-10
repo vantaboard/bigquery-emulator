@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./dist/server.js",
+  "exports": {
+    ".": "./dist/server.js",
+    "./browser": "./dist/server.browser.js"
+  },
   "scripts": {
     "build": "node esbuild.mjs",
     "test": "vitest run",
