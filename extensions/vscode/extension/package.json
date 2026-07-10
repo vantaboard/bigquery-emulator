@@ -27,8 +27,7 @@
           "googlesql"
         ],
         "extensions": [
-          ".bqsql",
-          ".googlesql"
+          ".sql"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -99,7 +98,12 @@
         "command": "bigquery.probeBackend",
         "title": "BigQuery: Probe Active Backend"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "files.associations": {
+        "*.sql": "bigquery"
+      }
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",

@@ -13,7 +13,7 @@ to:
 - Document formatting (SQL Tools or `sql-formatter` fallback)
 - Quick fixes (missing delimiters, did-you-mean, keyword casing)
 - Hover (function docs + table schemas via analyze + `tables.get`)
-- TextMate grammar for `.bqsql` / `.googlesql`
+- TextMate grammar for `.sql` files (GoogleSQL / BigQuery dialect)
 
 ## Prerequisites
 

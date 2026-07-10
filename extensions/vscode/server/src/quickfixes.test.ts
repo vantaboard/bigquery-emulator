@@ -25,7 +25,7 @@ describe('catalogCompletions', () => {
 describe('buildQuickFixes', () => {
   it('offers to insert a missing closing parenthesis', () => {
     const document = TextDocument.create(
-      'file:///tmp/query.bqsql',
+      'file:///tmp/query.sql',
       'bigquery',
       1,
       'SELECT SAFE_ADD(',
