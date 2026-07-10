@@ -51,7 +51,16 @@ export function diagnosticRange(
 
   if (diagnostic.endLine !== undefined && diagnostic.endColumn !== undefined) {
     const toLine = Math.min(Math.max(1, diagnostic.endLine), document.lineCount);
-    const toCharacter = Math.max(0, diagnostic.endColumn - 1);
+    let toCharacter = Math.max(0, diagnostic.endColumn - 1);
+    if (toLine === fromLine && toCharacter <= fromCharacter) {
+      if (fromCharacter > 0) {
+        return {
+          start: { line: fromLine - 1, character: fromCharacter - 1 },
+          end: { line: toLine - 1, character: fromCharacter },
+        };
+      }
+      toCharacter = fromCharacter + 1;
+    }
     return {
       start: { line: fromLine - 1, character: fromCharacter },
       end: { line: toLine - 1, character: toCharacter },

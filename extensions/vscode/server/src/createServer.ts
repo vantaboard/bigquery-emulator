@@ -16,6 +16,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import {
   completionKindToLsp,
+  diagnosticRange,
   diagnosticSeverity,
   formatDiagnosticMessage,
   lookupFunctionDoc,
@@ -217,36 +218,6 @@ export function createServer(connection: Connection, options: CreateServerOption
     return null;
   });
 
-  function diagnosticRangeForDocument(
-    document: TextDocument,
-    diagnostic: import('@bigquery-emulator/vscode-shared').SqlDiagnostic,
-  ) {
-    if (diagnostic.startUtf16 !== undefined && diagnostic.endUtf16 !== undefined) {
-      return {
-        start: document.positionAt(Math.max(0, diagnostic.startUtf16)),
-        end: document.positionAt(Math.max(diagnostic.startUtf16, diagnostic.endUtf16)),
-      };
-    }
-
-    const fromLine = Math.min(Math.max(1, diagnostic.line), document.lineCount);
-    const fromCharacter = Math.max(0, diagnostic.column - 1);
-    if (diagnostic.endLine !== undefined && diagnostic.endColumn !== undefined) {
-      const toLine = Math.min(Math.max(1, diagnostic.endLine), document.lineCount);
-      return {
-        start: { line: fromLine - 1, character: fromCharacter },
-        end: {
-          line: toLine - 1,
-          character: Math.max(0, diagnostic.endColumn - 1),
-        },
-      };
-    }
-
-    return {
-      start: { line: fromLine - 1, character: fromCharacter },
-      end: { line: fromLine - 1, character: fromCharacter + 1 },
-    };
-  }
-
   async function publishDiagnostics(document: TextDocument, expectedVersion?: number): Promise<void> {
     if (expectedVersion !== undefined) {
       const current = diagnosticVersions.get(document.uri);
@@ -262,7 +233,7 @@ export function createServer(connection: Connection, options: CreateServerOption
     });
 
     const diagnostics: Diagnostic[] = rawDiagnostics.map((item) => ({
-      range: diagnosticRangeForDocument(document, item),
+      range: diagnosticRange(document, item),
       severity: diagnosticSeverity(item.severity) as DiagnosticSeverity,
       message: formatDiagnosticMessage(item),
       source: backendManager.getActiveName(),

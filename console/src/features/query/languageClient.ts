@@ -11,6 +11,7 @@ import {
     type Hover,
     type TextEdit,
     type MarkupContent,
+    type CodeAction as LspCodeAction,
 } from 'vscode-languageserver-protocol';
 import type { InitializeParams, InitializeResult } from 'vscode-languageserver-protocol';
 
@@ -69,6 +70,126 @@ function lspSeverityToEditor(severity?: number): EditorDiagnostic['severity'] {
         default:
             return 'hint';
     }
+}
+
+function lspRangeToMarker(
+    range: LspDiagnostic['range'],
+    lineLength?: number,
+): Pick<
+    Monaco.editor.IMarkerData,
+    'startLineNumber' | 'startColumn' | 'endLineNumber' | 'endColumn'
+> {
+    let startLineNumber = range.start.line + 1;
+    let startColumn = range.start.character + 1;
+    let endLineNumber = range.end.line + 1;
+    let endColumn = range.end.character + 1;
+
+    if (endLineNumber === startLineNumber) {
+        if (endColumn <= startColumn) {
+            if (startColumn > 1) {
+                startColumn -= 1;
+            }
+            endColumn = startColumn + 1;
+        } else if (
+            lineLength !== undefined
+            && startColumn > lineLength
+        ) {
+            startColumn = Math.max(1, lineLength);
+            endColumn = startColumn + 1;
+        }
+    }
+
+    return { startLineNumber, startColumn, endLineNumber, endColumn };
+}
+
+function markerCoversPosition(
+    marker: Monaco.editor.IMarkerData,
+    position: Monaco.Position,
+): boolean {
+    if (
+        position.lineNumber < marker.startLineNumber
+        || position.lineNumber > marker.endLineNumber
+    ) {
+        return false;
+    }
+    const afterStart =
+        position.lineNumber > marker.startLineNumber
+        || position.column >= marker.startColumn;
+    const beforeEnd =
+        position.lineNumber < marker.endLineNumber
+        || position.column < marker.endColumn;
+    return afterStart && beforeEnd;
+}
+
+function markerSeverityToLsp(
+    monaco: typeof Monaco,
+    severity: Monaco.MarkerSeverity,
+): number {
+    switch (severity) {
+        case monaco.MarkerSeverity.Error:
+            return 1;
+        case monaco.MarkerSeverity.Warning:
+            return 2;
+        case monaco.MarkerSeverity.Info:
+            return 3;
+        default:
+            return 4;
+    }
+}
+
+function markersToLspDiagnostics(
+    monaco: typeof Monaco,
+    markers: Monaco.editor.IMarkerData[],
+): LspDiagnostic[] {
+    return markers.map((marker) => ({
+        range: {
+            start: {
+                line: marker.startLineNumber - 1,
+                character: marker.startColumn - 1,
+            },
+            end: {
+                line: marker.endLineNumber - 1,
+                character: marker.endColumn - 1,
+            },
+        },
+        message: marker.message,
+        severity: markerSeverityToLsp(monaco, marker.severity),
+    }));
+}
+
+function lspEditToMonaco(
+    monaco: typeof Monaco,
+    model: Monaco.editor.ITextModel,
+    action: LspCodeAction,
+): Monaco.languages.WorkspaceEdit | undefined {
+    const changes = action.edit?.changes;
+    if (!changes) {
+        return undefined;
+    }
+
+    const edits: Monaco.languages.IWorkspaceTextEdit[] = [];
+    for (const [docUri, textEdits] of Object.entries(changes)) {
+        if (docUri !== model.uri.toString()) {
+            continue;
+        }
+        for (const textEdit of textEdits) {
+            edits.push({
+                resource: model.uri,
+                versionId: model.getVersionId(),
+                textEdit: {
+                    range: new monaco.Range(
+                        textEdit.range.start.line + 1,
+                        textEdit.range.start.character + 1,
+                        textEdit.range.end.line + 1,
+                        textEdit.range.end.character + 1,
+                    ),
+                    text: textEdit.newText,
+                },
+            });
+        }
+    }
+
+    return edits.length > 0 ? { edits } : undefined;
 }
 
 function ensureWorkerConnection(): ProtocolConnection {
@@ -160,15 +281,15 @@ export async function attachGooglesqlLanguageClient(options: {
             if (params.uri !== uri) {
                 return;
             }
-            const markers: Monaco.editor.IMarkerData[] = params.diagnostics.map((d) => ({
-                severity: severityToMonaco(monaco, d.severity),
-                message: typeof d.message === 'string' ? d.message : markupToString(d.message),
-                startLineNumber: d.range.start.line + 1,
-                startColumn: d.range.start.character + 1,
-                endLineNumber: d.range.end.line + 1,
-                endColumn: Math.max(d.range.end.character + 1, d.range.start.character + 2),
-                source: d.source,
-            }));
+            const markers: Monaco.editor.IMarkerData[] = params.diagnostics.map((d) => {
+                const lineLength = model.getLineContent(d.range.start.line + 1).length;
+                const span = lspRangeToMarker(d.range, lineLength);
+                return {
+                    severity: severityToMonaco(monaco, d.severity),
+                    message: typeof d.message === 'string' ? d.message : markupToString(d.message),
+                    ...span,
+                };
+            });
             monaco.editor.setModelMarkers(model, 'bigquery-lsp', markers);
             onDiagnostics?.(
                 params.diagnostics.map((d) => ({
@@ -251,26 +372,53 @@ export async function attachGooglesqlLanguageClient(options: {
     const hoverProvider = monaco.languages.registerHoverProvider(languageId, {
         provideHover: async (m, position) => {
             const markers = monaco.editor.getModelMarkers({ resource: m.uri });
-            const atPos = markers.filter(
-                (marker) =>
-                    marker.startLineNumber <= position.lineNumber &&
-                    marker.endLineNumber >= position.lineNumber &&
-                    marker.startColumn <= position.column &&
-                    marker.endColumn >= position.column,
-            );
+            const atPos = markers.filter((marker) => markerCoversPosition(marker, position));
             if (atPos.length > 0) {
                 const primary = atPos[0]!;
+                const markerRange = new monaco.Range(
+                    primary.startLineNumber,
+                    primary.startColumn,
+                    primary.endLineNumber,
+                    primary.endColumn,
+                );
+
+                let quickFixLine = 'No quick fixes available';
+                if (settings.useEmulatorParser) {
+                    try {
+                        const actions = (await connection.sendRequest('textDocument/codeAction', {
+                            textDocument: { uri },
+                            range: {
+                                start: {
+                                    line: primary.startLineNumber - 1,
+                                    character: primary.startColumn - 1,
+                                },
+                                end: {
+                                    line: primary.endLineNumber - 1,
+                                    character: primary.endColumn - 1,
+                                },
+                            },
+                            context: {
+                                diagnostics: markersToLspDiagnostics(monaco, atPos),
+                                only: ['quickfix'],
+                            },
+                        })) as LspCodeAction[] | null;
+
+                        if (actions?.length) {
+                            quickFixLine = actions
+                                .map((action) => `$(${action.isPreferred ? 'star' : 'light-bulb'}) ${action.title}`)
+                                .join('  \n');
+                        }
+                    } catch {
+                        /* keep placeholder */
+                    }
+                }
+
                 return {
-                    range: new monaco.Range(
-                        primary.startLineNumber,
-                        primary.startColumn,
-                        primary.endLineNumber,
-                        primary.endColumn,
-                    ),
+                    range: markerRange,
                     contents: [
                         { value: primary.message },
                         {
-                            value: 'View Problem (Alt+F8)\n\nNo quick fixes available',
+                            value: `View Problem (Alt+F8)\n\n${quickFixLine}`,
                         },
                     ],
                 };
@@ -295,6 +443,50 @@ export async function attachGooglesqlLanguageClient(options: {
             }
         },
     });
+
+    const codeActionProvider = monaco.languages.registerCodeActionProvider(
+        languageId,
+        {
+            provideCodeActions: async (model, range, context) => {
+                if (!settings.useEmulatorParser || context.markers.length === 0) {
+                    return { actions: [], dispose: () => {} };
+                }
+
+                try {
+                    const result = (await connection.sendRequest('textDocument/codeAction', {
+                        textDocument: { uri },
+                        range: {
+                            start: {
+                                line: range.startLineNumber - 1,
+                                character: range.startColumn - 1,
+                            },
+                            end: {
+                                line: range.endLineNumber - 1,
+                                character: range.endColumn - 1,
+                            },
+                        },
+                        context: {
+                            diagnostics: markersToLspDiagnostics(monaco, context.markers),
+                            only: context.only ? [context.only] : undefined,
+                        },
+                    })) as LspCodeAction[] | null;
+
+                    const actions = (result ?? []).map((action) => ({
+                        title: action.title,
+                        kind: action.kind,
+                        diagnostics: context.markers,
+                        isPreferred: action.isPreferred,
+                        edit: lspEditToMonaco(monaco, model, action),
+                    }));
+
+                    return { actions, dispose: () => {} };
+                } catch {
+                    return { actions: [], dispose: () => {} };
+                }
+            },
+        },
+        { providedCodeActionKinds: ['quickfix'] },
+    );
 
     const formattingProvider = monaco.languages.registerDocumentFormattingEditProvider(languageId, {
         provideDocumentFormattingEdits: async (_model) => {
@@ -353,6 +545,7 @@ export async function attachGooglesqlLanguageClient(options: {
             changeSub.dispose();
             completionProvider.dispose();
             hoverProvider.dispose();
+            codeActionProvider.dispose();
             formattingProvider.dispose();
             publishHandler.dispose();
             monaco.editor.setModelMarkers(model, 'bigquery-lsp', []);
