@@ -34,7 +34,7 @@ body {
   min-height: 100vh;
 }
 
-/* Single border on the outer resizable shell (Monaco adds one too if we style .monaco-hover). */
+/* Single border on the outer resizable shell. */
 .monaco-resizable-hover,
 .monaco-editor .monaco-resizable-hover {
   z-index: 1000;
@@ -64,33 +64,46 @@ body {
   background-color: var(--vscode-editorHoverWidget-background) !important;
 }
 
-/* Our markdown hover includes message + footer; hide built-in marker duplicates. */
+/* Custom markdown shows the message; hide built-in marker message duplicate. */
 .monaco-hover .marker.hover-contents,
 .monaco-editor .monaco-hover .marker.hover-contents {
   display: none !important;
 }
 
-.monaco-hover .hover-row .actions,
-.monaco-editor .monaco-hover .hover-row .actions {
-  display: none !important;
-}
-
 /* Error message body */
-.monaco-hover .hover-row:first-child .hover-row-contents,
-.monaco-editor .monaco-hover .hover-row:first-child .hover-row-contents {
+.monaco-hover .markdown-hover .hover-contents,
+.monaco-editor .monaco-hover .markdown-hover .hover-contents {
   padding: 6px 10px;
 }
 
-/* Footer row — separated like production status bar */
+/* Hide built-in status bar when our markdown footer renders the actions. */
+.monaco-hover .hover-row.status-bar,
+.monaco-editor .monaco-hover .hover-row.status-bar {
+  display: none !important;
+}
+
+/* Footer row — VS Code-style status bar with clickable View Problem */
 .monaco-hover .hover-row:last-child,
 .monaco-editor .monaco-hover .hover-row:last-child {
   border-top: 1px solid var(--vscode-editorHoverWidget-border);
   background-color: var(--vscode-editorHoverWidget-statusBarBackground);
 }
 
-.monaco-hover .hover-row:last-child .hover-row-contents,
-.monaco-editor .monaco-hover .hover-row:last-child .hover-row-contents {
+.monaco-hover .hover-row:last-child .hover-contents,
+.monaco-editor .monaco-hover .hover-row:last-child .hover-contents {
   padding: 4px 10px;
   font-size: 12px;
-  color: var(--vscode-textLink-foreground);
+}
+
+.monaco-hover .hover-row:last-child a,
+.monaco-editor .monaco-hover .hover-row:last-child a {
+  color: var(--vscode-textLink-foreground) !important;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.monaco-hover .hover-row:last-child a:hover,
+.monaco-editor .monaco-hover .hover-row:last-child a:hover {
+  color: var(--vscode-textLink-activeForeground) !important;
+  text-decoration: underline;
 }

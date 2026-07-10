@@ -380,7 +380,10 @@ export async function attachGooglesqlLanguageClient(options: {
                     contents: [
                         { value: primary.message },
                         {
-                            value: 'View Problem (Alt+F8)&nbsp;&nbsp;&nbsp;&nbsp;No quick fixes available',
+                            value:
+                                '[View Problem](command:editor.action.marker.next)'
+                                + '&nbsp;&nbsp;&nbsp;&nbsp;No quick fixes available',
+                            isTrusted: true,
                         },
                     ],
                 };

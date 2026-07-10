@@ -257,8 +257,11 @@ test.describe('BigQuery Explorer', () => {
         const hoverText = await hover.first().innerText();
         expect(hoverText.match(/Syntax error/g)?.length ?? 0).toBe(1);
         await expect(hover.first()).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
-        await expect(hover.first()).toContainText('View Problem (Alt+F8)');
+        await expect(
+            hover.first().locator('a', { hasText: 'View Problem' }),
+        ).toBeVisible();
         await expect(hover.first()).toContainText('No quick fixes available');
+        await expect(hover.first()).not.toContainText('Alt+F8');
         await expect(hover.first()).not.toContainText('Insert missing');
         await expect(hover.first()).not.toContainText('uppercase keyword');
 
