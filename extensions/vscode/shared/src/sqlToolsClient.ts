@@ -16,6 +16,10 @@ export interface SqlToolsClientOptions {
   fetchImpl?: typeof fetch;
 }
 
+function boundFetch(): typeof fetch {
+  return (...args: Parameters<typeof fetch>) => fetch(...args);
+}
+
 export class SqlToolsClient {
   private readonly baseUrl: string;
   private readonly token?: string;
@@ -25,7 +29,7 @@ export class SqlToolsClient {
   constructor(options: SqlToolsClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.token = options.token?.trim() || undefined;
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? boundFetch();
   }
 
   resetProbe(): void {

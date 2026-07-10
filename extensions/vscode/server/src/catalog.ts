@@ -18,7 +18,7 @@ export class CatalogService {
   private readonly cache = new Map<string, Promise<SqlCatalog>>();
   private readonly tableCache = new Map<string, Promise<TableMetadata | null>>();
 
-  constructor(baseUrl: string, fetchImpl: typeof fetch = fetch) {
+  constructor(baseUrl: string, fetchImpl: typeof fetch = (...args) => fetch(...args)) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.fetchImpl = fetchImpl;
   }
