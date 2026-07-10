@@ -252,11 +252,13 @@ test.describe('BigQuery Explorer', () => {
         await expect(squiggle).toBeVisible({ timeout: 5_000 });
         await squiggle.hover({ force: true });
         await page.waitForTimeout(400);
-        const hover = page.locator('.monaco-hover').filter({ hasText: 'View Problem' });
+        const hover = page.locator('.monaco-hover').filter({ hasText: 'Syntax error' });
         await expect(hover.first()).toBeVisible({ timeout: 10_000 });
         await expect(hover.first()).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
-        await expect(hover.first()).toContainText('View Problem (Alt+F8)');
-        await expect(hover.first()).toContainText('Insert missing ")"');
+        await expect(hover.first()).toContainText('View Problem');
+        await expect(hover.first()).toContainText('No quick fixes available');
+        await expect(hover.first()).not.toContainText('Insert missing');
+        await expect(hover.first()).not.toContainText('uppercase keyword');
 
         await page.keyboard.press('Alt+F8');
         await expect(bar).toBeVisible();

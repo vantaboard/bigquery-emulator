@@ -29,8 +29,10 @@ function delimiterFixes(document: TextDocument, diagnostic: Diagnostic): CodeAct
   }
 
   const expected = match[1];
+  // Only offer delimiter inserts that complete a literal (string/identifier).
+  // Missing ")" at end-of-script is usually an incomplete expression (e.g. unfilled
+  // function args), not something a single character insert can fix.
   const closingPairs: Record<string, string> = {
-    ')': ')',
     '"': '"',
     "'": "'",
     '`': '`',
@@ -133,6 +135,10 @@ function keywordCasingFix(document: TextDocument, diagnostic: Diagnostic): CodeA
   }
 
   const keyword = match[1];
+  if (keyword === keyword.toUpperCase()) {
+    return [];
+  }
+
   const upper = keyword.toUpperCase();
   const startCharacter = lineText.indexOf(keyword);
   if (startCharacter < 0) {

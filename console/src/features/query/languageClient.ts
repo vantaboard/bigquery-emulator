@@ -372,56 +372,10 @@ export async function attachGooglesqlLanguageClient(options: {
     const hoverProvider = monaco.languages.registerHoverProvider(languageId, {
         provideHover: async (m, position) => {
             const markers = monaco.editor.getModelMarkers({ resource: m.uri });
-            const atPos = markers.filter((marker) => markerCoversPosition(marker, position));
-            if (atPos.length > 0) {
-                const primary = atPos[0]!;
-                const markerRange = new monaco.Range(
-                    primary.startLineNumber,
-                    primary.startColumn,
-                    primary.endLineNumber,
-                    primary.endColumn,
-                );
-
-                let quickFixLine = 'No quick fixes available';
-                if (settings.useEmulatorParser) {
-                    try {
-                        const actions = (await connection.sendRequest('textDocument/codeAction', {
-                            textDocument: { uri },
-                            range: {
-                                start: {
-                                    line: primary.startLineNumber - 1,
-                                    character: primary.startColumn - 1,
-                                },
-                                end: {
-                                    line: primary.endLineNumber - 1,
-                                    character: primary.endColumn - 1,
-                                },
-                            },
-                            context: {
-                                diagnostics: markersToLspDiagnostics(monaco, atPos),
-                                only: ['quickfix'],
-                            },
-                        })) as LspCodeAction[] | null;
-
-                        if (actions?.length) {
-                            quickFixLine = actions
-                                .map((action) => `$(${action.isPreferred ? 'star' : 'light-bulb'}) ${action.title}`)
-                                .join('  \n');
-                        }
-                    } catch {
-                        /* keep placeholder */
-                    }
-                }
-
-                return {
-                    range: markerRange,
-                    contents: [
-                        { value: primary.message },
-                        {
-                            value: `View Problem (Alt+F8)\n\n${quickFixLine}`,
-                        },
-                    ],
-                };
+            if (markers.some((marker) => markerCoversPosition(marker, position))) {
+                // Let Monaco's built-in marker hover render the error, View Problem,
+                // and quick-fix status without duplicating the message here.
+                return null;
             }
 
             try {
