@@ -1,7 +1,7 @@
 #include "backend/sqltools/sql_tools.h"
 
-#include "backend/sqltools/sql_references.h"
 #include "absl/strings/match.h"
+#include "backend/sqltools/sql_references.h"
 #include "googlesql/public/builtin_function_options.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/function_signature.h"

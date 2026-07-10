@@ -72,8 +72,7 @@ void AppendClauseWordCandidates(absl::string_view prefix,
   for (const ClauseWordEntry& entry : ClauseWords()) {
     if (prefix.empty() || absl::StartsWithIgnoreCase(entry.name, prefix)) {
       AppendUniqueCandidate(
-          out,
-          CompletionCandidate{entry.name, "keyword", entry.name, ""});
+          out, CompletionCandidate{entry.name, "keyword", entry.name, ""});
     }
   }
 }
@@ -211,11 +210,8 @@ void AppendCuratedFunctionCandidates(
         function.args.empty() ? "" : absl::StrCat("(", function.args, ")");
     AppendUniqueCandidate(
         out,
-        CompletionCandidate{function.name,
-                            "function",
-                            function.name + "(",
-                            detail,
-                            ""});
+        CompletionCandidate{
+            function.name, "function", function.name + "(", detail, ""});
   }
 }
 
@@ -284,7 +280,8 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
     }
     ctx = sql_tools_complete_internal::InferCompletionContext(tokens);
   } else {
-    ctx.kind = sql_tools_complete_internal::CompletionContextKind::kStatementStart;
+    ctx.kind =
+        sql_tools_complete_internal::CompletionContextKind::kStatementStart;
   }
 
   std::string prefix;
@@ -339,11 +336,8 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
       AppendFlatColumnUnion(catalog_names, prefix, &result.candidates);
       AppendRoutineCandidates(
           prefix, catalog_names.routines, &result.candidates);
-      AppendCuratedFunctionCandidates(catalog,
-                                      prefix,
-                                      catalog_names,
-                                      FunctionInfo(),
-                                      &result.candidates);
+      AppendCuratedFunctionCandidates(
+          catalog, prefix, catalog_names, FunctionInfo(), &result.candidates);
       AppendExpressionKeywordCandidates(prefix, &result.candidates);
       AppendClauseWordCandidates(prefix, &result.candidates);
       break;

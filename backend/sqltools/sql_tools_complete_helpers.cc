@@ -21,8 +21,14 @@ bool IsStatementBoundary(const ::googlesql::ParseToken& token) {
 bool IsTableContextKeyword(absl::string_view keyword) {
   static const absl::flat_hash_set<std::string>* kKeywords =
       new absl::flat_hash_set<std::string>{
-          "CREATE", "DELETE", "FROM",  "INSERT", "JOIN",   "MERGE",
-          "UPDATE", "USING",
+          "CREATE",
+          "DELETE",
+          "FROM",
+          "INSERT",
+          "JOIN",
+          "MERGE",
+          "UPDATE",
+          "USING",
       };
   return kKeywords->contains(std::string(keyword));
 }
@@ -30,9 +36,24 @@ bool IsTableContextKeyword(absl::string_view keyword) {
 bool IsColumnContextKeyword(absl::string_view keyword) {
   static const absl::flat_hash_set<std::string>* kKeywords =
       new absl::flat_hash_set<std::string>{
-          "AND",     "CASE",   "ELSE",   "GROUP",  "HAVING", "NOT",
-          "OMIT",    "ON",     "OR",     "ORDER",  "OVER",   "PARTITION",
-          "QUALIFY", "SELECT", "SET",    "THEN",   "WHEN",   "WHERE",
+          "AND",
+          "CASE",
+          "ELSE",
+          "GROUP",
+          "HAVING",
+          "NOT",
+          "OMIT",
+          "ON",
+          "OR",
+          "ORDER",
+          "OVER",
+          "PARTITION",
+          "QUALIFY",
+          "SELECT",
+          "SET",
+          "THEN",
+          "WHEN",
+          "WHERE",
       };
   return kKeywords->contains(std::string(keyword));
 }
