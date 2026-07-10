@@ -25,11 +25,14 @@ import {
     type RoutineTabState,
     type SavedQueryClassic,
     type SavedQueryVersioned,
+    type SplitPaneSide,
     type TableTabState,
     type UiPrefs,
     type WorkspaceSession,
+    type WorkspaceSplit,
     type WorkspaceTab,
 } from './types';
+import { pickSecondaryTabId, sanitizeSplit } from './splitUtils';
 
 type WorkspaceAction =
     | { type: 'HYDRATE'; session: WorkspaceSession }
@@ -45,7 +48,13 @@ type WorkspaceAction =
       }
     | { type: 'OPEN_ROUTINE_TAB'; projectId: string; datasetId: string; routineId: string; activate?: boolean }
     | { type: 'ACTIVATE_TAB'; id: string }
+    | { type: 'ASSIGN_TAB_TO_FOCUSED_PANE'; id: string }
     | { type: 'CLOSE_TAB'; id: string }
+    | { type: 'CLOSE_OTHER_TABS'; keepId: string }
+    | { type: 'SPLIT_TAB'; tabId: string; side: SplitPaneSide }
+    | { type: 'FOCUS_PANE'; side: SplitPaneSide }
+    | { type: 'SET_SPLIT_RATIO'; ratio: number }
+    | { type: 'CLEAR_SPLIT' }
     | { type: 'REORDER_TAB'; id: string; toIndex: number }
     | { type: 'RENAME_TAB'; id: string; title: string }
     | { type: 'UPDATE_QUERY_TAB'; id: string; patch: Partial<Omit<QueryTabState, 'type' | 'id'>> }
@@ -78,10 +87,11 @@ function parseSession(raw: string): WorkspaceSession | null {
         const data = JSON.parse(raw) as Partial<WorkspaceSession>;
         if (!Array.isArray(data.tabs) || !Array.isArray(data.tabOrder)) return null;
         const ui = { ...loadLegacyUiPrefs(), ...(data.ui ?? {}) };
-        return {
+        const session: WorkspaceSession = {
             tabs: data.tabs as WorkspaceTab[],
             tabOrder: data.tabOrder as string[],
             activeTabId: typeof data.activeTabId === 'string' ? data.activeTabId : null,
+            split: (data.split as WorkspaceSplit | null | undefined) ?? null,
             ui,
             savedQueriesClassic: Array.isArray(data.savedQueriesClassic)
                 ? (data.savedQueriesClassic as SavedQueryClassic[])
@@ -90,6 +100,7 @@ function parseSession(raw: string): WorkspaceSession | null {
                 ? (data.savedQueriesVersioned as SavedQueryVersioned[])
                 : [],
         };
+        return { ...session, split: sanitizeSplit(session) };
     } catch {
         return null;
     }
@@ -109,6 +120,7 @@ export function loadWorkspaceSession(): WorkspaceSession {
         tabs: [],
         tabOrder: [],
         activeTabId: null,
+        split: null,
         ui: loadLegacyUiPrefs(),
         savedQueriesClassic: [],
         savedQueriesVersioned: [],
@@ -131,6 +143,36 @@ function orderedTabs(tabs: WorkspaceTab[], tabOrder: string[]): WorkspaceTab[] {
         if (!tabOrder.includes(tab.id)) ordered.push(tab);
     }
     return ordered;
+}
+
+function assignTabToFocusedPane(state: WorkspaceSession, tabId: string): WorkspaceSession {
+    if (!state.split || !state.activeTabId) {
+        return { ...state, activeTabId: tabId };
+    }
+
+    if (tabId === state.activeTabId) {
+        return state;
+    }
+
+    if (tabId === state.split.secondaryTabId) {
+        return {
+            ...state,
+            activeTabId: tabId,
+            split: {
+                ...state.split,
+                secondaryTabId: state.activeTabId,
+            },
+        };
+    }
+
+    return {
+        ...state,
+        activeTabId: tabId,
+        split: {
+            ...state.split,
+            secondaryTabId: state.activeTabId,
+        },
+    };
 }
 
 function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): WorkspaceSession {
@@ -239,19 +281,99 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
 
         case 'ACTIVATE_TAB':
             if (!state.tabs.some((t) => t.id === action.id)) return state;
+            if (state.split) {
+                return assignTabToFocusedPane(state, action.id);
+            }
             return { ...state, activeTabId: action.id };
+
+        case 'ASSIGN_TAB_TO_FOCUSED_PANE':
+            if (!state.tabs.some((t) => t.id === action.id)) return state;
+            if (!state.split) {
+                return { ...state, activeTabId: action.id };
+            }
+            return assignTabToFocusedPane(state, action.id);
 
         case 'CLOSE_TAB': {
             if (!state.tabs.some((t) => t.id === action.id)) return state;
             const tabs = state.tabs.filter((t) => t.id !== action.id);
-            const tabOrder = state.tabOrder.filter((id) => id !== action.id);
+            const tabOrder = state.tabOrder.filter((closedId) => closedId !== action.id);
+
+            if (state.split) {
+                const closingFocused = state.activeTabId === action.id;
+                const closingSecondary = state.split.secondaryTabId === action.id;
+                if (closingFocused) {
+                    const survivor = state.split.secondaryTabId;
+                    if (tabs.some((t) => t.id === survivor)) {
+                        return { ...state, tabs, tabOrder, activeTabId: survivor, split: null };
+                    }
+                } else if (closingSecondary) {
+                    return { ...state, tabs, tabOrder, split: null };
+                }
+            }
+
             let activeTabId = state.activeTabId;
             if (activeTabId === action.id) {
                 const idx = state.tabOrder.indexOf(action.id);
                 activeTabId = tabOrder[idx] ?? tabOrder[idx - 1] ?? tabOrder[0] ?? null;
             }
-            return { ...state, tabs, tabOrder, activeTabId };
+            const next: WorkspaceSession = { ...state, tabs, tabOrder, activeTabId };
+            return { ...next, split: sanitizeSplit(next) };
         }
+
+        case 'CLOSE_OTHER_TABS': {
+            const keep = state.tabs.find((t) => t.id === action.keepId);
+            if (!keep) return state;
+            return {
+                ...state,
+                tabs: [keep],
+                tabOrder: [action.keepId],
+                activeTabId: action.keepId,
+                split: null,
+            };
+        }
+
+        case 'SPLIT_TAB': {
+            if (state.tabs.length < 2) return state;
+            if (!state.tabs.some((t) => t.id === action.tabId)) return state;
+            const secondaryTabId = pickSecondaryTabId(state, action.tabId);
+            if (!secondaryTabId) return state;
+            return {
+                ...state,
+                activeTabId: action.tabId,
+                split: {
+                    secondaryTabId,
+                    primarySide: action.side,
+                    ratio: state.split?.ratio ?? 0.5,
+                },
+            };
+        }
+
+        case 'FOCUS_PANE': {
+            if (!state.split || !state.activeTabId) return state;
+            if (state.split.primarySide === action.side) return state;
+            return {
+                ...state,
+                activeTabId: state.split.secondaryTabId,
+                split: {
+                    ...state.split,
+                    secondaryTabId: state.activeTabId,
+                    primarySide: action.side,
+                },
+            };
+        }
+
+        case 'SET_SPLIT_RATIO':
+            if (!state.split) return state;
+            return {
+                ...state,
+                split: {
+                    ...state.split,
+                    ratio: Math.max(0.2, Math.min(0.8, action.ratio)),
+                },
+            };
+
+        case 'CLEAR_SPLIT':
+            return { ...state, split: null };
 
         case 'REORDER_TAB': {
             const fromIndex = state.tabOrder.indexOf(action.id);
@@ -339,6 +461,11 @@ export interface WorkspaceContextValue {
     openRoutineTab: (projectId: string, datasetId: string, routineId: string) => void;
     activateTab: (id: string) => void;
     closeTab: (id: string) => void;
+    closeOtherTabs: (keepId: string) => void;
+    splitTab: (tabId: string, side: SplitPaneSide) => void;
+    focusPane: (side: SplitPaneSide) => void;
+    setSplitRatio: (ratio: number) => void;
+    clearSplit: () => void;
     renameTab: (id: string, title: string) => void;
     reorderTab: (id: string, toIndex: number) => void;
     updateQueryTab: (id: string, patch: Partial<Omit<QueryTabState, 'type' | 'id'>>) => void;
@@ -367,6 +494,8 @@ export interface WorkspaceContextValue {
         queryResult?: QueryResponse | null;
     }) => string;
 }
+
+export { workspaceReducer };
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
@@ -485,6 +614,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'CLOSE_TAB', id });
     }, []);
 
+    const closeOtherTabs = useCallback((keepId: string) => {
+        dispatch({ type: 'CLOSE_OTHER_TABS', keepId });
+    }, []);
+
+    const splitTab = useCallback((tabId: string, side: SplitPaneSide) => {
+        dispatch({ type: 'SPLIT_TAB', tabId, side });
+    }, []);
+
+    const focusPane = useCallback((side: SplitPaneSide) => {
+        dispatch({ type: 'FOCUS_PANE', side });
+    }, []);
+
+    const setSplitRatio = useCallback((ratio: number) => {
+        dispatch({ type: 'SET_SPLIT_RATIO', ratio });
+    }, []);
+
+    const clearSplit = useCallback(() => {
+        dispatch({ type: 'CLEAR_SPLIT' });
+    }, []);
+
     const renameTab = useCallback((id: string, title: string) => {
         dispatch({ type: 'RENAME_TAB', id, title });
     }, []);
@@ -567,6 +716,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             openRoutineTab,
             activateTab,
             closeTab,
+            closeOtherTabs,
+            splitTab,
+            focusPane,
+            setSplitRatio,
+            clearSplit,
             renameTab,
             reorderTab,
             updateQueryTab,
@@ -587,6 +741,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             openRoutineTab,
             activateTab,
             closeTab,
+            closeOtherTabs,
+            splitTab,
+            focusPane,
+            setSplitRatio,
+            clearSplit,
             renameTab,
             reorderTab,
             updateQueryTab,

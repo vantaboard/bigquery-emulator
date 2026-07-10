@@ -4,7 +4,15 @@ import { cn } from '@/lib/utils';
 
 import type { TabBarProps } from './Tabs';
 
-export function TabBar({ tabs, activeId, onChange, onClose, variant = 'underline', className }: TabBarProps) {
+export function TabBar({
+    tabs,
+    activeId,
+    onChange,
+    onClose,
+    onContextMenu,
+    variant = 'underline',
+    className,
+}: TabBarProps) {
     return (
         <div
             className={cn(
@@ -30,6 +38,14 @@ export function TabBar({ tabs, activeId, onChange, onClose, variant = 'underline
                                     active && 'border-[var(--bq-border)] bg-[var(--bq-surface)]',
                                 ),
                         )}
+                        onContextMenu={
+                            onContextMenu
+                                ? (event) => {
+                                      event.preventDefault();
+                                      onContextMenu(tab.id, event);
+                                  }
+                                : undefined
+                        }
                     >
                         <button
                             type="button"

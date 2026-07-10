@@ -37,6 +37,7 @@ describe('workspace session persistence', () => {
         expect(session.tabs).toEqual([]);
         expect(session.tabOrder).toEqual([]);
         expect(session.activeTabId).toBeNull();
+        expect(session.split).toBeNull();
         expect(session.ui.sidebarWidth).toBe(UI_DEFAULT.sidebarWidth);
         expect(session.ui.useEmulatorParser).toBe(true);
         expect(session.savedQueriesClassic).toEqual([]);

@@ -4,6 +4,7 @@ import { Outlet, useNavigate, useParams, useSearchParams } from 'react-router';
 import { parseExplorerSearchParams } from '@/features/explorer/urlState';
 
 import { ResourceSidebar } from './components/ResourceSidebar';
+import { WorkspaceSplitPanes } from './components/WorkspaceSplitPanes';
 import { WorkspaceTabBar } from './components/WorkspaceTabBar';
 import { tabRoutePath, useWorkspace } from './store';
 import { defaultSql, type QuerySubTab } from './types';
@@ -101,7 +102,7 @@ export function WorkspaceLayout() {
                 <div className="flex min-w-0 flex-1 flex-col">
                     <WorkspaceTabBar />
                     <main className="flex min-h-0 flex-1 flex-col">
-                        <Outlet />
+                        {session.split ? <WorkspaceSplitPanes /> : <Outlet />}
                     </main>
                 </div>
             </div>

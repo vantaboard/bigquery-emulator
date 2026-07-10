@@ -41,6 +41,17 @@ export interface RoutineTabState {
 
 export type WorkspaceTab = QueryTabState | DatasetTabState | TableTabState | RoutineTabState;
 
+export type SplitPaneSide = 'left' | 'right';
+
+export interface WorkspaceSplit {
+    /** Tab shown in the non-focused pane */
+    secondaryTabId: string;
+    /** Which side holds activeTabId (focused pane) */
+    primarySide: SplitPaneSide;
+    /** Left pane width fraction */
+    ratio: number;
+}
+
 export interface UiPrefs {
     sidebarWidth: number;
     editorHeight: number;
@@ -82,6 +93,7 @@ export interface WorkspaceSession {
     tabs: WorkspaceTab[];
     tabOrder: string[];
     activeTabId: string | null;
+    split: WorkspaceSplit | null;
     ui: UiPrefs;
     savedQueriesClassic: SavedQueryClassic[];
     savedQueriesVersioned: SavedQueryVersioned[];

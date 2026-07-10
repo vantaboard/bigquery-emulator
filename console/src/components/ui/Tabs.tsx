@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, MouseEvent } from 'react';
 
 export interface TabItem {
     id: string;
@@ -16,6 +16,7 @@ export interface TabBarProps {
     activeId: string;
     onChange: (id: string) => void;
     onClose?: (id: string) => void;
+    onContextMenu?: (id: string, event: MouseEvent) => void;
     variant?: TabVariant;
     className?: string;
 }

@@ -513,4 +513,38 @@ test.describe('BigQuery Explorer', () => {
         await expandDatasetWithRoutines(page);
         await expect(page.getByTestId(`routine-${routineName}`)).toBeVisible({ timeout: 10_000 });
     });
+
+    test('tab context menu closes other tabs', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('new-query-tab').click();
+        await expect(page.getByRole('tab', { name: 'table_a' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
+
+        const queryTab = page.getByRole('tab', { name: 'Untitled query' });
+        await queryTab.click({ button: 'right' });
+        const menu = page.getByTestId('context-menu');
+        await expect(menu).toBeVisible();
+        await menu.getByRole('menuitem', { name: 'Close other tabs' }).click();
+
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'table_a' })).not.toBeVisible();
+    });
+
+    test('tab context menu splits tab to the right', async ({ page }) => {
+        await selectTable(page);
+        await page.getByTestId('new-query-tab').click();
+        await expect(page.getByRole('tab', { name: 'table_a' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
+
+        const queryTab = page.getByRole('tab', { name: 'Untitled query' });
+        await queryTab.click({ button: 'right' });
+        const menu = page.getByTestId('context-menu');
+        await expect(menu).toBeVisible();
+        await menu.getByRole('menuitem', { name: 'Split tab to right' }).click();
+
+        await expect(page.getByTestId('workspace-pane-left')).toBeVisible();
+        await expect(page.getByTestId('workspace-pane-right')).toBeVisible();
+        await expect(page.getByTestId('workspace-pane-left').getByTestId('table-tab-page')).toBeVisible();
+        await expect(page.getByTestId('workspace-pane-right').getByTestId('sql-editor')).toBeVisible();
+    });
 });
