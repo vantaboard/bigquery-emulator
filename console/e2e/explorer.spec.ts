@@ -248,14 +248,14 @@ test.describe('BigQuery Explorer', () => {
         await expect(bar).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
 
         const root = await monacoEditor(page);
-        const squiggle = root.locator('.cdr.squiggly-error, .monaco-editor .squiggly-error').first();
-        await expect(squiggle).toBeVisible({ timeout: 5_000 });
-        await squiggle.hover({ force: true });
+        const editorLine = root.locator('.view-lines .view-line').first();
+        await expect(editorLine).toBeVisible({ timeout: 5_000 });
+        await editorLine.hover({ position: { x: 40, y: 8 } });
         await page.waitForTimeout(400);
         const hover = page.locator('.monaco-hover').filter({ hasText: 'Syntax error' });
         await expect(hover.first()).toBeVisible({ timeout: 10_000 });
         await expect(hover.first()).toContainText(/Syntax error: Expected "\)" but got end of script at \[1:\d+\]/);
-        await expect(hover.first()).toContainText('View Problem');
+        await expect(hover.first()).toContainText('View Problem (Alt+F8)');
         await expect(hover.first()).toContainText('No quick fixes available');
         await expect(hover.first()).not.toContainText('Insert missing');
         await expect(hover.first()).not.toContainText('uppercase keyword');

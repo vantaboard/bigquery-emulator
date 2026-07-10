@@ -102,23 +102,15 @@ function lspRangeToMarker(
     return { startLineNumber, startColumn, endLineNumber, endColumn };
 }
 
-function markerCoversPosition(
-    marker: Monaco.editor.IMarkerData,
+function markersAtLineForHover(
+    markers: Monaco.editor.IMarkerData[],
     position: Monaco.Position,
-): boolean {
-    if (
-        position.lineNumber < marker.startLineNumber
-        || position.lineNumber > marker.endLineNumber
-    ) {
-        return false;
-    }
-    const afterStart =
-        position.lineNumber > marker.startLineNumber
-        || position.column >= marker.startColumn;
-    const beforeEnd =
-        position.lineNumber < marker.endLineNumber
-        || position.column < marker.endColumn;
-    return afterStart && beforeEnd;
+): Monaco.editor.IMarkerData[] {
+    return markers.filter(
+        (marker) =>
+            position.lineNumber >= marker.startLineNumber
+            && position.lineNumber <= marker.endLineNumber,
+    );
 }
 
 function markerSeverityToLsp(
@@ -372,10 +364,53 @@ export async function attachGooglesqlLanguageClient(options: {
     const hoverProvider = monaco.languages.registerHoverProvider(languageId, {
         provideHover: async (m, position) => {
             const markers = monaco.editor.getModelMarkers({ resource: m.uri });
-            if (markers.some((marker) => markerCoversPosition(marker, position))) {
-                // Let Monaco's built-in marker hover render the error, View Problem,
-                // and quick-fix status without duplicating the message here.
-                return null;
+            const atPos = markersAtLineForHover(markers, position);
+            if (atPos.length > 0) {
+                const primary = atPos.sort(
+                    (a, b) => b.severity - a.severity,
+                )[0]!;
+                let quickFixLine = 'No quick fixes available';
+                if (settings.useEmulatorParser) {
+                    try {
+                        const actions = (await connection.sendRequest('textDocument/codeAction', {
+                            textDocument: { uri },
+                            range: {
+                                start: {
+                                    line: primary.startLineNumber - 1,
+                                    character: primary.startColumn - 1,
+                                },
+                                end: {
+                                    line: primary.endLineNumber - 1,
+                                    character: primary.endColumn - 1,
+                                },
+                            },
+                            context: {
+                                diagnostics: markersToLspDiagnostics(monaco, atPos),
+                                only: ['quickfix'],
+                            },
+                        })) as LspCodeAction[] | null;
+
+                        if (actions?.length) {
+                            quickFixLine = actions.map((action) => action.title).join('\n');
+                        }
+                    } catch {
+                        /* keep placeholder */
+                    }
+                }
+
+                return {
+                    range: new monaco.Range(
+                        primary.startLineNumber,
+                        1,
+                        primary.endLineNumber,
+                        m.getLineMaxColumn(primary.endLineNumber),
+                    ),
+                    contents: [
+                        {
+                            value: `${primary.message}\n\nView Problem (Alt+F8)\n\n${quickFixLine}`,
+                        },
+                    ],
+                };
             }
 
             try {
