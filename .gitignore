@@ -144,7 +144,17 @@ bqutils-sync.*/
 # / aggregator / smoke runs, timestamped `<scope>-YYYYMMDD-HHMMSS.log`).
 # Regenerated on demand by the operator; useful for post-mortem of a
 # specific session but never reproducible across runs, so do not check in.
-# VSCode extension workspace (npm workspaces under extensions/vscode/).
+# VSCode extension workspace (npm/pnpm workspaces under extensions/vscode/).
 /extensions/vscode/node_modules/
 /extensions/vscode/**/node_modules/
 /extensions/vscode/**/dist/
+
+# Console UI (React) + root JS workspace
+/node_modules/
+/console/node_modules/
+/console/dist/
+/console/test-results/
+/console/playwright-report/
+/console/pnpm-lock.yaml
+/console/pnpm-workspace.yaml
+

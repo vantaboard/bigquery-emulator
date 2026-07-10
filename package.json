@@ -1,0 +1,13 @@
+{
+  "name": "bigquery-emulator-js",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "build:console": "pnpm --filter @bigquery-emulator/console build",
+    "build:vscode": "pnpm --filter @bigquery-emulator/vscode-shared build && pnpm --filter @bigquery-emulator/vscode-server build && pnpm --filter bigquery-emulator build",
+    "dev:console": "pnpm --filter @bigquery-emulator/console dev",
+    "lint:console": "pnpm --filter @bigquery-emulator/console lint",
+    "test:console": "pnpm --filter @bigquery-emulator/console test",
+    "test:e2e:console": "pnpm --filter @bigquery-emulator/console test:e2e"
+  }
+}

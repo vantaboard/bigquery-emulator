@@ -1,0 +1,17 @@
+# Root JavaScript workspace: console UI + VS Code / LSP packages.
+packages:
+  - "console"
+  - "extensions/vscode/shared"
+  - "extensions/vscode/server"
+  - "extensions/vscode/extension"
+  - "extensions/vscode/test"
+
+allowBuilds:
+  esbuild: true
+
+# Keep CodeMirror pins until Monaco migration removes them from console.
+overrides:
+  "@codemirror/state": 6.6.0
+  "@codemirror/view": 6.41.1
+  "@codemirror/lint": 6.9.5
+  "@codemirror/autocomplete": 6.20.1

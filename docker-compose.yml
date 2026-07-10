@@ -146,5 +146,18 @@ services:
       - --host-port=0.0.0.0:8085
       - --project=${PUBSUB_PROJECT_ID:-dev}
 
+  # Web console (React UI). Opt-in: `docker compose --profile console up`.
+  bq-console:
+    profiles: ["console"]
+    build:
+      context: ./console
+      args:
+        VITE_DEFAULT_PROJECT: local-project
+    ports:
+      - "${CONSOLE_HTTP_PORT:-8080}:80"
+    depends_on:
+      bigquery-emulator:
+        condition: service_healthy
+
 volumes:
   bq-emulator-data:

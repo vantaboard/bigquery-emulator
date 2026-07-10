@@ -5,7 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=emulator-common.sh
 source "$root/scripts/emulator-common.sh"
 
-emulator_root="${EMULATOR_ROOT:-$root/../bigquery-emulator}"
+emulator_root="${EMULATOR_ROOT:-$root/..}"
 emulator_root="$(cd "$emulator_root" && pwd)"
 seed_file="${SEED_FILE:-$root/e2e/fixtures/seed.yaml}"
 http_port="${EMULATOR_HTTP_PORT:-9050}"
@@ -15,7 +15,7 @@ vite_port="${VITE_DEV_PORT:-5173}"
 gateway="$emulator_root/bin/gateway_main"
 
 if [ ! -x "$gateway" ]; then
-  echo "missing $gateway — run: task emulator:build" >&2
+  echo "missing $gateway — run: task emulator:build-all" >&2
   exit 1
 fi
 
@@ -47,7 +47,7 @@ EMULATOR_URL="http://127.0.0.1:$http_port" PROJECT_ID="$project_id" EXPECT_DATAS
   bash "$root/scripts/wait-for-emulator.sh"
 
 cd "$root"
-npm run dev &
+pnpm run dev &
 vite_pid=$!
 
 wait_for_vite() {
@@ -67,4 +67,4 @@ wait_for_vite() {
 wait_for_vite
 
 cd "$root"
-E2E_LOCAL=1 PLAYWRIGHT_BASE_URL="http://127.0.0.1:$vite_port" npx playwright test "$@"
+E2E_LOCAL=1 PLAYWRIGHT_BASE_URL="http://127.0.0.1:$vite_port" pnpm exec playwright test "$@"

@@ -1,22 +1,24 @@
 {
-  "name": "bigquery-emulator-ui",
+  "name": "@bigquery-emulator/console",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:local-emulator": "task dev:all",
+    "dev:local-emulator": "task console:dev:all",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:local": "task e2e:local",
+    "test:e2e:local": "task console:e2e:local",
     "test:e2e:ui": "playwright test --ui",
     "e2e:up": "docker compose -f docker-compose.e2e.yaml up -d --wait --build",
     "e2e:down": "docker compose -f docker-compose.e2e.yaml down -v"
   },
   "dependencies": {
+    "@bigquery-emulator/vscode-shared": "workspace:*",
+    "@bigquery-emulator/vscode-server": "workspace:*",
     "@codemirror/autocomplete": "6.20.1",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-sql": "^6.10.0",

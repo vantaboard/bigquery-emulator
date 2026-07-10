@@ -2,37 +2,33 @@ version: "3"
 
 tasks:
   install:
-    desc: Install npm dependencies for the VSCode extension workspace
-    dir: extensions/vscode
+    desc: Install pnpm dependencies for the VSCode extension workspace
     cmds:
-      - npm install
+      - pnpm install
 
   build:
     desc: Build the VSCode extension client, server, and shared packages
-    dir: extensions/vscode
     deps:
       - install
     cmds:
-      - npm run build --workspace=@bigquery-emulator/vscode-shared
-      - npm run build --workspace=@bigquery-emulator/vscode-server
-      - npm run build --workspace=bigquery-emulator
+      - pnpm --filter @bigquery-emulator/vscode-shared build
+      - pnpm --filter @bigquery-emulator/vscode-server build
+      - pnpm --filter bigquery-emulator build
 
   test:
     desc: Run VSCode extension unit and parity tests
-    dir: extensions/vscode
     deps:
       - build
     cmds:
-      - npm run test --workspace=@bigquery-emulator/vscode-shared
-      - npm run test --workspace=@bigquery-emulator/vscode-server
-      - npm run test --workspace=@bigquery-emulator/vscode-test
+      - pnpm --filter @bigquery-emulator/vscode-shared test
+      - pnpm --filter @bigquery-emulator/vscode-server test
+      - pnpm --filter @bigquery-emulator/vscode-test test
 
   lint:
     desc: Typecheck the VSCode extension workspace
-    dir: extensions/vscode
     deps:
       - install
     cmds:
-      - npm run lint --workspace=@bigquery-emulator/vscode-shared
-      - npm run lint --workspace=@bigquery-emulator/vscode-server
-      - npm run lint --workspace=bigquery-emulator
+      - pnpm --filter @bigquery-emulator/vscode-shared lint
+      - pnpm --filter @bigquery-emulator/vscode-server lint
+      - pnpm --filter bigquery-emulator lint

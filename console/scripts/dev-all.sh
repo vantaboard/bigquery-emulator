@@ -5,7 +5,8 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=emulator-common.sh
 source "$root/scripts/emulator-common.sh"
 
-emulator_root="${EMULATOR_ROOT:-$root/../bigquery-emulator}"
+# Monorepo: emulator lives at the repo root (parent of console/).
+emulator_root="${EMULATOR_ROOT:-$root/..}"
 emulator_root="$(cd "$emulator_root" && pwd)"
 seed_file="${SEED_FILE:-$root/data/data.yaml}"
 http_port="${EMULATOR_HTTP_PORT:-9050}"
@@ -45,4 +46,4 @@ EMULATOR_URL="http://127.0.0.1:$http_port" PROJECT_ID="$project_id" EXPECT_DATAS
   bash "$root/scripts/wait-for-emulator.sh"
 
 cd "$root"
-exec npm run dev
+exec pnpm run dev

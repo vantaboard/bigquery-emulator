@@ -5,7 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=emulator-common.sh
 source "$root/scripts/emulator-common.sh"
 
-emulator_root="${EMULATOR_ROOT:-$root/../bigquery-emulator}"
+emulator_root="${EMULATOR_ROOT:-$root/..}"
 emulator_root="$(cd "$emulator_root" && pwd)"
 seed_file="${SEED_FILE:-$root/data/data.yaml}"
 http_port="${EMULATOR_HTTP_PORT:-9050}"
@@ -14,7 +14,7 @@ project_id="${PROJECT_ID:-local-project}"
 gateway="$emulator_root/bin/gateway_main"
 
 if [ ! -x "$gateway" ]; then
-  echo "missing $gateway — run: task emulator:build" >&2
+  echo "missing $gateway — run: task emulator:build-all" >&2
   exit 1
 fi
 

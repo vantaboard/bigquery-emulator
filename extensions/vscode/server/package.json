@@ -10,7 +10,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@bigquery-emulator/vscode-shared": "0.1.0",
+    "@bigquery-emulator/vscode-shared": "workspace:*",
     "google-auth-library": "^9.15.1",
     "sql-formatter": "^15.4.11",
     "vscode-languageserver": "^9.0.1",

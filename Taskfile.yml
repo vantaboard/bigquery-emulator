@@ -27,6 +27,7 @@ includes:
   docs: ./taskfiles/docs.yml
   python-udf: ./taskfiles/python-udf.yml
   vscode: ./taskfiles/vscode.yml
+  console: ./taskfiles/console.yml
 
 tasks:
   default:

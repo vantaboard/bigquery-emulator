@@ -1,0 +1,105 @@
+version: "3"
+
+vars:
+  CONSOLE_ROOT:
+    sh: |
+      root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+      echo "$root/console"
+  EMULATOR_ROOT:
+    sh: git rev-parse --show-toplevel 2>/dev/null || pwd
+  EMULATOR_HTTP_PORT:
+    sh: echo "${EMULATOR_HTTP_PORT:-9050}"
+  EMULATOR_GRPC_PORT:
+    sh: echo "${EMULATOR_GRPC_PORT:-9060}"
+  PROJECT_ID:
+    sh: echo "${PROJECT_ID:-local-project}"
+  SEED_FILE:
+    sh: |
+      root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+      if [ -n "${SEED_FILE:-}" ]; then
+        echo "${SEED_FILE}"
+      else
+        echo "$root/console/data/data.yaml"
+      fi
+
+tasks:
+  install:
+    desc: Install pnpm dependencies for console + vscode packages
+    cmds:
+      - pnpm install
+
+  build:
+    desc: Build console (typecheck + Vite production bundle)
+    dir: "{{.CONSOLE_ROOT}}"
+    deps:
+      - install
+    cmds:
+      - pnpm run build
+
+  test:
+    desc: Run console unit tests
+    dir: "{{.CONSOLE_ROOT}}"
+    deps:
+      - install
+    cmds:
+      - pnpm run test
+
+  lint:
+    desc: Lint console sources
+    dir: "{{.CONSOLE_ROOT}}"
+    deps:
+      - install
+    cmds:
+      - pnpm run lint
+
+  emulator:check:
+    desc: Verify emulator binaries exist under this monorepo
+    cmds:
+      - |
+        set -eo pipefail
+        emu="{{.EMULATOR_ROOT}}"
+        if [ ! -x "$emu/bin/gateway_main" ] || [ ! -x "$emu/bin/emulator_main" ]; then
+          echo "Emulator binaries missing under $emu/bin/" >&2
+          echo "Run once: task emulator:build-all" >&2
+          exit 1
+        fi
+        echo "ok: $emu"
+
+  emulator:run:
+    desc: Run local emulator with console seed data (SQL Tools when supported)
+    deps: [emulator:check]
+    dir: "{{.CONSOLE_ROOT}}"
+    cmds:
+      - bash scripts/emulator-run.sh
+
+  dev:
+    desc: Vite console dev server (expects emulator on EMULATOR_HTTP_PORT)
+    dir: "{{.CONSOLE_ROOT}}"
+    deps:
+      - install
+    cmds:
+      - pnpm run dev
+
+  dev:all:
+    desc: Start local emulator in the background, wait for health, then Vite console
+    deps: [emulator:check, install]
+    dir: "{{.CONSOLE_ROOT}}"
+    cmds:
+      - bash scripts/dev-all.sh
+
+  e2e:
+    desc: Run Playwright e2e against docker-compose.e2e stack
+    dir: "{{.CONSOLE_ROOT}}"
+    deps:
+      - install
+    cmds:
+      - pnpm run e2e:up
+      - pnpm run test:e2e {{.CLI_ARGS}}
+      - pnpm run e2e:down
+
+  e2e:local:
+    desc: Run Playwright against a native emulator + Vite
+    deps: [emulator:check, install]
+    dir: "{{.CONSOLE_ROOT}}"
+    cmds:
+      - bash scripts/e2e-local.sh {{.CLI_ARGS}}

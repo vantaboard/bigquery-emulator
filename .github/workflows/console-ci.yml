@@ -1,0 +1,64 @@
+name: Console CI
+
+on:
+  pull_request:
+    paths:
+      - "console/**"
+      - "extensions/vscode/**"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - ".github/workflows/console-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "console/**"
+      - "extensions/vscode/**"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - ".github/workflows/console-ci.yml"
+
+jobs:
+  console:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build VS Code shared + server packages
+        run: |
+          pnpm --filter @bigquery-emulator/vscode-shared build
+          pnpm --filter @bigquery-emulator/vscode-server build
+
+      - name: Lint console
+        run: pnpm --filter @bigquery-emulator/console lint
+
+      - name: Unit test console
+        run: pnpm --filter @bigquery-emulator/console test
+
+      - name: Build console
+        run: pnpm --filter @bigquery-emulator/console build
+
+      - name: Install Playwright browsers
+        working-directory: console
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        working-directory: console
+        run: |
+          pnpm run e2e:up
+          pnpm run test:e2e
+          pnpm run e2e:down
