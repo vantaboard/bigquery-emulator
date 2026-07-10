@@ -32,7 +32,7 @@ export interface FormatRequest {
 
 export interface FormatResponse {
   formattedSql: string;
-  diagnostics: SqlDiagnostic[];
+  diagnostics?: SqlDiagnostic[];
 }
 
 export interface ParseRequest {
@@ -42,7 +42,7 @@ export interface ParseRequest {
 
 export interface ParseResponse {
   statementKinds: string[];
-  diagnostics: SqlDiagnostic[];
+  diagnostics?: SqlDiagnostic[];
 }
 
 export interface CompleteRequest {
@@ -85,7 +85,7 @@ export interface ReferencedTable {
 export interface AnalyzeResponse {
   referencedTables: ReferencedTable[];
   statementKinds: string[];
-  diagnostics: SqlDiagnostic[];
+  diagnostics?: SqlDiagnostic[];
 }
 
 export interface SqlCatalog {

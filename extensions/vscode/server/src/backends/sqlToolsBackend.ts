@@ -14,11 +14,12 @@ export class SqlToolsBackend implements LanguageBackend {
   private readonly client: SqlToolsClient;
   private readonly catalog: CatalogService;
 
-  constructor(settings: ConnectionSettings) {
+  constructor(settings: ConnectionSettings, options?: { fetchImpl?: typeof fetch }) {
     this.settings = settings;
     this.client = new SqlToolsClient({
       baseUrl: settings.emulatorBaseUrl,
       token: settings.sqlToolsToken,
+      fetchImpl: options?.fetchImpl,
     });
     this.catalog = new CatalogService(settings.emulatorBaseUrl);
   }
@@ -43,7 +44,7 @@ export class SqlToolsBackend implements LanguageBackend {
       return [];
     }
     const result = await this.client.parse({ sql, offsetUnit: 'utf16' });
-    return result.diagnostics;
+    return result.diagnostics ?? [];
   }
 
   async getCompletions(sql: string, cursorOffset: number, _context: BackendContext) {

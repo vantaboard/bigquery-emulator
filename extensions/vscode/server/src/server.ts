@@ -248,7 +248,7 @@ async function publishDiagnostics(document: TextDocument, expectedVersion?: numb
     document,
   });
 
-  const diagnostics: Diagnostic[] = rawDiagnostics.map((item) => ({
+  const diagnostics: Diagnostic[] = (rawDiagnostics ?? []).map((item) => ({
     range: diagnosticRangeForDocument(document, item),
     severity: diagnosticSeverity(item.severity) as DiagnosticSeverity,
     message: formatDiagnosticMessage(item),
