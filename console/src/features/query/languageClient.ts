@@ -378,8 +378,9 @@ export async function attachGooglesqlLanguageClient(options: {
                         m.getLineMaxColumn(primary.endLineNumber),
                     ),
                     contents: [
+                        { value: primary.message },
                         {
-                            value: `${primary.message}\n\nView Problem (Alt+F8)    No quick fixes available`,
+                            value: 'View Problem (Alt+F8)&nbsp;&nbsp;&nbsp;&nbsp;No quick fixes available',
                         },
                     ],
                 };

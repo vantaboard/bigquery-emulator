@@ -13,7 +13,7 @@
   --bq-text: #e8eef7;
   --bq-muted: #94a3b8;
 
-  /* Monaco hover widget (also used when fixedOverflowWidgets lifts it out of the editor). */
+  /* Monaco hover widget */
   --vscode-editorHoverWidget-foreground: #e8e8e8;
   --vscode-editorHoverWidget-background: #2b2b2b;
   --vscode-editorHoverWidget-border: #555555;
@@ -34,15 +34,34 @@ body {
   min-height: 100vh;
 }
 
-/* Diagnostic hover: match production BigQuery — distinct panel, visible border. */
-.monaco-hover,
-.monaco-editor .monaco-hover {
+/* Single border on the outer resizable shell (Monaco adds one too if we style .monaco-hover). */
+.monaco-resizable-hover,
+.monaco-editor .monaco-resizable-hover {
   z-index: 1000;
-  color: var(--vscode-editorHoverWidget-foreground) !important;
-  background-color: var(--vscode-editorHoverWidget-background) !important;
   border: 1px solid var(--vscode-editorHoverWidget-border) !important;
   border-radius: 4px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.monaco-resizable-hover > .monaco-hover,
+.monaco-editor .monaco-resizable-hover > .monaco-hover {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--vscode-editorHoverWidget-foreground);
+  background-color: var(--vscode-editorHoverWidget-background) !important;
+}
+
+/* Fallback when the hover is not wrapped in .monaco-resizable-hover. */
+.monaco-hover:not(.monaco-resizable-hover .monaco-hover),
+.monaco-editor .monaco-hover:not(.monaco-resizable-hover .monaco-hover) {
+  z-index: 1000;
+  border: 1px solid var(--vscode-editorHoverWidget-border) !important;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  color: var(--vscode-editorHoverWidget-foreground);
+  background-color: var(--vscode-editorHoverWidget-background) !important;
 }
 
 /* Our markdown hover includes message + footer; hide built-in marker duplicates. */
@@ -54,4 +73,24 @@ body {
 .monaco-hover .hover-row .actions,
 .monaco-editor .monaco-hover .hover-row .actions {
   display: none !important;
+}
+
+/* Error message body */
+.monaco-hover .hover-row:first-child .hover-row-contents,
+.monaco-editor .monaco-hover .hover-row:first-child .hover-row-contents {
+  padding: 6px 10px;
+}
+
+/* Footer row — separated like production status bar */
+.monaco-hover .hover-row:last-child,
+.monaco-editor .monaco-hover .hover-row:last-child {
+  border-top: 1px solid var(--vscode-editorHoverWidget-border);
+  background-color: var(--vscode-editorHoverWidget-statusBarBackground);
+}
+
+.monaco-hover .hover-row:last-child .hover-row-contents,
+.monaco-editor .monaco-hover .hover-row:last-child .hover-row-contents {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--vscode-textLink-foreground);
 }
