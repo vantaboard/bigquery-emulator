@@ -64,7 +64,7 @@ export function TableDetailsTab({ projectId, datasetId, tableId }: TableDetailsT
                             type="button"
                             className="rounded-md border border-[var(--bq-border)] px-3 py-1.5 text-sm opacity-50"
                             disabled
-                            title="Edit Query is planned for M4"
+                            title="Editing view queries is not supported yet"
                         >
                             Edit Query
                         </button>
