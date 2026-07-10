@@ -44,7 +44,8 @@ export async function loadSqlCatalog(projectId: string): Promise<SqlCatalog> {
             datasets.map(async (datasetId) => {
                 let tableIds: string[] = [];
                 try {
-                    tableIds = await explorerQueries.tables(projectId, datasetId);
+                    const entries = await explorerQueries.tables(projectId, datasetId);
+                    tableIds = entries.map((e) => e.tableId);
                 } catch {
                     return;
                 }

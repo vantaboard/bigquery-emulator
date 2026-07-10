@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { TabBar } from '@/components/ui/Tabs';
 import { explorerQueries } from '@/features/explorer/api';
+import { ResourceIcon, resourceIconForTab } from '@/features/resource/ResourceIcon';
 
 import { tabRoutePath, useWorkspace } from '@/features/workspace/store';
 import { tabLabel } from '@/features/workspace/types';
@@ -46,6 +47,7 @@ export function WorkspaceTabBar() {
                 tabs={tabs.map((tab) => ({
                     id: tab.id,
                     label: tabLabel(tab),
+                    icon: <ResourceIcon kind={resourceIconForTab(tab)} className="size-3.5" />,
                     closable: true,
                 }))}
             />

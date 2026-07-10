@@ -147,7 +147,7 @@ export function ExplorerPage() {
             const ds = await explorerQueries.datasets(project);
             setProjectDatasets((m) => ({ ...m, [project]: ds }));
             const tb = await explorerQueries.tables(project, dataset);
-            setDatasetTables((m) => ({ ...m, [dk]: tb }));
+            setDatasetTables((m) => ({ ...m, [dk]: tb.map((e) => e.tableId) }));
 
             setExpandedProjects((s) => (s.includes(project) ? s : [...s, project]));
             setExpandedDatasets((s) => (s.includes(dk) ? s : [...s, dk]));
@@ -184,8 +184,9 @@ export function ExplorerPage() {
             const dk = `${st.project}-${st.dataset}`;
             const tbList = await explorerQueries.tables(st.project, st.dataset);
             if (cancelled) return;
-            setDatasetTables((m) => ({ ...m, [dk]: tbList }));
-            if (!tbList.includes(st.table)) return;
+            const tableIds = tbList.map((e) => e.tableId);
+            setDatasetTables((m) => ({ ...m, [dk]: tableIds }));
+            if (!tableIds.includes(st.table)) return;
 
             setExpandedProjects((prev) => (prev.includes(st.project) ? prev : [...prev, st.project]));
             setExpandedDatasets((prev) => (prev.includes(dk) ? prev : [...prev, dk]));
@@ -228,7 +229,7 @@ export function ExplorerPage() {
             setExpandedDatasets((s) => [...s, key]);
             if (!datasetTables[key]) {
                 const tb = await explorerQueries.tables(project, dataset);
-                setDatasetTables((m) => ({ ...m, [key]: tb }));
+                setDatasetTables((m) => ({ ...m, [key]: tb.map((e) => e.tableId) }));
             }
         }
     };

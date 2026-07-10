@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Copy, Play, RefreshCw, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { ActionToolbar, ToolbarButton } from '@/components/ui/ActionToolbar';
@@ -9,6 +9,7 @@ import { UnplannedTab } from '@/components/ui/UnplannedTab';
 import { explorerQueries } from '@/features/explorer/api';
 import { Breadcrumbs, tableBreadcrumbs } from '@/features/workspace/components/Breadcrumbs';
 import { useWorkspace } from '@/features/workspace/store';
+import { resourceTabId } from '@/features/workspace/types';
 import type { ResourceType } from '@/types/api';
 
 import { CopyTableModal } from './copyTable/CopyTableModal';
@@ -65,7 +66,7 @@ export function TableTabPage() {
     const { projectId = '', datasetId = '', tableId = '' } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-    const { openQueryForTable } = useWorkspace();
+    const { openQueryForTable, updateTableResourceType, tabs } = useWorkspace();
     const [resourceTab, setResourceTab] = useState<ResourceTab>('schema');
     const [copyOpen, setCopyOpen] = useState(false);
     const [snapshotOpen, setSnapshotOpen] = useState(false);
@@ -75,6 +76,15 @@ export function TableTabPage() {
         queryKey: ['explorer', 'tableSchema', projectId, datasetId, tableId],
         queryFn: () => explorerQueries.tableSchema(projectId, datasetId, tableId),
     });
+
+    useEffect(() => {
+        if (!metadata?.resourceType || !projectId || !datasetId || !tableId) return;
+        const id = resourceTabId('table', projectId, datasetId, tableId);
+        const tab = tabs.find((t) => t.id === id);
+        if (tab?.type === 'table' && tab.resourceType !== metadata.resourceType) {
+            updateTableResourceType(id, metadata.resourceType);
+        }
+    }, [metadata?.resourceType, projectId, datasetId, tableId, tabs, updateTableResourceType]);
 
     const onQuery = () => {
         const id = openQueryForTable(projectId, datasetId, tableId);

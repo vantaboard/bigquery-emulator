@@ -1,23 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    Folder,
-    FolderOpen,
-    FunctionSquare,
-    RefreshCw,
-    Table2,
-} from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { cn } from '@/lib/utils';
 
-import { explorerQueries } from '@/features/explorer/api';
+import { explorerQueries, type TableListEntry } from '@/features/explorer/api';
 import { EXPLORER_DATASETS_CHANGED, EXPLORER_ROUTINES_CHANGED, EXPLORER_TABLES_CHANGED } from '@/features/explorer/events';
+import { ResourceIcon } from '@/features/resource/ResourceIcon';
 import { tabRoutePath, useWorkspace } from '@/features/workspace/store';
 import { resourceTabId } from '@/features/workspace/types';
+import type { ResourceType } from '@/types/api';
 
 export function ResourceSidebar() {
     const navigate = useNavigate();
@@ -26,7 +19,7 @@ export function ResourceSidebar() {
     const [expandedProjects, setExpandedProjects] = useState<string[]>([]);
     const [expandedDatasets, setExpandedDatasets] = useState<string[]>([]);
     const [projectDatasets, setProjectDatasets] = useState<Record<string, string[]>>({});
-    const [datasetTables, setDatasetTables] = useState<Record<string, string[]>>({});
+    const [datasetTables, setDatasetTables] = useState<Record<string, TableListEntry[]>>({});
     const [datasetRoutines, setDatasetRoutines] = useState<Record<string, string[]>>({});
 
     const [newProjectId, setNewProjectId] = useState('');
@@ -77,10 +70,24 @@ export function ResourceSidebar() {
         navigate(tabRoutePath({ type: 'dataset', id, projectId: project, datasetId: dataset }));
     };
 
-    const onSelectTable = (project: string, dataset: string, table: string) => {
-        openTableTab(project, dataset, table);
+    const onSelectTable = (
+        project: string,
+        dataset: string,
+        table: string,
+        resourceType?: ResourceType,
+    ) => {
+        openTableTab(project, dataset, table, resourceType);
         const id = resourceTabId('table', project, dataset, table);
-        navigate(tabRoutePath({ type: 'table', id, projectId: project, datasetId: dataset, tableId: table }));
+        navigate(
+            tabRoutePath({
+                type: 'table',
+                id,
+                projectId: project,
+                datasetId: dataset,
+                tableId: table,
+                resourceType,
+            }),
+        );
     };
 
     const onSelectRoutine = (project: string, dataset: string, routine: string) => {
@@ -240,35 +247,45 @@ export function ResourceSidebar() {
                                                             className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left"
                                                             onClick={() => onSelectDataset(p, d)}
                                                         >
-                                                            {expandedDatasets.includes(dk) ? (
-                                                                <FolderOpen className="size-4 shrink-0" />
-                                                            ) : (
-                                                                <Folder className="size-4 shrink-0" />
-                                                            )}
+                                                            <ResourceIcon kind={{ kind: 'dataset' }} />
                                                             <span className="truncate">{d}</span>
                                                         </button>
                                                     </div>
                                                     {expandedDatasets.includes(dk) && (
                                                         <ul className="ml-4">
-                                                            {(datasetTables[dk] ?? []).map((t) => {
+                                                            {(datasetTables[dk] ?? []).map((entry) => {
                                                                 const active =
                                                                     activeTab?.type === 'table' &&
                                                                     activeTab.projectId === p &&
                                                                     activeTab.datasetId === d &&
-                                                                    activeTab.tableId === t;
+                                                                    activeTab.tableId === entry.tableId;
                                                                 return (
-                                                                    <li key={t}>
+                                                                    <li key={entry.tableId}>
                                                                         <button
                                                                             type="button"
-                                                                            data-testid={`table-${t}`}
+                                                                            data-testid={`table-${entry.tableId}`}
                                                                             className={cn(
                                                                                 'flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-white/5',
                                                                                 active && 'bg-blue-600/30',
                                                                             )}
-                                                                            onClick={() => onSelectTable(p, d, t)}
+                                                                            onClick={() =>
+                                                                                onSelectTable(
+                                                                                    p,
+                                                                                    d,
+                                                                                    entry.tableId,
+                                                                                    entry.resourceType,
+                                                                                )
+                                                                            }
                                                                         >
-                                                                            <Table2 className="size-4 shrink-0" />
-                                                                            <span className="truncate">{t}</span>
+                                                                            <ResourceIcon
+                                                                                kind={{
+                                                                                    kind: 'table',
+                                                                                    resourceType: entry.resourceType,
+                                                                                }}
+                                                                            />
+                                                                            <span className="truncate">
+                                                                                {entry.tableId}
+                                                                            </span>
                                                                         </button>
                                                                     </li>
                                                                 );
@@ -290,7 +307,7 @@ export function ResourceSidebar() {
                                                                             )}
                                                                             onClick={() => onSelectRoutine(p, d, r)}
                                                                         >
-                                                                            <FunctionSquare className="size-4 shrink-0" />
+                                                                            <ResourceIcon kind={{ kind: 'routine' }} />
                                                                             <span className="truncate">{r}</span>
                                                                         </button>
                                                                     </li>

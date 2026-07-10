@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 export interface TabItem {
     id: string;
     label: ReactNode;
+    icon?: ReactNode;
     badge?: ReactNode;
     closable?: boolean;
     testId?: string;

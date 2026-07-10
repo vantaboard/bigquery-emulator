@@ -49,6 +49,17 @@ export function TabBar({ tabs, activeId, onChange, onClose, variant = 'underline
                             onClick={() => onChange(tab.id)}
                         >
                             <span className="inline-flex items-center gap-1.5">
+                                {tab.icon ? (
+                                    <span
+                                        className={cn(
+                                            'inline-flex shrink-0',
+                                            variant === 'workspace' && '[&_svg]:size-3.5',
+                                            active ? 'opacity-100' : 'opacity-70',
+                                        )}
+                                    >
+                                        {tab.icon}
+                                    </span>
+                                ) : null}
                                 {tab.label}
                                 {tab.badge ? (
                                     <span className="text-xs text-[var(--bq-muted)]">{tab.badge}</span>

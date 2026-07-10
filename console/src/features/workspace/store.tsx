@@ -9,7 +9,7 @@ import {
     type ReactNode,
 } from 'react';
 
-import type { QueryResponse } from '@/types/api';
+import type { QueryResponse, ResourceType } from '@/types/api';
 
 import {
     LEGACY_UI_KEY,
@@ -35,13 +35,21 @@ type WorkspaceAction =
     | { type: 'HYDRATE'; session: WorkspaceSession }
     | { type: 'OPEN_QUERY_TAB'; tab: QueryTabState; activate?: boolean }
     | { type: 'OPEN_DATASET_TAB'; projectId: string; datasetId: string; activate?: boolean }
-    | { type: 'OPEN_TABLE_TAB'; projectId: string; datasetId: string; tableId: string; activate?: boolean }
+    | {
+          type: 'OPEN_TABLE_TAB';
+          projectId: string;
+          datasetId: string;
+          tableId: string;
+          resourceType?: ResourceType;
+          activate?: boolean;
+      }
     | { type: 'OPEN_ROUTINE_TAB'; projectId: string; datasetId: string; routineId: string; activate?: boolean }
     | { type: 'ACTIVATE_TAB'; id: string }
     | { type: 'CLOSE_TAB'; id: string }
     | { type: 'REORDER_TAB'; id: string; toIndex: number }
     | { type: 'RENAME_TAB'; id: string; title: string }
     | { type: 'UPDATE_QUERY_TAB'; id: string; patch: Partial<Omit<QueryTabState, 'type' | 'id'>> }
+    | { type: 'UPDATE_TABLE_RESOURCE_TYPE'; id: string; resourceType: ResourceType }
     | { type: 'UPDATE_UI'; patch: Partial<UiPrefs> }
     | { type: 'SAVE_QUERY_CLASSIC'; entry: SavedQueryClassic }
     | { type: 'SAVE_QUERY_VERSIONED'; entry: SavedQueryVersioned; sql: string };
@@ -173,8 +181,19 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
             const id = resourceTabId('table', action.projectId, action.datasetId, action.tableId);
             const existing = state.tabs.find((t) => t.id === id);
             if (existing) {
+                const tabs =
+                    existing.type === 'table' &&
+                    action.resourceType &&
+                    existing.resourceType !== action.resourceType
+                        ? state.tabs.map((t) =>
+                              t.id === id && t.type === 'table'
+                                  ? { ...t, resourceType: action.resourceType }
+                                  : t,
+                          )
+                        : state.tabs;
                 return {
                     ...state,
+                    tabs,
                     activeTabId: action.activate === false ? state.activeTabId : id,
                 };
             }
@@ -184,6 +203,7 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                 projectId: action.projectId,
                 datasetId: action.datasetId,
                 tableId: action.tableId,
+                ...(action.resourceType ? { resourceType: action.resourceType } : {}),
             };
             return {
                 ...state,
@@ -258,6 +278,16 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                 ),
             };
 
+        case 'UPDATE_TABLE_RESOURCE_TYPE':
+            return {
+                ...state,
+                tabs: state.tabs.map((t) =>
+                    t.id === action.id && t.type === 'table'
+                        ? { ...t, resourceType: action.resourceType }
+                        : t,
+                ),
+            };
+
         case 'UPDATE_UI':
             return { ...state, ui: { ...state.ui, ...action.patch } };
 
@@ -300,13 +330,19 @@ export interface WorkspaceContextValue {
     openBlankQuery: (projectId?: string) => string;
     openQueryForTable: (projectId: string, datasetId: string, tableId: string, sql?: string) => string;
     openDatasetTab: (projectId: string, datasetId: string) => void;
-    openTableTab: (projectId: string, datasetId: string, tableId: string) => void;
+    openTableTab: (
+        projectId: string,
+        datasetId: string,
+        tableId: string,
+        resourceType?: ResourceType,
+    ) => void;
     openRoutineTab: (projectId: string, datasetId: string, routineId: string) => void;
     activateTab: (id: string) => void;
     closeTab: (id: string) => void;
     renameTab: (id: string, title: string) => void;
     reorderTab: (id: string, toIndex: number) => void;
     updateQueryTab: (id: string, patch: Partial<Omit<QueryTabState, 'type' | 'id'>>) => void;
+    updateTableResourceType: (id: string, resourceType: ResourceType) => void;
     updateUi: (patch: Partial<UiPrefs>) => void;
     saveQueryClassic: (opts: {
         title: string;
@@ -430,9 +466,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'OPEN_DATASET_TAB', projectId, datasetId });
     }, []);
 
-    const openTableTab = useCallback((projectId: string, datasetId: string, tableId: string) => {
-        dispatch({ type: 'OPEN_TABLE_TAB', projectId, datasetId, tableId });
-    }, []);
+    const openTableTab = useCallback(
+        (projectId: string, datasetId: string, tableId: string, resourceType?: ResourceType) => {
+            dispatch({ type: 'OPEN_TABLE_TAB', projectId, datasetId, tableId, resourceType });
+        },
+        [],
+    );
 
     const openRoutineTab = useCallback((projectId: string, datasetId: string, routineId: string) => {
         dispatch({ type: 'OPEN_ROUTINE_TAB', projectId, datasetId, routineId });
@@ -456,6 +495,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     const updateQueryTab = useCallback((id: string, patch: Partial<Omit<QueryTabState, 'type' | 'id'>>) => {
         dispatch({ type: 'UPDATE_QUERY_TAB', id, patch });
+    }, []);
+
+    const updateTableResourceType = useCallback((id: string, resourceType: ResourceType) => {
+        dispatch({ type: 'UPDATE_TABLE_RESOURCE_TYPE', id, resourceType });
     }, []);
 
     const updateUi = useCallback((patch: Partial<UiPrefs>) => {
@@ -527,6 +570,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             renameTab,
             reorderTab,
             updateQueryTab,
+            updateTableResourceType,
             updateUi,
             saveQueryClassic,
             saveQueryVersioned,
@@ -546,6 +590,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             renameTab,
             reorderTab,
             updateQueryTab,
+            updateTableResourceType,
             updateUi,
             saveQueryClassic,
             saveQueryVersioned,

@@ -79,7 +79,7 @@ export async function submitCopyDataset(opts: {
     await ensureDataset(opts.destProject, opts.destDataset, opts.location);
 
     const writeDisposition = opts.overwrite ? 'WRITE_TRUNCATE' : 'WRITE_EMPTY';
-    for (const tableId of tables) {
+    for (const { tableId } of tables) {
         await submitCopyJobAndWait(
             opts.projectId,
             buildCopyTableJobConfig({

@@ -7,6 +7,8 @@ import {
     routineFromBq,
     routineIdsFromList,
     tableDataFromBq,
+    tableEntriesFromList,
+    tableIdsFromList,
     tableMetadataFromBq,
     type BqDataset,
     type BqJob,
@@ -14,6 +16,7 @@ import {
     type BqRoutineList,
     type BqTable,
     type BqTableData,
+    type BqTableList,
 } from './bqRest';
 
 describe('resourceTypeFromBq', () => {
@@ -27,6 +30,35 @@ describe('resourceTypeFromBq', () => {
     it('defaults unknown types to TABLE', () => {
         expect(resourceTypeFromBq({ type: 'UNKNOWN' })).toBe('TABLE');
         expect(resourceTypeFromBq({})).toBe('TABLE');
+    });
+});
+
+describe('tableEntriesFromList', () => {
+    it('parses tableId and type from tables.list entries', () => {
+        const data: BqTableList = {
+            tables: [
+                { tableReference: { tableId: 't1' }, type: 'TABLE' },
+                { tableReference: { tableId: 'v1' }, type: 'VIEW' },
+                { tableReference: { tableId: 'mv1' }, type: 'MATERIALIZED_VIEW' },
+                { tableReference: { tableId: 's1' }, type: 'SNAPSHOT' },
+                { tableReference: { tableId: 'e1' }, type: 'EXTERNAL' },
+            ],
+        };
+        expect(tableEntriesFromList(data)).toEqual([
+            { tableId: 't1', resourceType: 'TABLE' },
+            { tableId: 'v1', resourceType: 'VIEW' },
+            { tableId: 'mv1', resourceType: 'MATERIALIZED_VIEW' },
+            { tableId: 's1', resourceType: 'SNAPSHOT' },
+            { tableId: 'e1', resourceType: 'EXTERNAL' },
+        ]);
+    });
+
+    it('defaults missing type to TABLE and skips entries without tableId', () => {
+        const data: BqTableList = {
+            tables: [{ tableReference: {} }, { tableReference: { tableId: 'plain' } }],
+        };
+        expect(tableEntriesFromList(data)).toEqual([{ tableId: 'plain', resourceType: 'TABLE' }]);
+        expect(tableIdsFromList(data)).toEqual(['plain']);
     });
 });
 

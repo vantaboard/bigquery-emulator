@@ -44,11 +44,12 @@ export function CreateTableModal({
     const [form, setForm] = useState<CreateTableFormState>(() => defaultCreateTableForm(projectId, datasetId));
     const [validationError, setValidationError] = useState<string | null>(null);
 
-    const { data: tableIds = [] } = useQuery({
+    const { data: tableEntries = [] } = useQuery({
         queryKey: ['explorer', 'tables', projectId, datasetId],
         queryFn: () => explorerQueries.tables(projectId, datasetId),
         enabled: open,
     });
+    const tableIds = tableEntries.map((e) => e.tableId);
 
     useEffect(() => {
         if (open) {

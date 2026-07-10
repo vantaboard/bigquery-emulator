@@ -8,7 +8,7 @@ import {
     routineFromBq,
     routineIdsFromList,
     tableDataFromBq,
-    tableIdsFromList,
+    tableEntriesFromList,
     tableMetadataFromBq,
     type BqDataset,
     type BqDatasetList,
@@ -20,6 +20,7 @@ import {
     type BqTable,
     type BqTableData,
     type BqTableList,
+    type TableListEntry,
 } from '@/lib/bqRest';
 import type {
     DatasetMetadata,
@@ -32,6 +33,8 @@ import type {
     TableMetadata,
     TableSchemaField,
 } from '@/types/api';
+
+export type { TableListEntry };
 
 const defaultProject = import.meta.env.VITE_DEFAULT_PROJECT?.trim() ?? '';
 
@@ -71,11 +74,11 @@ export const explorerQueries = {
         return datasetIdsFromList(data);
     },
 
-    tables: async (projectId: string, datasetId: string): Promise<string[]> => {
+    tables: async (projectId: string, datasetId: string): Promise<TableListEntry[]> => {
         const data = await apiClient.get<BqTableList>(
             `/bigquery/v2/projects/${encodeURIComponent(projectId)}/datasets/${encodeURIComponent(datasetId)}/tables`,
         );
-        return tableIdsFromList(data);
+        return tableEntriesFromList(data);
     },
 
     tableSchema: async (projectId: string, datasetId: string, tableId: string): Promise<TableMetadata> => {

@@ -1,4 +1,4 @@
-import type { QueryResponse } from '@/types/api';
+import type { QueryResponse, ResourceType } from '@/types/api';
 
 export type QuerySubTab = 'results' | 'json';
 
@@ -27,6 +27,8 @@ export interface TableTabState {
     projectId: string;
     datasetId: string;
     tableId: string;
+    /** Present when known from tables.list or tables.get; defaults to TABLE for icons. */
+    resourceType?: ResourceType;
 }
 
 export interface RoutineTabState {

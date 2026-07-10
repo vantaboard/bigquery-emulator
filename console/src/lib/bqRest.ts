@@ -19,7 +19,12 @@ interface BqDatasetList {
 }
 
 interface BqTableList {
-    tables?: Array<{ tableReference?: { tableId?: string } }>;
+    tables?: Array<{ tableReference?: { tableId?: string }; type?: string }>;
+}
+
+export interface TableListEntry {
+    tableId: string;
+    resourceType: ResourceType;
 }
 
 interface BqRoutineList {
@@ -168,9 +173,20 @@ export function datasetIdsFromList(data: BqDatasetList): string[] {
 }
 
 export function tableIdsFromList(data: BqTableList): string[] {
+    return tableEntriesFromList(data).map((e) => e.tableId);
+}
+
+export function tableEntriesFromList(data: BqTableList): TableListEntry[] {
     return (data.tables ?? [])
-        .map((t) => t.tableReference?.tableId)
-        .filter((id): id is string => Boolean(id));
+        .map((t) => {
+            const tableId = t.tableReference?.tableId;
+            if (!tableId) return null;
+            return {
+                tableId,
+                resourceType: resourceTypeFromBq({ type: t.type }),
+            };
+        })
+        .filter((e): e is TableListEntry => e !== null);
 }
 
 export function routineIdsFromList(data: BqRoutineList): string[] {

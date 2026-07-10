@@ -14,7 +14,7 @@ function tableRoute(projectId: string, datasetId: string, tableId: string): stri
 
 export function DatasetTablesSubTab({ projectId, datasetId }: DatasetTablesSubTabProps) {
     const {
-        data: tableIds = [],
+        data: tableEntries = [],
         isLoading,
         isError,
         error,
@@ -24,9 +24,9 @@ export function DatasetTablesSubTab({ projectId, datasetId }: DatasetTablesSubTa
     });
 
     const metaQueries = useQueries({
-        queries: tableIds.map((tableId) => ({
-            queryKey: ['explorer', 'tableSchema', projectId, datasetId, tableId],
-            queryFn: () => explorerQueries.tableSchema(projectId, datasetId, tableId),
+        queries: tableEntries.map((entry) => ({
+            queryKey: ['explorer', 'tableSchema', projectId, datasetId, entry.tableId],
+            queryFn: () => explorerQueries.tableSchema(projectId, datasetId, entry.tableId),
         })),
     });
 
@@ -42,7 +42,7 @@ export function DatasetTablesSubTab({ projectId, datasetId }: DatasetTablesSubTa
         );
     }
 
-    if (tableIds.length === 0) {
+    if (tableEntries.length === 0) {
         return <p className="p-4 text-sm text-[var(--bq-muted)]">No tables in this dataset.</p>;
     }
 
@@ -57,20 +57,20 @@ export function DatasetTablesSubTab({ projectId, datasetId }: DatasetTablesSubTa
                     </tr>
                 </thead>
                 <tbody>
-                    {tableIds.map((tableId, index) => {
+                    {tableEntries.map((entry, index) => {
                         const meta = metaQueries[index]?.data;
                         return (
-                            <tr key={tableId} className="border-b border-[var(--bq-border)]/50 hover:bg-white/5">
+                            <tr key={entry.tableId} className="border-b border-[var(--bq-border)]/50 hover:bg-white/5">
                                 <td className="px-4 py-2">
                                     <Link
-                                        to={tableRoute(projectId, datasetId, tableId)}
+                                        to={tableRoute(projectId, datasetId, entry.tableId)}
                                         className="text-blue-400 hover:underline"
                                     >
-                                        {tableId}
+                                        {entry.tableId}
                                     </Link>
                                 </td>
                                 <td className="px-4 py-2 text-[var(--bq-muted)]">
-                                    {meta?.resourceType ?? meta?.type ?? '—'}
+                                    {meta?.resourceType ?? meta?.type ?? entry.resourceType ?? '—'}
                                 </td>
                                 <td className="px-4 py-2 text-[var(--bq-muted)]">{meta?.creationTime || '—'}</td>
                             </tr>
