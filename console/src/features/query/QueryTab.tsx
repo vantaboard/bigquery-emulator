@@ -301,6 +301,7 @@ export function QueryTab({ tab }: QueryTabProps) {
                     {!ui.editorCollapsed && (
                         <>
                             <SqlEditor
+                                key={tab.id}
                                 value={tab.sql}
                                 projectId={tab.projectId}
                                 defaultDatasetId={tab.datasetId}

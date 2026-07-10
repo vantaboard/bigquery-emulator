@@ -1,5 +1,4 @@
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
 import { useEffect, useMemo, useRef } from 'react';
 
 import {
@@ -7,6 +6,7 @@ import {
     type EditorDiagnostic,
     type GooglesqlLanguageSession,
 } from '@/features/query/languageClient';
+import { monaco } from '@/lib/monacoSetup';
 import { cn } from '@/lib/utils';
 
 loader.config({ monaco });
@@ -73,6 +73,7 @@ export function SqlEditor({
     onDiagnostics,
     onEditorReady,
 }: SqlEditorProps) {
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
     const sessionRef = useRef<GooglesqlLanguageSession | null>(null);
     const onDiagnosticsRef = useRef(onDiagnostics);
     onDiagnosticsRef.current = onDiagnostics;
@@ -96,6 +97,21 @@ export function SqlEditor({
         void sessionRef.current?.updateSettings(settings);
     }, [settings]);
 
+    // Apply parent-driven SQL updates (format API, tab restore) without using the
+    // controlled `value` prop, which fights Monaco on every keystroke and corrupts
+    // LSP document sync.
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) {
+            return;
+        }
+        const model = editor.getModel();
+        if (!model || model.getValue() === value) {
+            return;
+        }
+        editor.setValue(value);
+    }, [value]);
+
     useEffect(() => {
         return () => {
             void sessionRef.current?.dispose();
@@ -104,6 +120,7 @@ export function SqlEditor({
     }, []);
 
     const handleMount: OnMount = (editor) => {
+        editorRef.current = editor;
         ensureGooglesqlLanguage();
         onEditorReadyRef.current?.(editor);
 
@@ -134,7 +151,7 @@ export function SqlEditor({
                 height="220px"
                 language={LANGUAGE_ID}
                 theme="vs-dark"
-                value={value}
+                defaultValue={value}
                 onChange={(next) => onChange(next ?? '')}
                 onMount={handleMount}
                 options={{

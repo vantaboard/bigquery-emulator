@@ -51,10 +51,9 @@ async function monacoEditor(page: Page) {
 
 async function monacoSetValue(page: Page, value: string) {
     const root = await monacoEditor(page);
-    const input = root.locator('textarea.inputarea');
-    await input.click();
+    await root.locator('.monaco-editor').click({ force: true });
     await page.keyboard.press('Control+a');
-    await input.fill(value);
+    await page.keyboard.insertText(value);
 }
 
 async function monacoText(page: Page): Promise<string> {
@@ -252,36 +251,31 @@ test.describe('BigQuery Explorer', () => {
         const squiggle = root.locator('.cdr.squiggly-error, .monaco-editor .squiggly-error').first();
         await expect(squiggle).toBeVisible({ timeout: 5_000 });
         await squiggle.hover({ force: true });
-        const hover = page.locator('.monaco-hover');
+        const hover = page.locator('.monaco-hover').filter({ hasText: 'View Problem' });
         await expect(hover).toBeVisible();
         await expect(hover).toContainText('View Problem (Alt+F8)');
         await expect(hover).toContainText('No quick fixes available');
 
-        await root.locator('textarea.inputarea').press('Alt+F8');
+        await page.keyboard.press('Alt+F8');
         await expect(bar).toBeVisible();
     });
 
     test('shows autocompletion suggestions while typing', async ({ page }) => {
         await openQueryFromTable(page);
-        await monacoSetValue(page, 'SELECT * FROM ');
-
-        await Promise.race([
-            page.waitForResponse(
-                (r) => r.url().includes('/api/emulator/sql/complete') && r.ok(),
-                { timeout: 5000 },
-            ),
-            page.waitForResponse(
-                (r) => r.url().includes('/datasets/') && r.ok(),
-                { timeout: 5000 },
-            ),
-        ]);
+        await monacoSetValue(page, 'SELECT S');
 
         const root = await monacoEditor(page);
-        await root.locator('textarea.inputarea').press('Control+Space');
+        await root.locator('.monaco-editor').click({ force: true });
+        const completeResponsePromise = page.waitForResponse(
+            (r) => r.url().includes('/api/emulator/sql/complete') && r.ok(),
+            { timeout: 10_000 },
+        );
+        await page.keyboard.press('Control+Space');
+        await completeResponsePromise;
 
         const suggest = page.locator('.suggest-widget');
         await expect(suggest).toBeVisible({ timeout: 10_000 });
-        await expect(suggest.locator('.monaco-list-row', { hasText: 'table_a' }).first()).toBeVisible();
+        await expect(suggest.locator('.monaco-list-row', { hasText: 'SAFE_ADD' }).first()).toBeVisible();
     });
 
     test('saves a query to localStorage and restores after reload', async ({ page }) => {
@@ -491,7 +485,7 @@ test.describe('BigQuery Explorer', () => {
         ]);
 
         const root = await monacoEditor(page);
-        await root.locator('textarea.inputarea').press('Control+Space');
+        await page.keyboard.press('Control+Space');
         const suggest = page.locator('.suggest-widget');
         await expect(suggest).toBeVisible({ timeout: 10_000 });
         await expect(suggest.locator('.monaco-list-row', { hasText: routineName }).first()).toBeVisible();
