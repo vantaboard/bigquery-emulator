@@ -39,11 +39,10 @@ export function ContextMenu({ open, items, onClose }: ContextMenuProps) {
         const padding = 8;
         const maxX = window.innerWidth - rect.width - padding;
         const maxY = window.innerHeight - rect.height - padding;
-        setPosition({
-            x: Math.max(padding, Math.min(open.x, maxX)),
-            y: Math.max(padding, Math.min(open.y, maxY)),
-        });
-    }, [open, items]);
+        const x = Math.max(padding, Math.min(open.x, maxX));
+        const y = Math.max(padding, Math.min(open.y, maxY));
+        setPosition((prev) => (prev?.x === x && prev?.y === y ? prev : { x, y }));
+    }, [open?.x, open?.y]);
 
     useEffect(() => {
         if (!open) return;
