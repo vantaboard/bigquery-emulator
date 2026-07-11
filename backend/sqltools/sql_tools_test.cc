@@ -236,6 +236,70 @@ TEST_F(SqlToolsTest, CompleteProjectQualifiedTableCandidate) {
   EXPECT_TRUE(found_fqn);
 }
 
+TEST_F(SqlToolsTest, CompleteColumnContextExcludesOutOfScopeColumns) {
+  CatalogNames names;
+  names.columns_by_table["sales_dataset.transactions"] = {
+      CatalogColumnEntry{"transaction_id", "STRING"},
+      CatalogColumnEntry{"customer_id", "INT64"},
+      CatalogColumnEntry{"total_amount", "NUMERIC"},
+      CatalogColumnEntry{"purchase_date", "TIMESTAMP"},
+  };
+  names.columns_by_table["test-dataset.table_a"] = {
+      CatalogColumnEntry{"id", "INT64"},
+      CatalogColumnEntry{"name", "STRING"},
+      CatalogColumnEntry{"skillNum", "NUMERIC"},
+      CatalogColumnEntry{"structarr", "ARRAY<STRUCT<key STRING, value JSON>>"},
+  };
+  names.columns_by_table["products_dataset.inventory"] = {
+      CatalogColumnEntry{"product_id", "STRING"},
+      CatalogColumnEntry{"specs", "STRUCT<weight FLOAT64>"},
+  };
+  PopulateInScopeTablesFromHeuristic(
+      "SELECT s FROM sales_dataset.transactions", language_, "", &names);
+  ASSERT_EQ(names.in_scope_tables.size(), 1u);
+
+  const std::string sql = "SELECT s FROM sales_dataset.transactions";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, 7, language_, catalog_.get(), names, "");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.kind != "column") continue;
+    EXPECT_NE(candidate.label, "skillNum");
+    EXPECT_NE(candidate.label, "structarr");
+    EXPECT_NE(candidate.label, "specs");
+  }
+}
+
+TEST_F(SqlToolsTest, CompleteColumnContextIncludesInScopeColumns) {
+  CatalogNames names;
+  names.columns_by_table["sales_dataset.transactions"] = {
+      CatalogColumnEntry{"transaction_id", "STRING"},
+      CatalogColumnEntry{"customer_id", "INT64"},
+  };
+  names.columns_by_table["test-dataset.table_a"] = {
+      CatalogColumnEntry{"skillNum", "NUMERIC"},
+  };
+  PopulateInScopeTablesFromHeuristic(
+      "SELECT t FROM sales_dataset.transactions", language_, "", &names);
+
+  const std::string sql = "SELECT t FROM sales_dataset.transactions";
+  const absl::StatusOr<CompleteResult> result =
+      CompleteSqlText(sql, 7, language_, catalog_.get(), names, "");
+  ASSERT_TRUE(result.ok()) << result.status();
+
+  bool found_transaction_id = false;
+  for (const CompletionCandidate& candidate : result->candidates) {
+    if (candidate.label == "transaction_id" && candidate.kind == "column") {
+      found_transaction_id = true;
+    }
+    if (candidate.kind == "column" && candidate.label == "skillNum") {
+      FAIL() << "skillNum should not be suggested for sales_dataset.transactions";
+    }
+  }
+  EXPECT_TRUE(found_transaction_id);
+}
+
 TEST_F(SqlToolsTest, CompleteIncompleteSqlUsesHeuristicColumns) {
   CatalogNames names;
   names.columns_by_table["analytics.events"] = {

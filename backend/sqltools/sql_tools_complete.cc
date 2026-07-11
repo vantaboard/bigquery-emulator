@@ -147,19 +147,6 @@ void AppendInScopeColumnCandidates(
   }
 }
 
-void AppendFlatColumnUnion(const CatalogNames& catalog_names,
-                           absl::string_view prefix,
-                           std::vector<CompletionCandidate>* out) {
-  AppendColumnCandidates(prefix, catalog_names.columns, out);
-  for (const auto& [table_key, columns] : catalog_names.columns_by_table) {
-    (void)table_key;
-    AppendColumnCandidates(prefix, columns, out);
-  }
-  for (const InScopeTableRef& table : catalog_names.in_scope_tables) {
-    AppendColumnCandidates(prefix, table.columns, out);
-  }
-}
-
 absl::flat_hash_set<std::string> RegisteredRoutineNames(
     const CatalogNames& catalog_names) {
   absl::flat_hash_set<std::string> registered_routines;
@@ -327,13 +314,11 @@ absl::StatusOr<CompleteResult> CompleteSqlText(
                                     ctx.qualifier,
                                     catalog_names.in_scope_tables,
                                     &result.candidates);
-      AppendFlatColumnUnion(catalog_names, prefix, &result.candidates);
       AppendClauseWordCandidates(prefix, &result.candidates);
       break;
     case sql_tools_complete_internal::CompletionContextKind::kColumn:
       AppendInScopeColumnCandidates(
           prefix, "", catalog_names.in_scope_tables, &result.candidates);
-      AppendFlatColumnUnion(catalog_names, prefix, &result.candidates);
       AppendRoutineCandidates(
           prefix, catalog_names.routines, &result.candidates);
       AppendCuratedFunctionCandidates(
