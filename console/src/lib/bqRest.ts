@@ -1,3 +1,5 @@
+import { isUserVisibleDataset } from '@/lib/internalCatalog';
+
 import type {
     DatasetMetadata,
     JobRef,
@@ -169,7 +171,8 @@ export function projectIdsFromList(data: BqProjectList): string[] {
 export function datasetIdsFromList(data: BqDatasetList): string[] {
     return (data.datasets ?? [])
         .map((d) => d.datasetReference?.datasetId)
-        .filter((id): id is string => Boolean(id));
+        .filter((id): id is string => Boolean(id))
+        .filter(isUserVisibleDataset);
 }
 
 export function tableIdsFromList(data: BqTableList): string[] {

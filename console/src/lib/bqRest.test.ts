@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    datasetIdsFromList,
     datasetMetadataFromBq,
     jobRefFromBq,
     resourceTypeFromBq,
@@ -18,6 +19,19 @@ import {
     type BqTableData,
     type BqTableList,
 } from './bqRest';
+
+describe('datasetIdsFromList', () => {
+    it('omits internal emulator staging datasets', () => {
+        expect(
+            datasetIdsFromList({
+                datasets: [
+                    { datasetReference: { datasetId: 'events_dataset' } },
+                    { datasetReference: { datasetId: '_bqemu_query_results' } },
+                ],
+            }),
+        ).toEqual(['events_dataset']);
+    });
+});
 
 describe('resourceTypeFromBq', () => {
     it('maps BQ table types to ResourceType', () => {

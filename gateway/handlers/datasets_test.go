@@ -439,6 +439,41 @@ func TestDatasetListSurfacesEngineEntries(t *testing.T) {
 	}
 }
 
+// TestDatasetListOmitsInternalDatasets asserts emulator-internal staging
+// datasets are filtered from datasets.list responses.
+func TestDatasetListOmitsInternalDatasets(t *testing.T) {
+	fake := &fakeCatalogClient{
+		listDatasetsFn: func(_ context.Context, _ *enginepb.ListDatasetsRequest) (*enginepb.ListDatasetsResponse, error) {
+			return &enginepb.ListDatasetsResponse{
+				Datasets: []*enginepb.DatasetRef{
+					{ProjectId: testProjectID, DatasetId: "events_dataset"},
+					{ProjectId: testProjectID, DatasetId: "_bqemu_query_results"},
+				},
+			}, nil
+		},
+	}
+	req := newDatasetReq(http.MethodGet, "", "")
+	rec := httptest.NewRecorder()
+	DatasetList(Dependencies{Catalog: fake})(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	items, _ := doc["datasets"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("datasets entries = %d, want 1; body=%s", len(items), rec.Body.String())
+	}
+	first, _ := items[0].(map[string]any)
+	ref, _ := first["datasetReference"].(map[string]any)
+	if ref["datasetId"] != "events_dataset" {
+		t.Errorf("datasetReference.datasetId = %v, want events_dataset", ref["datasetId"])
+	}
+}
+
 // TestDatasetListForwardsPublicDataProject asserts list requests for
 // bigquery-public-data forward the URL project id to Catalog.ListDatasets
 // so cross-project dataset listing samples see seeded public datasets.

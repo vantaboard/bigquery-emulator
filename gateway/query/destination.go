@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqinternal"
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
@@ -20,7 +21,7 @@ type MetadataStore interface {
 	MergeTable(projectID, datasetID, tableID string, patch bqtypes.Table)
 }
 
-const implicitDestDatasetID = "_bqemu_query_results"
+const implicitDestDatasetID = bqinternal.ImplicitQueryResultsDatasetID
 
 var nonIdentRE = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
 

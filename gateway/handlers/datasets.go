@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqinternal"
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
@@ -116,6 +117,9 @@ func DatasetList(deps Dependencies) http.HandlerFunc {
 		}
 		items := make([]map[string]any, 0, len(resp.GetDatasets()))
 		for _, ref := range resp.GetDatasets() {
+			if !bqinternal.IsUserVisibleDataset(ref.GetDatasetId()) {
+				continue
+			}
 			labels := bqtypes.ResourceLabels{}
 			if overlay, ok := deps.Metadata.GetDataset(
 				ref.GetProjectId(), ref.GetDatasetId(),
