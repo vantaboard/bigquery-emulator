@@ -39,8 +39,7 @@ export function WorkspaceLayout() {
         if (shareHandled.current && !params.tabId && !params.projectId) return;
 
         if (params.tabId) {
-            const tab = tabs.find((t) => t.type === 'query' && t.id === params.tabId);
-            if (tab) activateTab(tab.id);
+            activateTab(params.tabId);
             return;
         }
 
@@ -67,7 +66,6 @@ export function WorkspaceLayout() {
         params.routineId,
         params.tabId,
         params.tableId,
-        tabs,
     ]);
 
     useEffect(() => {

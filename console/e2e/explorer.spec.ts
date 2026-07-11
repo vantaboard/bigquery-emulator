@@ -549,4 +549,18 @@ test.describe('BigQuery Explorer', () => {
         await expect(page.getByTestId('workspace-pane-left').getByTestId('table-tab-page')).toBeVisible();
         await expect(page.getByTestId('workspace-pane-right').getByTestId('sql-editor')).toBeVisible();
     });
+
+    test('closing a dataset tab does not reopen it', async ({ page }) => {
+        await openDataset(page);
+        await page.getByTestId('new-query-tab').click();
+        await expect(page.getByRole('tab', { name: 'test-dataset' })).toBeVisible();
+        await expect(page.getByRole('tab', { name: 'Untitled query' })).toBeVisible();
+
+        await page.getByRole('tab', { name: 'test-dataset' }).click();
+        await page.getByRole('button', { name: 'Close test-dataset' }).click();
+
+        await expect(page.getByRole('tab', { name: 'test-dataset' })).not.toBeVisible();
+        await expect(page.getByTestId('sql-editor')).toBeVisible();
+        await expect(page).toHaveURL(/\/query\//);
+    });
 });

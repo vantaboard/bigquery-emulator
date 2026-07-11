@@ -75,12 +75,12 @@ export function WorkspacePaneTabBar({ paneSide = null }: WorkspacePaneTabBarProp
             const remaining = paneTabs.filter((t) => t.id !== id);
             const closingActive = activeId === id;
 
-            closeTab(id);
-
             if (closingActive) {
                 const next = remaining[Math.min(idx, remaining.length - 1)] ?? remaining[0];
                 navigateToTab(navigate, next);
             }
+
+            closeTab(id);
         },
         [activeId, closeTab, navigate, paneTabs],
     );
