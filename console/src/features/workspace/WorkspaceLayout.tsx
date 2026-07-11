@@ -100,7 +100,7 @@ export function WorkspaceLayout() {
             <div className="flex min-h-0 flex-1">
                 <ResourceSidebar />
                 <div className="flex min-w-0 flex-1 flex-col">
-                    <WorkspaceTabBar />
+                    {!session.split ? <WorkspaceTabBar /> : null}
                     <main className="flex min-h-0 flex-1 flex-col">
                         {session.split ? <WorkspaceSplitPanes /> : <Outlet />}
                     </main>

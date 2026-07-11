@@ -32,11 +32,22 @@ import {
     type WorkspaceSplit,
     type WorkspaceTab,
 } from './types';
-import { pickSecondaryTabId, sanitizeSplit } from './splitUtils';
+import {
+    activateTabInSplit,
+    closeTabInSplit,
+    collapseSplitIfNeeded,
+    findPaneForTab,
+    getPaneGroup,
+    mergeSplitToGlobal,
+    migrateSplit,
+    pickSecondaryTabId,
+    sanitizeSplit,
+    setPaneGroup,
+} from './splitUtils';
 
 type WorkspaceAction =
     | { type: 'HYDRATE'; session: WorkspaceSession }
-    | { type: 'OPEN_QUERY_TAB'; tab: QueryTabState; activate?: boolean }
+    | { type: 'OPEN_QUERY_TAB'; tab: QueryTabState; activate?: boolean; paneSide?: SplitPaneSide }
     | { type: 'OPEN_DATASET_TAB'; projectId: string; datasetId: string; activate?: boolean }
     | {
           type: 'OPEN_TABLE_TAB';
@@ -100,7 +111,7 @@ function parseSession(raw: string): WorkspaceSession | null {
                 ? (data.savedQueriesVersioned as SavedQueryVersioned[])
                 : [],
         };
-        return { ...session, split: sanitizeSplit(session) };
+        return { ...session, split: migrateSplit(session) };
     } catch {
         return null;
     }
@@ -145,33 +156,39 @@ function orderedTabs(tabs: WorkspaceTab[], tabOrder: string[]): WorkspaceTab[] {
     return ordered;
 }
 
-function assignTabToFocusedPane(state: WorkspaceSession, tabId: string): WorkspaceSession {
-    if (!state.split || !state.activeTabId) {
-        return { ...state, activeTabId: tabId };
+function openTabInSession(
+    state: WorkspaceSession,
+    tab: WorkspaceTab,
+    activate: boolean | undefined,
+    paneSide?: SplitPaneSide,
+): WorkspaceSession {
+    const existing = state.tabs.find((t) => t.id === tab.id);
+    if (existing) {
+        if (activate === false) return state;
+        if (state.split) return activateTabInSplit(state, tab.id);
+        return { ...state, activeTabId: tab.id };
     }
 
-    if (tabId === state.activeTabId) {
-        return state;
-    }
-
-    if (tabId === state.split.secondaryTabId) {
+    if (!state.split) {
         return {
             ...state,
-            activeTabId: tabId,
-            split: {
-                ...state.split,
-                secondaryTabId: state.activeTabId,
-            },
+            tabs: [...state.tabs, tab],
+            tabOrder: [...state.tabOrder, tab.id],
+            activeTabId: activate === false ? state.activeTabId : tab.id,
         };
     }
 
+    const side = paneSide ?? state.split.focusedSide;
+    const group = getPaneGroup(state.split, side);
+    const split = setPaneGroup(state.split, side, {
+        tabOrder: [...group.tabOrder, tab.id],
+        activeTabId: activate === false ? group.activeTabId : tab.id,
+    });
     return {
         ...state,
-        activeTabId: tabId,
-        split: {
-            ...state.split,
-            secondaryTabId: state.activeTabId,
-        },
+        tabs: [...state.tabs, tab],
+        activeTabId: activate === false ? state.activeTabId : tab.id,
+        split: { ...split, focusedSide: activate === false ? split.focusedSide : side },
     };
 }
 
@@ -183,27 +200,20 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
         case 'OPEN_QUERY_TAB': {
             const exists = state.tabs.find((t) => t.id === action.tab.id);
             if (exists) {
-                return {
-                    ...state,
-                    activeTabId: action.activate === false ? state.activeTabId : action.tab.id,
-                };
+                if (action.activate === false) return state;
+                if (state.split) return activateTabInSplit(state, action.tab.id);
+                return { ...state, activeTabId: action.tab.id };
             }
-            return {
-                ...state,
-                tabs: [...state.tabs, action.tab],
-                tabOrder: [...state.tabOrder, action.tab.id],
-                activeTabId: action.activate === false ? state.activeTabId : action.tab.id,
-            };
+            return openTabInSession(state, action.tab, action.activate !== false, action.paneSide);
         }
 
         case 'OPEN_DATASET_TAB': {
             const id = resourceTabId('dataset', action.projectId, action.datasetId);
             const existing = state.tabs.find((t) => t.id === id);
             if (existing) {
-                return {
-                    ...state,
-                    activeTabId: action.activate === false ? state.activeTabId : id,
-                };
+                if (action.activate === false) return state;
+                if (state.split) return activateTabInSplit(state, id);
+                return { ...state, activeTabId: id };
             }
             const tab: DatasetTabState = {
                 type: 'dataset',
@@ -211,12 +221,7 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                 projectId: action.projectId,
                 datasetId: action.datasetId,
             };
-            return {
-                ...state,
-                tabs: [...state.tabs, tab],
-                tabOrder: [...state.tabOrder, id],
-                activeTabId: action.activate === false ? state.activeTabId : id,
-            };
+            return openTabInSession(state, tab, action.activate !== false);
         }
 
         case 'OPEN_TABLE_TAB': {
@@ -233,11 +238,10 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                                   : t,
                           )
                         : state.tabs;
-                return {
-                    ...state,
-                    tabs,
-                    activeTabId: action.activate === false ? state.activeTabId : id,
-                };
+                const withType = { ...state, tabs };
+                if (action.activate === false) return withType;
+                if (withType.split) return activateTabInSplit(withType, id);
+                return { ...withType, activeTabId: id };
             }
             const tab: TableTabState = {
                 type: 'table',
@@ -247,22 +251,16 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                 tableId: action.tableId,
                 ...(action.resourceType ? { resourceType: action.resourceType } : {}),
             };
-            return {
-                ...state,
-                tabs: [...state.tabs, tab],
-                tabOrder: [...state.tabOrder, id],
-                activeTabId: action.activate === false ? state.activeTabId : id,
-            };
+            return openTabInSession(state, tab, action.activate !== false);
         }
 
         case 'OPEN_ROUTINE_TAB': {
             const id = resourceTabId('routine', action.projectId, action.datasetId, action.routineId);
             const existing = state.tabs.find((t) => t.id === id);
             if (existing) {
-                return {
-                    ...state,
-                    activeTabId: action.activate === false ? state.activeTabId : id,
-                };
+                if (action.activate === false) return state;
+                if (state.split) return activateTabInSplit(state, id);
+                return { ...state, activeTabId: id };
             }
             const tab: RoutineTabState = {
                 type: 'routine',
@@ -271,58 +269,57 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
                 datasetId: action.datasetId,
                 routineId: action.routineId,
             };
-            return {
-                ...state,
-                tabs: [...state.tabs, tab],
-                tabOrder: [...state.tabOrder, id],
-                activeTabId: action.activate === false ? state.activeTabId : id,
-            };
+            return openTabInSession(state, tab, action.activate !== false);
         }
 
         case 'ACTIVATE_TAB':
             if (!state.tabs.some((t) => t.id === action.id)) return state;
-            if (state.split) {
-                return assignTabToFocusedPane(state, action.id);
-            }
+            if (state.split) return activateTabInSplit(state, action.id);
             return { ...state, activeTabId: action.id };
 
         case 'ASSIGN_TAB_TO_FOCUSED_PANE':
             if (!state.tabs.some((t) => t.id === action.id)) return state;
-            if (!state.split) {
-                return { ...state, activeTabId: action.id };
-            }
-            return assignTabToFocusedPane(state, action.id);
+            if (state.split) return activateTabInSplit(state, action.id);
+            return { ...state, activeTabId: action.id };
 
         case 'CLOSE_TAB': {
             if (!state.tabs.some((t) => t.id === action.id)) return state;
+            if (state.split) return closeTabInSplit(state, action.id);
+
             const tabs = state.tabs.filter((t) => t.id !== action.id);
             const tabOrder = state.tabOrder.filter((closedId) => closedId !== action.id);
-
-            if (state.split) {
-                const closingFocused = state.activeTabId === action.id;
-                const closingSecondary = state.split.secondaryTabId === action.id;
-                if (closingFocused) {
-                    const survivor = state.split.secondaryTabId;
-                    if (tabs.some((t) => t.id === survivor)) {
-                        return { ...state, tabs, tabOrder, activeTabId: survivor, split: null };
-                    }
-                } else if (closingSecondary) {
-                    return { ...state, tabs, tabOrder, split: null };
-                }
-            }
-
             let activeTabId = state.activeTabId;
             if (activeTabId === action.id) {
                 const idx = state.tabOrder.indexOf(action.id);
                 activeTabId = tabOrder[idx] ?? tabOrder[idx - 1] ?? tabOrder[0] ?? null;
             }
-            const next: WorkspaceSession = { ...state, tabs, tabOrder, activeTabId };
-            return { ...next, split: sanitizeSplit(next) };
+            return { ...state, tabs, tabOrder, activeTabId };
         }
 
         case 'CLOSE_OTHER_TABS': {
             const keep = state.tabs.find((t) => t.id === action.keepId);
             if (!keep) return state;
+
+            if (state.split) {
+                const pane = findPaneForTab(state.split, action.keepId);
+                if (!pane) return state;
+                const group = getPaneGroup(state.split, pane);
+                const removeIds = group.tabOrder.filter((id) => id !== action.keepId);
+                const split = {
+                    ...setPaneGroup(state.split, pane, {
+                        tabOrder: [action.keepId],
+                        activeTabId: action.keepId,
+                    }),
+                    focusedSide: pane,
+                };
+                return collapseSplitIfNeeded({
+                    ...state,
+                    tabs: state.tabs.filter((t) => t.id === action.keepId || !removeIds.includes(t.id)),
+                    activeTabId: action.keepId,
+                    split,
+                });
+            }
+
             return {
                 ...state,
                 tabs: [keep],
@@ -335,30 +332,59 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
         case 'SPLIT_TAB': {
             if (state.tabs.length < 2) return state;
             if (!state.tabs.some((t) => t.id === action.tabId)) return state;
-            const secondaryTabId = pickSecondaryTabId(state, action.tabId);
-            if (!secondaryTabId) return state;
-            return {
+
+            if (!state.split) {
+                const others = state.tabOrder.filter((id) => id !== action.tabId);
+                const otherActive = pickSecondaryTabId(state, action.tabId) ?? others[0] ?? null;
+                const targetGroup = { tabOrder: [action.tabId], activeTabId: action.tabId };
+                const otherGroup = { tabOrder: others, activeTabId: otherActive };
+                const split: WorkspaceSplit = {
+                    left: action.side === 'left' ? targetGroup : otherGroup,
+                    right: action.side === 'right' ? targetGroup : otherGroup,
+                    focusedSide: action.side,
+                    ratio: 0.5,
+                };
+                return { ...state, activeTabId: action.tabId, split };
+            }
+
+            let split = state.split;
+            const currentPane = findPaneForTab(split, action.tabId);
+            if (currentPane && currentPane !== action.side) {
+                const fromGroup = getPaneGroup(split, currentPane);
+                const remaining = fromGroup.tabOrder.filter((id) => id !== action.tabId);
+                split = setPaneGroup(split, currentPane, {
+                    tabOrder: remaining,
+                    activeTabId:
+                        fromGroup.activeTabId === action.tabId
+                            ? remaining[remaining.length - 1] ?? null
+                            : fromGroup.activeTabId,
+                });
+            }
+
+            const targetGroup = getPaneGroup(split, action.side);
+            const targetOrder = targetGroup.tabOrder.includes(action.tabId)
+                ? targetGroup.tabOrder
+                : [...targetGroup.tabOrder, action.tabId];
+            split = setPaneGroup(split, action.side, {
+                tabOrder: targetOrder,
+                activeTabId: action.tabId,
+            });
+
+            return collapseSplitIfNeeded({
                 ...state,
                 activeTabId: action.tabId,
-                split: {
-                    secondaryTabId,
-                    primarySide: action.side,
-                    ratio: state.split?.ratio ?? 0.5,
-                },
-            };
+                split: { ...split, focusedSide: action.side },
+            });
         }
 
         case 'FOCUS_PANE': {
-            if (!state.split || !state.activeTabId) return state;
-            if (state.split.primarySide === action.side) return state;
+            if (!state.split) return state;
+            const group = getPaneGroup(state.split, action.side);
+            if (!group.activeTabId) return state;
             return {
                 ...state,
-                activeTabId: state.split.secondaryTabId,
-                split: {
-                    ...state.split,
-                    secondaryTabId: state.activeTabId,
-                    primarySide: action.side,
-                },
+                activeTabId: group.activeTabId,
+                split: { ...state.split, focusedSide: action.side },
             };
         }
 
@@ -373,7 +399,7 @@ function workspaceReducer(state: WorkspaceSession, action: WorkspaceAction): Wor
             };
 
         case 'CLEAR_SPLIT':
-            return { ...state, split: null };
+            return mergeSplitToGlobal(state);
 
         case 'REORDER_TAB': {
             const fromIndex = state.tabOrder.indexOf(action.id);
@@ -449,7 +475,7 @@ export interface WorkspaceContextValue {
     activeTab: WorkspaceTab | null;
     ui: UiPrefs;
     dispatch: Dispatch<WorkspaceAction>;
-    openBlankQuery: (projectId?: string) => string;
+    openBlankQuery: (projectId?: string, paneSide?: SplitPaneSide) => string;
     openQueryForTable: (projectId: string, datasetId: string, tableId: string, sql?: string) => string;
     openDatasetTab: (projectId: string, datasetId: string) => void;
     openTableTab: (
@@ -506,14 +532,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         saveWorkspaceSession(session);
     }, [session]);
 
-    const tabs = useMemo(() => orderedTabs(session.tabs, session.tabOrder), [session.tabs, session.tabOrder]);
+    const tabs = useMemo(() => {
+        if (session.split) {
+            const order = [...session.split.left.tabOrder, ...session.split.right.tabOrder];
+            return orderedTabs(session.tabs, order);
+        }
+        return orderedTabs(session.tabs, session.tabOrder);
+    }, [session.split, session.tabOrder, session.tabs]);
 
     const activeTab = useMemo(
         () => tabs.find((t) => t.id === session.activeTabId) ?? null,
         [tabs, session.activeTabId],
     );
 
-    const openBlankQuery = useCallback((projectId = '') => {
+    const openBlankQuery = useCallback((projectId = '', paneSide?: SplitPaneSide) => {
         const id = newQueryTabId();
         const tab: QueryTabState = {
             type: 'query',
@@ -523,7 +555,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             subTab: 'results',
             projectId,
         };
-        dispatch({ type: 'OPEN_QUERY_TAB', tab });
+        dispatch({ type: 'OPEN_QUERY_TAB', tab, paneSide });
         return id;
     }, []);
 

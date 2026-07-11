@@ -2,24 +2,17 @@ import { useCallback, useRef, type PointerEvent } from 'react';
 
 import { cn } from '@/lib/utils';
 
-import { paneTabIds } from '@/features/workspace/splitUtils';
+import { getPaneGroup, orderedPaneTabs } from '@/features/workspace/splitUtils';
 import { useWorkspace } from '@/features/workspace/store';
-import type { SplitPaneSide, WorkspaceTab } from '@/features/workspace/types';
+import type { SplitPaneSide } from '@/features/workspace/types';
 
+import { WorkspacePaneTabBar } from './WorkspacePaneTabBar';
 import { WorkspaceTabContent } from './WorkspaceTabContent';
-
-function tabById(tabs: WorkspaceTab[], id: string | null): WorkspaceTab | null {
-    if (!id) return null;
-    return tabs.find((t) => t.id === id) ?? null;
-}
 
 export function WorkspaceSplitPanes() {
     const { session, tabs, focusPane, setSplitRatio } = useWorkspace();
     const dragRef = useRef<{ startX: number; startRatio: number } | null>(null);
 
-    const { leftTabId, rightTabId, focusedSide } = paneTabIds(session.split, session.activeTabId);
-    const leftTab = tabById(tabs, leftTabId);
-    const rightTab = tabById(tabs, rightTabId);
     const ratio = session.split?.ratio ?? 0.5;
 
     const onDividerPointerDown = useCallback(
@@ -51,8 +44,13 @@ export function WorkspaceSplitPanes() {
         event.currentTarget.releasePointerCapture(event.pointerId);
     }, []);
 
-    const renderPane = (tab: WorkspaceTab | null, side: SplitPaneSide) => {
-        const focused = focusedSide === side;
+    const renderPane = (side: SplitPaneSide) => {
+        if (!session.split) return null;
+        const group = getPaneGroup(session.split, side);
+        const paneTabs = orderedPaneTabs(tabs, group.tabOrder);
+        const activeTab = paneTabs.find((t) => t.id === group.activeTabId) ?? paneTabs[0] ?? null;
+        const focused = session.split.focusedSide === side;
+
         return (
             <div
                 data-testid={side === 'left' ? 'workspace-pane-left' : 'workspace-pane-right'}
@@ -62,8 +60,9 @@ export function WorkspaceSplitPanes() {
                 )}
                 onMouseDown={() => focusPane(side)}
             >
-                {tab ? (
-                    <WorkspaceTabContent tab={tab} />
+                <WorkspacePaneTabBar paneSide={side} />
+                {activeTab ? (
+                    <WorkspaceTabContent tab={activeTab} />
                 ) : (
                     <div className="flex flex-1 items-center justify-center text-sm text-[var(--bq-muted)]">
                         No tab
@@ -76,7 +75,7 @@ export function WorkspaceSplitPanes() {
     return (
         <div className="flex min-h-0 flex-1">
             <div className="flex min-h-0 min-w-0 flex-col" style={{ width: `${ratio * 100}%` }}>
-                {renderPane(leftTab, 'left')}
+                {renderPane('left')}
             </div>
             <div
                 role="separator"
@@ -86,7 +85,7 @@ export function WorkspaceSplitPanes() {
                 onPointerMove={onDividerPointerMove}
                 onPointerUp={onDividerPointerUp}
             />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{renderPane(rightTab, 'right')}</div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{renderPane('right')}</div>
         </div>
     );
 }

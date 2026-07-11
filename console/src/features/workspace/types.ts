@@ -43,11 +43,15 @@ export type WorkspaceTab = QueryTabState | DatasetTabState | TableTabState | Rou
 
 export type SplitPaneSide = 'left' | 'right';
 
+export interface SplitPaneGroup {
+    tabOrder: string[];
+    activeTabId: string | null;
+}
+
 export interface WorkspaceSplit {
-    /** Tab shown in the non-focused pane */
-    secondaryTabId: string;
-    /** Which side holds activeTabId (focused pane) */
-    primarySide: SplitPaneSide;
+    left: SplitPaneGroup;
+    right: SplitPaneGroup;
+    focusedSide: SplitPaneSide;
     /** Left pane width fraction */
     ratio: number;
 }

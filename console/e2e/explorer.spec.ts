@@ -544,6 +544,8 @@ test.describe('BigQuery Explorer', () => {
 
         await expect(page.getByTestId('workspace-pane-left')).toBeVisible();
         await expect(page.getByTestId('workspace-pane-right')).toBeVisible();
+        await expect(page.getByTestId('workspace-pane-tabbar-left')).toBeVisible();
+        await expect(page.getByTestId('workspace-pane-tabbar-right')).toBeVisible();
         await expect(page.getByTestId('workspace-pane-left').getByTestId('table-tab-page')).toBeVisible();
         await expect(page.getByTestId('workspace-pane-right').getByTestId('sql-editor')).toBeVisible();
     });
