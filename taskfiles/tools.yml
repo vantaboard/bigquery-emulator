@@ -18,6 +18,42 @@ tasks:
       - mise install
 
   doctor:
-    desc: Run `mise doctor` to diagnose toolchain issues (missing pins, stale shims, ...)
+    desc: |
+      Diagnose toolchain issues: mise doctor plus a check that PATH's
+      golangci-lint is not a stale GOPATH binary built with an older Go
+      than go.mod (that combination fails with "Go language version ...
+      used to build golangci-lint is lower than the targeted Go version").
     cmds:
       - mise doctor
+      - |
+        set -eo pipefail
+        root="$(git rev-parse --show-toplevel)"
+        cd "$root"
+        target_go="$(sed -n 's/^go //p' go.mod | head -1)"
+        if [ -z "$target_go" ]; then
+          echo "tools:doctor: could not read go version from go.mod" >&2
+          exit 1
+        fi
+        mise_bin="$(mise which golangci-lint 2>/dev/null || true)"
+        path_bin="$(command -v golangci-lint 2>/dev/null || true)"
+        if [ -z "$mise_bin" ]; then
+          echo "tools:doctor: mise golangci-lint missing; run: task tools:install" >&2
+          exit 1
+        fi
+        echo "tools:doctor: mise golangci-lint -> $mise_bin"
+        mise x -- golangci-lint version
+        if [ -n "$path_bin" ] && [ "$(readlink -f "$path_bin")" != "$(readlink -f "$mise_bin")" ]; then
+          echo "tools:doctor: WARNING: PATH resolves golangci-lint to $path_bin" >&2
+          echo "  (mise pin is $mise_bin). A GOPATH/bin copy built with an older" >&2
+          echo "  Go will break lint when it shadows mise. Prefer: rm -f \"$path_bin\"" >&2
+          echo "  Lint tasks use \`mise x -- golangci-lint\` so they stay correct." >&2
+          "$path_bin" version 2>&1 | sed 's/^/  PATH binary: /' >&2 || true
+        fi
+        # Smoke that the pinned binary accepts go.mod's language version.
+        if ! mise x -- golangci-lint config path >/dev/null 2>&1; then
+          echo "tools:doctor: mise golangci-lint cannot load .golangci.yml for go ${target_go}" >&2
+          echo "  Fix: upgrade the golangci-lint pin in mise.toml (must be built with go >= ${target_go})" >&2
+          mise x -- golangci-lint config path 2>&1 || true
+          exit 1
+        fi
+        echo "tools:doctor: golangci-lint OK for go ${target_go}"

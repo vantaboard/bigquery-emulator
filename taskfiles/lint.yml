@@ -261,23 +261,28 @@ tasks:
 
   go:
     desc: Run golangci-lint with the project's .golangci.yml (slow, full check)
+    # Invoke via `mise x` so a stale `$(go env GOPATH)/bin/golangci-lint`
+    # (often built with an older Go via `go install`) cannot shadow the
+    # binary pinned in mise.toml. golangci-lint refuses to load config
+    # when its build Go is older than go.mod's language version.
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        golangci-lint run ./...
+        mise x -- golangci-lint run ./...
 
   go-fix:
     desc: Run golangci-lint --fix to apply formatters and auto-fixable linters
+    # See lint:go — always use the mise-pinned binary, not PATH order.
     cmds:
       - |
         set -eo pipefail
         root="$(git rev-parse --show-toplevel)"
         cd "$root"
         export GOFLAGS="-buildvcs=false${GOFLAGS:+ ${GOFLAGS}}"
-        golangci-lint run --fix ./...
+        mise x -- golangci-lint run --fix ./...
 
   dispositions:
     desc: |
