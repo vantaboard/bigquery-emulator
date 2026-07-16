@@ -294,7 +294,8 @@ TEST_F(SqlToolsTest, CompleteColumnContextIncludesInScopeColumns) {
       found_transaction_id = true;
     }
     if (candidate.kind == "column" && candidate.label == "skillNum") {
-      FAIL() << "skillNum should not be suggested for sales_dataset.transactions";
+      FAIL()
+          << "skillNum should not be suggested for sales_dataset.transactions";
     }
   }
   EXPECT_TRUE(found_transaction_id);

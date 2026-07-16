@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<FunctionInfoEntry>& FunctionInfoEntriesA() {
-  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<FunctionInfoEntry>{
+  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<
+      FunctionInfoEntry>{
       {"ABS",
        "numeric_expr",
        "Computes absolute value. Returns an error if theargument isan integer "

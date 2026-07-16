@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<ClauseWordEntry>& ClauseWordEntries() {
-  static const std::vector<ClauseWordEntry>* kEntries = new std::vector<ClauseWordEntry>{
+  static const std::vector<ClauseWordEntry>* kEntries =
+      new std::vector<ClauseWordEntry>{
           {"SELECT", "select"},
           {"FROM", "from"},
           {"INNER JOIN", "join"},
@@ -194,7 +195,7 @@ const std::vector<ClauseWordEntry>& ClauseWordEntries() {
           {"DEFINE", "match_recognize"},
           {"AFTER MATCH SKIP TO NEXT ROW", "match_recognize"},
           {"AFTER MATCH SKIP PAST LAST ROW", "match_recognize"},
-  };
+      };
   return *kEntries;
 }
 

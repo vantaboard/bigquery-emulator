@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<FunctionInfoEntry>& FunctionInfoEntriesB() {
-  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<FunctionInfoEntry>{
+  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<
+      FunctionInfoEntry>{
       {"LAST_DAY",
        "datetime_expression [, date_part]",
        "Returns the last day from the <datetime_expression> that contains the "

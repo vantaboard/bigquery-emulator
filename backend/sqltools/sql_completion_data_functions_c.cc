@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<FunctionInfoEntry>& FunctionInfoEntriesC() {
-  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<FunctionInfoEntry>{
+  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<
+      FunctionInfoEntry>{
       {"TAN",
        "numeric_expr",
        "Computes tangent of <numeric_expr>. Generates an error if an overflow "

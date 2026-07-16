@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<std::string>& ExpressionKeywordEntries() {
-  static const std::vector<std::string>* kEntries = new std::vector<std::string>{
+  static const std::vector<std::string>* kEntries =
+      new std::vector<std::string>{
           "ACCESS",       "ADD",          "AFTER",
           "AGGREGATE",    "ALL",          "ALTER",
           "AND",          "ANY",          "ARRAY",
@@ -66,7 +67,7 @@ const std::vector<std::string>& ExpressionKeywordEntries() {
           "UNPIVOT",      "UNTIL",        "USING",
           "VIEW",         "WHEN",         "WITH",
           "WITHIN",
-  };
+      };
   return *kEntries;
 }
 

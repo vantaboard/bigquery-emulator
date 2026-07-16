@@ -5,7 +5,8 @@ namespace backend {
 namespace sqltools {
 namespace completion_data_internal {
 const std::vector<FunctionInfoEntry>& TvfFunctionInfoEntries() {
-  static const std::vector<FunctionInfoEntry>* kEntries = new std::vector<FunctionInfoEntry>{
+  static const std::vector<FunctionInfoEntry>* kEntries =
+      new std::vector<FunctionInfoEntry>{
           {"ML.EVALUATE",
            "MODEL model, TABLE table | (subquery) [, STRUCT(numeric_expr AS "
            "threshold)]",
@@ -31,7 +32,7 @@ const std::vector<FunctionInfoEntry>& TvfFunctionInfoEntries() {
            "Produces a table of sessionized ranges.",
            "https://cloud.google.com/bigquery/docs/reference/standard-sql/"
            "range-functions#range_sessionize"},
-  };
+      };
   return *kEntries;
 }
 
