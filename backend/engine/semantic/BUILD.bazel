@@ -331,6 +331,7 @@ cc_library(
         "scan_eval_analytic_layout.cc",
         "scan_eval_analytic_apply.cc",
         "scan_eval_analytic_numbering.cc",
+        "scan_eval_analytic_aggregate.cc",
         "scan_eval_sample.cc",
         "scan_eval_match_recognize.cc",
         "scan_eval_scan_impl.cc",
@@ -349,9 +350,13 @@ cc_library(
         ":outer_row_eval",
         ":value",
         "@com_google_absl//absl/container:flat_hash_map",
+        # Hash-join build/probe index in
+        # `scan_eval_materialize_helpers.cc`.
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/status",
         "@googlesql//googlesql/public:function",
         "@googlesql//googlesql/public:evaluator",
+        "@googlesql//googlesql/public:type",
         "//backend/catalog:storage_table",
         "//backend/engine/semantic/array_struct:array_scan",
         "//backend/engine/semantic/functions:operator_funcs",
@@ -515,6 +520,7 @@ cc_test(
     name = "executor_test",
     srcs = [
         "executor_analytic_test.cc",
+        "executor_join_test.cc",
         "executor_test.cc",
         "executor_test_fixture.h",
     ],

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -264,6 +265,15 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeJoinScan(
   if (!left_or.ok()) return left_or.status();
   auto right_or = MaterializeScanImpl(join.right_scan(), ctx);
   if (!right_or.ok()) return right_or.status();
+  // Equality conjuncts over hash-safe column types take the hash
+  // path (O(L + R + matches)); everything else keeps the general
+  // nested loop. Same inclusion semantics either way.
+  if (std::optional<materialize_internal::EquiJoinPlan> plan =
+          materialize_internal::PlanEquiJoin(join);
+      plan.has_value()) {
+    return materialize_internal::MaterializeHashEquiJoinRows(
+        join, *plan, *left_or, *right_or, ctx);
+  }
   return MaterializeNestedLoopJoinRows(join, *left_or, *right_or, ctx);
 }
 

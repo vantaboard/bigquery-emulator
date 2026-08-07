@@ -1,14 +1,20 @@
+#include <cstddef>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/array_struct/array_scan.h"
+#include "backend/engine/semantic/eval_expr_internal.h"
 #include "backend/engine/semantic/outer_row_eval.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/scan_eval_materialize_internal.h"
 #include "backend/engine/semantic/value.h"
+#include "googlesql/public/type.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 
@@ -20,6 +26,8 @@ namespace scan_eval_internal {
 
 using ::bigquery_emulator::backend::engine::semantic::EvalContext;
 using ::bigquery_emulator::backend::engine::semantic::EvalExpr;
+using ::bigquery_emulator::backend::engine::semantic::eval_expr_internal::
+    LowerFunctionDispatchName;
 
 namespace materialize_internal {
 
@@ -90,6 +98,199 @@ absl::StatusOr<bool> ShouldIncludeJoinRow(
   EvalContext merged_ctx = ctx;
   merged_ctx.columns = &merged;
   return EvalBoolExpr(join.join_expr(), merged_ctx);
+}
+
+namespace {
+
+// Key types where `GroupKeyFingerprint` equality coincides with SQL
+// equality for non-NULL values. DOUBLE/FLOAT are excluded (NaN and
+// signed-zero semantics), as are INTERVAL (distinct representations
+// compare equal) and composite/exotic types (nested-NULL equality).
+bool HashableJoinKeyType(const ::googlesql::Type* type) {
+  if (type == nullptr) return false;
+  switch (type->kind()) {
+    case ::googlesql::TYPE_INT32:
+    case ::googlesql::TYPE_INT64:
+    case ::googlesql::TYPE_UINT32:
+    case ::googlesql::TYPE_UINT64:
+    case ::googlesql::TYPE_BOOL:
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_BYTES:
+    case ::googlesql::TYPE_DATE:
+    case ::googlesql::TYPE_TIMESTAMP:
+    case ::googlesql::TYPE_TIME:
+    case ::googlesql::TYPE_DATETIME:
+    case ::googlesql::TYPE_NUMERIC:
+    case ::googlesql::TYPE_BIGNUMERIC:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void FlattenAndConjuncts(const ::googlesql::ResolvedExpr* expr,
+                         std::vector<const ::googlesql::ResolvedExpr*>& out) {
+  if (expr == nullptr) return;
+  if (expr->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
+    const auto* call = expr->GetAs<::googlesql::ResolvedFunctionCall>();
+    if (call->function() != nullptr &&
+        LowerFunctionDispatchName(call->function()) == "$and") {
+      for (int i = 0; i < call->argument_list_size(); ++i) {
+        FlattenAndConjuncts(call->argument_list(i), out);
+      }
+      return;
+    }
+  }
+  out.push_back(expr);
+}
+
+// Returns the column id when `expr` is an uncorrelated bare column
+// reference of a hash-safe type; -1 otherwise.
+int HashableColumnRefId(const ::googlesql::ResolvedExpr* expr) {
+  if (expr == nullptr ||
+      expr->node_kind() != ::googlesql::RESOLVED_COLUMN_REF) {
+    return -1;
+  }
+  const auto* ref = expr->GetAs<::googlesql::ResolvedColumnRef>();
+  if (ref->is_correlated() || !HashableJoinKeyType(ref->type())) return -1;
+  return ref->column().column_id();
+}
+
+absl::StatusOr<std::string> JoinKeyFingerprint(const ColumnBindings& row,
+                                               const std::vector<int>& key_ids,
+                                               bool* has_null_key) {
+  std::vector<Value> keys;
+  keys.reserve(key_ids.size());
+  *has_null_key = false;
+  for (int id : key_ids) {
+    auto it = row.find(id);
+    if (it == row.end()) {
+      return absl::InternalError(
+          absl::StrCat("semantic: join key column_id=",
+                       id,
+                       " missing from materialized row"));
+    }
+    if (it->second.is_null()) {
+      *has_null_key = true;
+      return std::string();
+    }
+    keys.push_back(it->second);
+  }
+  return GroupKeyFingerprint(keys);
+}
+
+}  // namespace
+
+std::optional<EquiJoinPlan> PlanEquiJoin(
+    const ::googlesql::ResolvedJoinScan& join) {
+  if (join.is_lateral() || join.join_expr() == nullptr) return std::nullopt;
+  if (join.join_type() != ::googlesql::ResolvedJoinScan::INNER &&
+      join.join_type() != ::googlesql::ResolvedJoinScan::LEFT) {
+    return std::nullopt;
+  }
+  if (join.left_scan() == nullptr || join.right_scan() == nullptr) {
+    return std::nullopt;
+  }
+  absl::flat_hash_set<int> left_ids;
+  for (int i = 0; i < join.left_scan()->column_list_size(); ++i) {
+    left_ids.insert(join.left_scan()->column_list(i).column_id());
+  }
+  absl::flat_hash_set<int> right_ids;
+  for (int i = 0; i < join.right_scan()->column_list_size(); ++i) {
+    right_ids.insert(join.right_scan()->column_list(i).column_id());
+  }
+
+  std::vector<const ::googlesql::ResolvedExpr*> conjuncts;
+  FlattenAndConjuncts(join.join_expr(), conjuncts);
+
+  EquiJoinPlan plan;
+  for (const ::googlesql::ResolvedExpr* conjunct : conjuncts) {
+    int lhs = -1;
+    int rhs = -1;
+    if (conjunct != nullptr &&
+        conjunct->node_kind() == ::googlesql::RESOLVED_FUNCTION_CALL) {
+      const auto* call = conjunct->GetAs<::googlesql::ResolvedFunctionCall>();
+      if (call->function() != nullptr && call->argument_list_size() == 2 &&
+          LowerFunctionDispatchName(call->function()) == "$equal") {
+        lhs = HashableColumnRefId(call->argument_list(0));
+        rhs = HashableColumnRefId(call->argument_list(1));
+      }
+    }
+    if (lhs >= 0 && rhs >= 0 && left_ids.contains(lhs) &&
+        right_ids.contains(rhs)) {
+      plan.left_key_ids.push_back(lhs);
+      plan.right_key_ids.push_back(rhs);
+    } else if (lhs >= 0 && rhs >= 0 && left_ids.contains(rhs) &&
+               right_ids.contains(lhs)) {
+      plan.left_key_ids.push_back(rhs);
+      plan.right_key_ids.push_back(lhs);
+    } else {
+      plan.residual.push_back(conjunct);
+    }
+  }
+  if (plan.left_key_ids.empty()) return std::nullopt;
+  return plan;
+}
+
+absl::StatusOr<std::vector<ColumnBindings>> MaterializeHashEquiJoinRows(
+    const ::googlesql::ResolvedJoinScan& join,
+    const EquiJoinPlan& plan,
+    const std::vector<ColumnBindings>& left_rows,
+    const std::vector<ColumnBindings>& right_rows,
+    const EvalContext& ctx) {
+  const bool is_left_outer =
+      join.join_type() == ::googlesql::ResolvedJoinScan::LEFT;
+  const ::googlesql::ResolvedScan* rscan = StripBarrierScans(join.right_scan());
+
+  absl::flat_hash_map<std::string, std::vector<size_t>> right_index;
+  right_index.reserve(right_rows.size());
+  for (size_t r = 0; r < right_rows.size(); ++r) {
+    bool has_null_key = false;
+    auto fp =
+        JoinKeyFingerprint(right_rows[r], plan.right_key_ids, &has_null_key);
+    if (!fp.ok()) return fp.status();
+    if (has_null_key) continue;  // NULL keys never match.
+    right_index[*fp].push_back(r);
+  }
+
+  const std::vector<size_t> no_matches;
+  std::vector<ColumnBindings> out;
+  for (const ColumnBindings& lrow : left_rows) {
+    bool has_null_key = false;
+    auto fp = JoinKeyFingerprint(lrow, plan.left_key_ids, &has_null_key);
+    if (!fp.ok()) return fp.status();
+    const std::vector<size_t>* matches = &no_matches;
+    if (!has_null_key) {
+      auto it = right_index.find(*fp);
+      if (it != right_index.end()) matches = &it->second;
+    }
+    bool any_match = false;
+    for (size_t r : *matches) {
+      ColumnBindings merged = lrow;
+      merged.insert(right_rows[r].begin(), right_rows[r].end());
+      bool include = true;
+      for (const ::googlesql::ResolvedExpr* residual : plan.residual) {
+        EvalContext merged_ctx = ctx;
+        merged_ctx.columns = &merged;
+        auto ok = EvalBoolExpr(residual, merged_ctx);
+        if (!ok.ok()) return ok.status();
+        if (!*ok) {
+          include = false;
+          break;
+        }
+      }
+      if (include) {
+        any_match = true;
+        out.push_back(std::move(merged));
+      }
+    }
+    if (!any_match && is_left_outer) {
+      ColumnBindings merged = lrow;
+      AppendNullRightColumns(rscan, &merged);
+      out.push_back(std::move(merged));
+    }
+  }
+  return out;
 }
 
 absl::StatusOr<std::vector<ColumnBindings>> MaterializeNestedLoopJoinRows(
