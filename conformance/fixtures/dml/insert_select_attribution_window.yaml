@@ -1,0 +1,103 @@
+# R17: INSERT...SELECT attribution shape must stay on DuckDB.
+#
+# Compact form of the tester's activity-summary INSERT: CTE + JOIN +
+# TIMESTAMP_ADD window filter + NOT IN + ROW_NUMBER + outer aggregates.
+# Before R17, `$in` and `timestamp_add` forced semantic_executor and
+# the nested-loop join path hung at ~1k–10k rows.
+name: insert_select_attribution_window
+description: |
+  INSERT...SELECT with TIMESTAMP_ADD / NOT IN / ROW_NUMBER attribution
+  routes to DuckDB (not semantic_executor) and produces correct rows.
+project_id: proj-dml-attr-window
+dataset_id: ds_attr
+setup:
+  - dataset: ds_attr
+  - table:
+      dataset: ds_attr
+      id: dispatches
+      schema:
+        - {name: user_public_id, type: STRING, mode: REQUIRED}
+        - {name: activity_id, type: STRING, mode: REQUIRED}
+        - {name: channel, type: STRING, mode: REQUIRED}
+        - {name: dispatched_at, type: TIMESTAMP, mode: REQUIRED}
+  - table:
+      dataset: ds_attr
+      id: users
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: public_id, type: STRING, mode: REQUIRED}
+  - table:
+      dataset: ds_attr
+      id: transactions
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: user_id, type: INT64, mode: REQUIRED}
+        - {name: total_amount, type: FLOAT64, mode: REQUIRED}
+        - {name: is_deleted, type: BOOL, mode: NULLABLE}
+        - {name: status, type: STRING, mode: REQUIRED}
+        - {name: source_created_at, type: TIMESTAMP, mode: REQUIRED}
+  - table:
+      dataset: ds_attr
+      id: summary
+      schema:
+        - {name: activity_id, type: STRING, mode: NULLABLE}
+        - {name: total_transactions, type: INT64, mode: NULLABLE}
+        - {name: gross_value, type: FLOAT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_attr
+      table: users
+      rows:
+        - {id: 1, public_id: u1}
+        - {id: 2, public_id: u2}
+  - rows:
+      dataset: ds_attr
+      table: dispatches
+      rows:
+        - {user_public_id: u1, activity_id: a1, channel: ch1, dispatched_at: '2024-03-01 10:00:00 UTC'}
+        - {user_public_id: u1, activity_id: a2, channel: ch2, dispatched_at: '2024-03-02 10:00:00 UTC'}
+        - {user_public_id: u2, activity_id: a1, channel: ch1, dispatched_at: '2024-03-01 12:00:00 UTC'}
+  - rows:
+      dataset: ds_attr
+      table: transactions
+      rows:
+        - {id: 10, user_id: 1, total_amount: "100.0", is_deleted: false, status: ok, source_created_at: '2024-03-03 15:00:00 UTC'}
+        - {id: 11, user_id: 1, total_amount: "50.0", is_deleted: false, status: status_x, source_created_at: '2024-03-03 16:00:00 UTC'}
+        - {id: 12, user_id: 2, total_amount: "200.0", is_deleted: false, status: done, source_created_at: '2024-03-02 15:00:00 UTC'}
+  - sql: |
+      INSERT INTO ds_attr.summary (activity_id, total_transactions, gross_value)
+      WITH Attributed AS (
+        SELECT
+          logs.activity_id,
+          txn.id AS txn_id,
+          txn.total_amount,
+          ROW_NUMBER() OVER (
+            PARTITION BY txn.id ORDER BY logs.dispatched_at DESC
+          ) AS attribution_rank
+        FROM ds_attr.dispatches logs
+        JOIN ds_attr.users users ON logs.user_public_id = users.public_id
+        JOIN ds_attr.transactions txn ON users.id = txn.user_id
+        WHERE txn.source_created_at > logs.dispatched_at
+          AND txn.source_created_at <= TIMESTAMP_ADD(logs.dispatched_at, INTERVAL 7 DAY)
+          AND COALESCE(txn.is_deleted, FALSE) = FALSE
+          AND txn.status NOT IN ('status_x', 'status_y')
+      )
+      SELECT
+        activity_id,
+        COUNT(txn_id) AS total_transactions,
+        COALESCE(SUM(total_amount), 0) AS gross_value
+      FROM Attributed
+      WHERE attribution_rank = 1
+      GROUP BY activity_id
+query: |
+  SELECT activity_id, total_transactions, gross_value
+  FROM ds_attr.summary
+  ORDER BY activity_id
+expected:
+  # Final SELECT is duckdb_native; INSERT route is pinned separately
+  # by insert_select_attribution_window_route.yaml.
+  route: duckdb_native
+  rows:
+    # txn10 → a2 (later dispatch wins ROW_NUMBER); txn12 → a1;
+    # txn11 excluded by NOT IN ('status_x', ...).
+    - {activity_id: "a1", total_transactions: "1", gross_value: "200"}
+    - {activity_id: "a2", total_transactions: "1", gross_value: "100"}

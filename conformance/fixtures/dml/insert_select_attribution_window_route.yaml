@@ -1,0 +1,46 @@
+# R17: route pin — INSERT...SELECT with TIMESTAMP_ADD + NOT IN stays
+# on DuckDB (duckdb_udf via timestamp_add), not semantic_executor.
+name: insert_select_attribution_window_route
+description: |
+  Compact attribution INSERT must not promote to semantic_executor.
+project_id: proj-dml-attr-route
+dataset_id: ds_attr_route
+setup:
+  - dataset: ds_attr_route
+  - sql: |
+      CREATE TABLE ds_attr_route.dispatches (
+        user_public_id STRING, activity_id STRING,
+        dispatched_at TIMESTAMP
+      )
+  - sql: |
+      CREATE TABLE ds_attr_route.users (id INT64, public_id STRING)
+  - sql: |
+      CREATE TABLE ds_attr_route.transactions (
+        id INT64, user_id INT64, total_amount FLOAT64,
+        status STRING, source_created_at TIMESTAMP
+      )
+  - sql: |
+      CREATE TABLE ds_attr_route.summary (
+        activity_id STRING, total_transactions INT64
+      )
+  - sql: |
+      INSERT INTO ds_attr_route.users VALUES (1, 'u1')
+  - sql: |
+      INSERT INTO ds_attr_route.dispatches VALUES
+        ('u1', 'a1', TIMESTAMP '2024-03-01 10:00:00 UTC')
+  - sql: |
+      INSERT INTO ds_attr_route.transactions VALUES
+        (10, 1, 100.0, 'ok', TIMESTAMP '2024-03-03 15:00:00 UTC')
+query: |
+  INSERT INTO ds_attr_route.summary (activity_id, total_transactions)
+  SELECT logs.activity_id, COUNT(*) AS total_transactions
+  FROM ds_attr_route.dispatches logs
+  JOIN ds_attr_route.users users ON logs.user_public_id = users.public_id
+  JOIN ds_attr_route.transactions txn ON users.id = txn.user_id
+  WHERE txn.source_created_at > logs.dispatched_at
+    AND txn.source_created_at <= TIMESTAMP_ADD(logs.dispatched_at, INTERVAL 7 DAY)
+    AND txn.status NOT IN ('status_x', 'status_y')
+  GROUP BY logs.activity_id
+expected:
+  route: duckdb_udf
+  rows: []

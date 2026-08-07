@@ -1,0 +1,14 @@
+# R17: TIMESTAMP_SUB on the DuckDB UDF path (bq_timestamp_sub).
+name: function_timestamp_sub
+description: |
+  TIMESTAMP_SUB with INTERVAL 90 MINUTE lowers to bq_timestamp_sub.
+project_id: proj-functions-timestamp-sub
+query: |
+  SELECT UNIX_SECONDS(
+           TIMESTAMP_SUB(TIMESTAMP '2024-01-01 00:00:00 UTC', INTERVAL 90 MINUTE)
+         ) AS s
+  FROM UNNEST([1]) AS _
+expected:
+  route: duckdb_udf
+  rows:
+    - {s: "1704061800"}

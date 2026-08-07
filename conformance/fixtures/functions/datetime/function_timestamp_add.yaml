@@ -1,0 +1,24 @@
+# R17: TIMESTAMP_ADD on the DuckDB UDF path (bq_timestamp_add).
+#
+# Pins fixed-width INTERVAL arithmetic (DAY == exactly 86400s) so the
+# attribution-window shape in the tester's INSERT...SELECT no longer
+# promotes the whole statement onto the semantic executor.
+#
+# Assert via UNIX_SECONDS (not a raw TIMESTAMP cell): the REST wire
+# encodes TIMESTAMP as epoch micros, which the conformance differ
+# would otherwise mis-read as seconds.
+name: function_timestamp_add
+description: |
+  TIMESTAMP_ADD with INTERVAL 7 DAY lowers to bq_timestamp_add and
+  routes duckdb_udf. FROM UNNEST keeps a non-scalar SELECT so the
+  scalar-only promotion does not mask the function disposition.
+project_id: proj-functions-timestamp-add
+query: |
+  SELECT UNIX_SECONDS(
+           TIMESTAMP_ADD(TIMESTAMP '2024-03-09 12:00:00 UTC', INTERVAL 7 DAY)
+         ) AS s
+  FROM UNNEST([1]) AS _
+expected:
+  route: duckdb_udf
+  rows:
+    - {s: "1710590400"}

@@ -1,0 +1,37 @@
+# R17: value-list IN / NOT IN on the DuckDB native path.
+#
+# Previously `$in` was disposition=semantic_executor, which dragged
+# every `status NOT IN (...)` filter (and thus the tester's attribution
+# INSERT) onto the interpreted nested-loop join path.
+name: operator_in_not_in_value_list
+description: |
+  STRING IN / NOT IN value lists stay on duckdb_native with SQL NULL
+  semantics (NULL IN (...) is NULL / filtered by WHERE).
+project_id: proj-op-in-value-list
+dataset_id: ds_op_in
+setup:
+  - dataset: ds_op_in
+  - table:
+      dataset: ds_op_in
+      id: items
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: status, type: STRING, mode: NULLABLE}
+  - rows:
+      dataset: ds_op_in
+      table: items
+      rows:
+        - {id: 1, status: ok}
+        - {id: 2, status: status_x}
+        - {id: 3, status: status_y}
+        - {id: 4, status: done}
+        - {id: 5, status: null}
+query: |
+  SELECT id FROM ds_op_in.items
+  WHERE status NOT IN ('status_x', 'status_y')
+  ORDER BY id
+expected:
+  route: duckdb_native
+  rows:
+    - {id: "1"}
+    - {id: "4"}

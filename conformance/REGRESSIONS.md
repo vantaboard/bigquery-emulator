@@ -29,6 +29,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R14 | `NTILE` over aggregate input → "analytic function 'ntile' is not yet implemented" | window + semantic executor test | semantic `ApplyAnalyticNtile` |
 | R15 | `RANK`/`DENSE_RANK`/`LAG`/`LEAD` over aggregate input → "analytic function ... is not yet implemented" | window + semantic executor test | semantic rank/lag/lead apply |
 | R16 | `MAX(date_col)` on semantic route → "aggregate 'max' is not implemented" | aggregate + semantic executor test | MIN/MAX over all orderable types via `Value::LessThan` |
+| R17 | INSERT…SELECT with `TIMESTAMP_ADD` + `NOT IN` + `COALESCE(SUM…)` hangs at ~1k–10k rows (semantic nested-loop joins) | dml + datetime + scalar + classifier/transpiler/semantic tests | `$in` + `timestamp_add/sub` → DuckDB; semantic hash equi-join; `COALESCE(agg)` still forces semantic (DuckDB CTE/`__bq_j_*` follow-up) |
 
 ## Paths by tag
 
@@ -110,6 +111,17 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 - `conformance/fixtures/aggregate/aggregate_min_max_date_string_semantic.yaml`
 - `backend/engine/semantic/executor_test.cc` (`MaxOverDateReturnsLatestDate`, `MinOverStringReturnsSmallestByCodePoint`, `MaxOverAllNullDatesReturnsNull`)
 
+### R17 — attribution INSERT hangs at modest scale
+
+- `conformance/fixtures/dml/insert_select_attribution_window.yaml`
+- `conformance/fixtures/dml/insert_select_attribution_window_route.yaml`
+- `conformance/fixtures/functions/datetime/function_timestamp_add.yaml`
+- `conformance/fixtures/functions/datetime/function_timestamp_sub.yaml`
+- `conformance/fixtures/scalar/operator_in_not_in_value_list.yaml`
+- `backend/engine/coordinator/route_classifier_core_test.cc` (`TimestampAddLiteralIntervalRoutesToDuckdbUdf`, `InsertSelectAttributionShapeRoutesToDuckdb`, `CoalesceAroundCountStarPromotesViaDeferredColumn`)
+- `backend/engine/duckdb/transpiler/transpiler_integration_test.cc` (`TranspileTimestampAddLiteralInterval`, `TranspileNotInStringList`, `TranspileCoalesceAroundCountStar`)
+- `backend/engine/semantic/executor_join_test.cc` (hash equi-join)
+
 ## Machine-readable index
 
 Parsed by `go test ./conformance/ -run TestRegressionsIndexPathsExist`.
@@ -167,15 +179,20 @@ R12:
 R13:
   - conformance/fixtures/cte_subquery/unnest_groupby_cte_then_join.yaml
   - conformance/fixtures/cte_subquery/unnest_cte_then_join.yaml
-  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
 R14:
   - conformance/fixtures/window/ntile_over_aggregate_input.yaml
-  - backend/engine/semantic/executor_analytic_test.cc
 R15:
   - conformance/fixtures/window/rank_dense_rank_over_aggregate_input.yaml
   - conformance/fixtures/window/lag_lead_over_aggregate_input.yaml
-  - backend/engine/semantic/executor_analytic_test.cc
 R16:
   - conformance/fixtures/aggregate/aggregate_min_max_date_string_semantic.yaml
   - backend/engine/semantic/executor_test.cc
+R17:
+  - conformance/fixtures/dml/insert_select_attribution_window.yaml
+  - conformance/fixtures/dml/insert_select_attribution_window_route.yaml
+  - conformance/fixtures/functions/datetime/function_timestamp_add.yaml
+  - conformance/fixtures/functions/datetime/function_timestamp_sub.yaml
+  - conformance/fixtures/scalar/operator_in_not_in_value_list.yaml
+  - backend/engine/coordinator/route_classifier_core_test.cc
+  - backend/engine/semantic/executor_join_test.cc
 ```
