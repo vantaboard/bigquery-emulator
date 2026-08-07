@@ -31,8 +31,6 @@ absl::StatusOr<Value> AvgNumericCells(const ::googlesql::Type* return_type,
                                       const std::vector<Value>& cells);
 absl::StatusOr<Value> AvgBigNumericCells(const ::googlesql::Type* return_type,
                                          const std::vector<Value>& cells);
-bool ShouldReplaceMinMax(const Value& cur, const Value& v, bool pick_max);
-bool IsSupportedMinMaxType(::googlesql::TypeKind kind);
 
 }  // namespace aggregate_sum_avg_internal
 }  // namespace functions

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
@@ -23,9 +24,7 @@ using aggregate_sum_avg_internal::AvgBigNumericCells;
 using aggregate_sum_avg_internal::AvgDoubleCells;
 using aggregate_sum_avg_internal::AvgInt64Cells;
 using aggregate_sum_avg_internal::AvgNumericCells;
-using aggregate_sum_avg_internal::IsSupportedMinMaxType;
 using aggregate_sum_avg_internal::NullOfAggregateType;
-using aggregate_sum_avg_internal::ShouldReplaceMinMax;
 using aggregate_sum_avg_internal::SumDoubleCells;
 using aggregate_sum_avg_internal::SumInt64Cells;
 using aggregate_sum_avg_internal::SumNumericAggregateCells;
@@ -99,6 +98,13 @@ absl::StatusOr<Value> AvgAggregateImpl(
   }
 }
 
+bool IsNaNCell(const Value& v) {
+  return (v.type_kind() == ::googlesql::TYPE_DOUBLE &&
+          std::isnan(v.double_value())) ||
+         (v.type_kind() == ::googlesql::TYPE_FLOAT &&
+          std::isnan(v.float_value()));
+}
+
 template <typename CallLike>
 absl::StatusOr<Value> MinMaxAggregateImpl(
     const CallLike& call,
@@ -115,21 +121,20 @@ absl::StatusOr<Value> MinMaxAggregateImpl(
   std::optional<Value> best;
   for (const Value& v : cells) {
     if (v.is_null()) continue;
+    // BigQuery MIN/MAX return NaN whenever any input is NaN.
+    if (IsNaNCell(v)) return v;
     if (!best.has_value()) {
       best = v;
       continue;
     }
-    const Value& cur = *best;
-    if (cur.type_kind() != v.type_kind()) {
+    if (best->type_kind() != v.type_kind()) {
       return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
                                "semantic: MIN/MAX argument type mismatch");
     }
-    if (!IsSupportedMinMaxType(v.type_kind())) {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: MIN/MAX is not implemented for this argument type");
-    }
-    if (ShouldReplaceMinMax(cur, v, pick_max)) {
+    // `Value::LessThan` is a total order over identically typed values and
+    // covers every orderable GoogleSQL type (DATE, DATETIME, TIME, STRING,
+    // ...). The analyzer rejects unorderable MIN/MAX arguments upstream.
+    if (pick_max ? best->LessThan(v) : v.LessThan(*best)) {
       best = v;
     }
   }

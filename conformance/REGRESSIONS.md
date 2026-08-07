@@ -28,6 +28,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R13 | UNNEST in CTE then outer JOIN → DuckDB `__bq_j_N` / `__bq_input_rn` not found | cte_subquery + transpiler test | reset join-alias + rn flags across CTE boundaries |
 | R14 | `NTILE` over aggregate input → "analytic function 'ntile' is not yet implemented" | window + semantic executor test | semantic `ApplyAnalyticNtile` |
 | R15 | `RANK`/`DENSE_RANK`/`LAG`/`LEAD` over aggregate input → "analytic function ... is not yet implemented" | window + semantic executor test | semantic rank/lag/lead apply |
+| R16 | `MAX(date_col)` on semantic route → "aggregate 'max' is not implemented" | aggregate + semantic executor test | MIN/MAX over all orderable types via `Value::LessThan` |
 
 ## Paths by tag
 
@@ -104,6 +105,11 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 - `conformance/fixtures/window/lag_lead_over_aggregate_input.yaml`
 - `backend/engine/semantic/executor_analytic_test.cc` (`RankDenseRankOverNestedAggregateTies`, `LagLeadOverNestedAggregate`)
 
+### R16 — MIN/MAX over DATE / STRING on the semantic route
+
+- `conformance/fixtures/aggregate/aggregate_min_max_date_string_semantic.yaml`
+- `backend/engine/semantic/executor_test.cc` (`MaxOverDateReturnsLatestDate`, `MinOverStringReturnsSmallestByCodePoint`, `MaxOverAllNullDatesReturnsNull`)
+
 ## Machine-readable index
 
 Parsed by `go test ./conformance/ -run TestRegressionsIndexPathsExist`.
@@ -169,4 +175,7 @@ R15:
   - conformance/fixtures/window/rank_dense_rank_over_aggregate_input.yaml
   - conformance/fixtures/window/lag_lead_over_aggregate_input.yaml
   - backend/engine/semantic/executor_analytic_test.cc
+R16:
+  - conformance/fixtures/aggregate/aggregate_min_max_date_string_semantic.yaml
+  - backend/engine/semantic/executor_test.cc
 ```

@@ -1,0 +1,50 @@
+# R16: MIN/MAX over DATE / STRING on the semantic-executor route.
+# Reported: "400 rpc error: code = Unimplemented desc = semantic:
+# aggregate 'max' is not implemented".
+# Index: conformance/REGRESSIONS.md
+#
+# The NTILE(...) OVER (ORDER BY SUM(...)) nested aggregate promotes the
+# whole query to `semantic_executor`, so every aggregate in the query is
+# evaluated by the semantic aggregate path. That path's MIN/MAX only
+# accepted INT64/DOUBLE/NUMERIC/BIGNUMERIC/TIMESTAMP arguments; a DATE
+# or STRING argument fell through `EvalAggregateCall`'s dispatch chain
+# and surfaced as the generic "aggregate 'max' is not implemented".
+name: aggregate_min_max_date_string_semantic
+description: |
+  MAX over DATE and MIN over STRING evaluated on the semantic-executor
+  route (query promoted by a nested-aggregate NTILE window).
+project_id: proj-r16-minmax-agg
+dataset_id: ds_r16_minmax
+setup:
+  - dataset: ds_r16_minmax
+  - table:
+      dataset: ds_r16_minmax
+      id: orders
+      schema:
+        - {name: customer_id, type: INT64, mode: REQUIRED}
+        - {name: order_date, type: DATE, mode: REQUIRED}
+        - {name: status, type: STRING, mode: REQUIRED}
+        - {name: amount, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_r16_minmax
+      table: orders
+      rows:
+        - {customer_id: 1, order_date: '2024-01-10', status: churned, amount: 100}
+        - {customer_id: 1, order_date: '2024-03-05', status: active, amount: 50}
+        - {customer_id: 2, order_date: '2024-02-20', status: active, amount: 200}
+        - {customer_id: 3, order_date: '2024-01-01', status: new, amount: 50}
+query: |
+  SELECT
+    customer_id,
+    MAX(order_date) AS last_order,
+    MIN(status) AS first_status,
+    NTILE(2) OVER (ORDER BY SUM(amount) DESC) AS bucket
+  FROM ds_r16_minmax.orders
+  GROUP BY customer_id
+  ORDER BY customer_id
+expected:
+  route: semantic_executor
+  rows:
+    - {customer_id: "1", last_order: "2024-03-05", first_status: "active", bucket: "1"}
+    - {customer_id: "2", last_order: "2024-02-20", first_status: "active", bucket: "1"}
+    - {customer_id: "3", last_order: "2024-01-01", first_status: "new", bucket: "2"}

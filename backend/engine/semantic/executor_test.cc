@@ -257,6 +257,42 @@ TEST_F(SemanticExecutorTest, DdlSurfacesNotImplemented) {
   EXPECT_EQ(out.code(), absl::StatusCode::kUnimplemented);
 }
 
+// R16 (conformance/REGRESSIONS.md): MIN/MAX over non-numeric orderable
+// argument types (DATE, STRING, ...) used to fall through the aggregate
+// dispatch as kNotImplemented and surface as the generic
+// "semantic: aggregate 'max' is not implemented".
+TEST_F(SemanticExecutorTest, MaxOverDateReturnsLatestDate) {
+  const std::string sql =
+      "WITH orders AS ("
+      "  SELECT DATE '2024-01-10' AS order_date UNION ALL"
+      "  SELECT DATE '2024-03-05' UNION ALL"
+      "  SELECT DATE '2024-02-20') "
+      "SELECT MAX(order_date) FROM orders";
+  auto cell = RunForFirstCell(sql);
+  ASSERT_TRUE(cell.ok()) << cell.status();
+  EXPECT_EQ(cell->string_value(), "2024-03-05");
+}
+
+TEST_F(SemanticExecutorTest, MinOverStringReturnsSmallestByCodePoint) {
+  const std::string sql =
+      "WITH names AS ("
+      "  SELECT 'pear' AS n UNION ALL SELECT 'apple' UNION ALL SELECT 'plum') "
+      "SELECT MIN(n) FROM names";
+  auto cell = RunForFirstCell(sql);
+  ASSERT_TRUE(cell.ok()) << cell.status();
+  EXPECT_EQ(cell->string_value(), "apple");
+}
+
+TEST_F(SemanticExecutorTest, MaxOverAllNullDatesReturnsNull) {
+  const std::string sql =
+      "WITH d AS (SELECT CAST(NULL AS DATE) AS x UNION ALL"
+      "           SELECT CAST(NULL AS DATE)) "
+      "SELECT MAX(x) FROM d";
+  auto cell = RunForFirstCell(sql);
+  ASSERT_TRUE(cell.ok()) << cell.status();
+  EXPECT_TRUE(cell->is_null());
+}
+
 TEST_F(SemanticExecutorTest, ChainedCteReferencesPriorEntry) {
   const std::string sql =
       "WITH base AS (SELECT 1 AS n UNION ALL SELECT 2 AS n), "

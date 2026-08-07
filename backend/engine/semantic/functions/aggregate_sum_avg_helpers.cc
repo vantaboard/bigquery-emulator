@@ -1,4 +1,3 @@
-#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -20,18 +19,7 @@ namespace aggregate_sum_avg_internal {
 
 absl::StatusOr<Value> NullOfAggregateType(const ::googlesql::Type* type) {
   if (type == nullptr) return Value::NullInt64();
-  switch (type->kind()) {
-    case ::googlesql::TYPE_INT64:
-      return Value::NullInt64();
-    case ::googlesql::TYPE_DOUBLE:
-      return Value::NullDouble();
-    case ::googlesql::TYPE_NUMERIC:
-      return Value::NullNumeric();
-    case ::googlesql::TYPE_BIGNUMERIC:
-      return Value::NullBigNumeric();
-    default:
-      return Value::NullInt64();
-  }
+  return Value::Null(type);
 }
 
 absl::StatusOr<Value> CoerceToNumeric(const Value& v) {
@@ -285,41 +273,6 @@ absl::StatusOr<Value> AvgBigNumericCells(const ::googlesql::Type* return_type,
                              avg.status().message());
   }
   return Value::BigNumeric(*avg);
-}
-
-bool ShouldReplaceMinMax(const Value& cur, const Value& v, bool pick_max) {
-  switch (v.type_kind()) {
-    case ::googlesql::TYPE_INT64:
-      return pick_max ? v.int64_value() > cur.int64_value()
-                      : v.int64_value() < cur.int64_value();
-    case ::googlesql::TYPE_DOUBLE:
-      return pick_max ? v.double_value() > cur.double_value()
-                      : v.double_value() < cur.double_value();
-    case ::googlesql::TYPE_NUMERIC:
-      return pick_max ? v.numeric_value() > cur.numeric_value()
-                      : v.numeric_value() < cur.numeric_value();
-    case ::googlesql::TYPE_BIGNUMERIC:
-      return pick_max ? v.bignumeric_value() > cur.bignumeric_value()
-                      : v.bignumeric_value() < cur.bignumeric_value();
-    case ::googlesql::TYPE_TIMESTAMP:
-      return pick_max ? v.ToUnixMicros() > cur.ToUnixMicros()
-                      : v.ToUnixMicros() < cur.ToUnixMicros();
-    default:
-      return false;
-  }
-}
-
-bool IsSupportedMinMaxType(::googlesql::TypeKind kind) {
-  switch (kind) {
-    case ::googlesql::TYPE_INT64:
-    case ::googlesql::TYPE_DOUBLE:
-    case ::googlesql::TYPE_NUMERIC:
-    case ::googlesql::TYPE_BIGNUMERIC:
-    case ::googlesql::TYPE_TIMESTAMP:
-      return true;
-    default:
-      return false;
-  }
 }
 
 }  // namespace aggregate_sum_avg_internal
