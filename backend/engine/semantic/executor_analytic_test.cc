@@ -2,8 +2,6 @@
 // (R14 NTILE, R15 RANK/DENSE_RANK/LAG/LEAD). Fixture shared via
 // `executor_test_fixture.h`.
 
-#include "backend/engine/semantic/executor_test_fixture.h"
-
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -11,6 +9,7 @@
 
 #include "absl/status/status.h"
 #include "backend/engine/semantic/executor.h"
+#include "backend/engine/semantic/executor_test_fixture.h"
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"

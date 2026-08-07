@@ -25,7 +25,12 @@ namespace bigquery_emulator {
 namespace backend {
 namespace engine {
 namespace semantic {
-namespace {
+
+// NOTE: deliberately NOT in an anonymous namespace. Both
+// `executor_test.cc` and `executor_analytic_test.cc` link into the
+// same `cc_test` binary and share the `SemanticExecutorTest` suite
+// name; an anonymous namespace would give each TU a distinct fixture
+// type, which gtest rejects ("must use the same test fixture class").
 
 inline ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   ::googlesql::LanguageOptions language;
@@ -87,7 +92,6 @@ class SemanticExecutorTest : public ::testing::Test {
   std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
 };
 
-}  // namespace
 }  // namespace semantic
 }  // namespace engine
 }  // namespace backend
