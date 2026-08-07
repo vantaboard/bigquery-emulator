@@ -120,25 +120,6 @@ Value LookupColumnValue(const ColumnBindings& row, int col_id) {
   return it->second;
 }
 
-absl::StatusOr<Value> AddValues(const Value& a, const Value& b) {
-  if (a.is_null()) return b;
-  if (b.is_null()) return a;
-  if (a.type_kind() == ::googlesql::TYPE_INT64 &&
-      b.type_kind() == ::googlesql::TYPE_INT64) {
-    return Value::Int64(a.int64_value() + b.int64_value());
-  }
-  if (a.type_kind() == ::googlesql::TYPE_DOUBLE &&
-      b.type_kind() == ::googlesql::TYPE_DOUBLE) {
-    return Value::Double(a.double_value() + b.double_value());
-  }
-  if (a.type_kind() == ::googlesql::TYPE_FLOAT &&
-      b.type_kind() == ::googlesql::TYPE_FLOAT) {
-    return Value::Float(a.float_value() + b.float_value());
-  }
-  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                           "semantic: analytic SUM add unsupported types");
-}
-
 absl::StatusOr<Value> FrameBoundValue(
     const ::googlesql::ResolvedWindowFrameExpr* bound,
     const Value& current_order,
@@ -155,6 +136,13 @@ absl::StatusOr<Value> FrameBoundValue(
     case ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING: {
       auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
       if (!offset_or.ok()) return offset_or.status();
+      if (current_order.type_kind() == ::googlesql::TYPE_INT64) {
+        return Value::Int64(current_order.int64_value() - *offset_or);
+      }
+      if (current_order.type_kind() == ::googlesql::TYPE_DOUBLE) {
+        return Value::Double(current_order.double_value() -
+                             static_cast<double>(*offset_or));
+      }
       if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
         return AddDateOffset(current_order, -*offset_or);
       }
@@ -166,6 +154,13 @@ absl::StatusOr<Value> FrameBoundValue(
     case ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING: {
       auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
       if (!offset_or.ok()) return offset_or.status();
+      if (current_order.type_kind() == ::googlesql::TYPE_INT64) {
+        return Value::Int64(current_order.int64_value() + *offset_or);
+      }
+      if (current_order.type_kind() == ::googlesql::TYPE_DOUBLE) {
+        return Value::Double(current_order.double_value() +
+                             static_cast<double>(*offset_or));
+      }
       if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
         return AddDateOffset(current_order, *offset_or);
       }

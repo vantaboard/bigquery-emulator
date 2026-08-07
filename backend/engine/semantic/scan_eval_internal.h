@@ -125,8 +125,18 @@ absl::Status ApplyAnalyticLagLead(
     int direction,
     std::vector<ColumnBindings>& out_rows);
 
+// Frame-aware aggregate analytics (SUM/AVG/MIN/MAX/COUNT/$count_star).
+absl::Status ApplyAnalyticAggregate(
+    const ::googlesql::ResolvedAnalyticFunctionCall& afn,
+    absl::string_view fname,
+    const ::googlesql::ResolvedWindowOrdering* order_spec,
+    const AnalyticGroupLayout& layout,
+    const std::vector<ColumnBindings>& input_rows,
+    int out_col_id,
+    const EvalContext& ctx,
+    std::vector<ColumnBindings>& out_rows);
+
 Value LookupColumnValue(const ColumnBindings& row, int col_id);
-absl::StatusOr<Value> AddValues(const Value& a, const Value& b);
 absl::StatusOr<Value> FrameBoundValue(
     const ::googlesql::ResolvedWindowFrameExpr* bound,
     const Value& current_order,

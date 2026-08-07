@@ -1,5 +1,6 @@
-// Analytic numbering / navigation tests for `SemanticExecutor`
-// (R14 NTILE, R15 RANK/DENSE_RANK/LAG/LEAD). Fixture shared via
+// Analytic numbering / navigation / aggregate-window tests for
+// `SemanticExecutor` (R14 NTILE, R15 RANK/DENSE_RANK/LAG/LEAD,
+// frame-aware SUM/AVG/MIN/MAX/COUNT). Fixture shared via
 // `executor_test_fixture.h`.
 
 #include <cstdint>
@@ -168,6 +169,149 @@ TEST_F(SemanticExecutorTest, LagLeadOverNestedAggregate) {
   auto has_extra = (*source)->Next(&extra);
   ASSERT_TRUE(has_extra.ok());
   EXPECT_FALSE(*has_extra);
+}
+
+// Whole-partition MAX/MIN/AVG/COUNT(*) over aggregate input.
+TEST_F(SemanticExecutorTest, AggregateWindowsWholePartitionOverGroups) {
+  const std::string sql =
+      "SELECT customer_id,"
+      "       SUM(amount) AS monetary,"
+      "       MAX(SUM(amount)) OVER () AS max_m,"
+      "       MIN(SUM(amount)) OVER () AS min_m,"
+      "       AVG(SUM(amount)) OVER () AS avg_m,"
+      "       COUNT(*) OVER () AS n_groups "
+      "FROM ("
+      "  SELECT 1 AS customer_id, 100 AS amount UNION ALL"
+      "  SELECT 2, 200 UNION ALL"
+      "  SELECT 3, 300"
+      ") GROUP BY customer_id "
+      "ORDER BY customer_id";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  // Group sums: 100,200,300 → max=300, min=100, avg=200, count=3.
+  for (int64_t id = 1; id <= 3; ++id) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << id;
+    ASSERT_EQ(row.cells.size(), 6u);
+    EXPECT_EQ(row.cells[0].int64_value(), id);
+    EXPECT_EQ(row.cells[1].int64_value(), id * 100);
+    EXPECT_EQ(row.cells[2].int64_value(), 300);
+    EXPECT_EQ(row.cells[3].int64_value(), 100);
+    EXPECT_DOUBLE_EQ(row.cells[4].float64_value(), 200.0);
+    EXPECT_EQ(row.cells[5].int64_value(), 3);
+  }
+  storage::Row extra;
+  auto has_extra = (*source)->Next(&extra);
+  ASSERT_TRUE(has_extra.ok());
+  EXPECT_FALSE(*has_extra);
+}
+
+// Default RANGE frame running SUM with a peer tie.
+TEST_F(SemanticExecutorTest, RunningSumOverNestedAggregateWithTies) {
+  const std::string sql =
+      "SELECT customer_id,"
+      "       SUM(amount) AS monetary,"
+      "       SUM(SUM(amount)) OVER (ORDER BY SUM(amount)) AS running "
+      "FROM ("
+      "  SELECT 1 AS customer_id, 100 AS amount UNION ALL"
+      "  SELECT 2, 100 UNION ALL"
+      "  SELECT 3, 200 UNION ALL"
+      "  SELECT 4, 50"
+      ") GROUP BY customer_id "
+      "ORDER BY customer_id";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  // Ordered by monetary ASC: 50(c4), 100(c1), 100(c2), 200(c3).
+  // Default RANGE UNBOUNDED PRECEDING .. CURRENT ROW includes peers, so
+  // both 100-rows see 50+100+100=250 and the 200-row sees 450.
+  // Ordered by customer_id: c1→250, c2→250, c3→450, c4→50.
+  const std::vector<int64_t> want_running = {250, 250, 450, 50};
+  for (size_t i = 0; i < want_running.size(); ++i) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << i;
+    ASSERT_EQ(row.cells.size(), 3u);
+    EXPECT_EQ(row.cells[0].int64_value(), static_cast<int64_t>(i + 1));
+    EXPECT_EQ(row.cells[2].int64_value(), want_running[i])
+        << "running row " << i;
+  }
+}
+
+// Explicit ROWS frame: preceding + current only (no peer expansion).
+TEST_F(SemanticExecutorTest, RowsFrameSumOverNestedAggregate) {
+  const std::string sql =
+      "SELECT customer_id,"
+      "       SUM(SUM(amount)) OVER ("
+      "         ORDER BY customer_id"
+      "         ROWS BETWEEN 1 PRECEDING AND CURRENT ROW"
+      "       ) AS win "
+      "FROM ("
+      "  SELECT 1 AS customer_id, 100 AS amount UNION ALL"
+      "  SELECT 2, 200 UNION ALL"
+      "  SELECT 3, 300 UNION ALL"
+      "  SELECT 4, 400"
+      ") GROUP BY customer_id "
+      "ORDER BY customer_id";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  // Row sums 100,200,300,400 → windows: 100, 300, 500, 700.
+  const std::vector<int64_t> want = {100, 300, 500, 700};
+  for (size_t i = 0; i < want.size(); ++i) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << i;
+    ASSERT_EQ(row.cells.size(), 2u);
+    EXPECT_EQ(row.cells[0].int64_value(), static_cast<int64_t>(i + 1));
+    EXPECT_EQ(row.cells[1].int64_value(), want[i]) << "rows frame row " << i;
+  }
+}
+
+// Numeric RANGE value-offset COUNT (replaces the old CountRange lane;
+// BigQuery requires a numeric ORDER BY for RANGE offsets).
+TEST_F(SemanticExecutorTest, NumericRangeCountOverAggregateInput) {
+  const std::string sql =
+      "SELECT customer_id,"
+      "       COUNT(*) OVER ("
+      "         ORDER BY SUM(amount)"
+      "         RANGE BETWEEN 1 PRECEDING AND CURRENT ROW"
+      "       ) AS cnt "
+      "FROM ("
+      "  SELECT 1 AS customer_id, 10 AS amount UNION ALL"
+      "  SELECT 2, 11 UNION ALL"
+      "  SELECT 3, 12 UNION ALL"
+      "  SELECT 4, 20"
+      ") GROUP BY customer_id "
+      "ORDER BY customer_id";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  // Sums 10,11,12,20 → RANGE ±1 preceding..current:
+  // 10→{10}, 11→{10,11}, 12→{11,12}, 20→{20}.
+  const std::vector<int64_t> want = {1, 2, 2, 1};
+  for (size_t i = 0; i < want.size(); ++i) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << i;
+    ASSERT_EQ(row.cells.size(), 2u);
+    EXPECT_EQ(row.cells[0].int64_value(), static_cast<int64_t>(i + 1));
+    EXPECT_EQ(row.cells[1].int64_value(), want[i]) << "range count row " << i;
+  }
 }
 
 }  // namespace

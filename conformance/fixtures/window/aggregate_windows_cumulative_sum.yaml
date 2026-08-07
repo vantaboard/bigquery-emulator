@@ -1,0 +1,29 @@
+# Cumulative SUM over nested aggregate with peer ties (default RANGE frame).
+#
+# Pins frame-aware semantic SUM: default OVER (ORDER BY ...) is
+# RANGE UNBOUNDED PRECEDING .. CURRENT ROW and includes ORDER BY peers.
+name: aggregate_windows_cumulative_sum
+description: |
+  SUM(SUM(amount)) OVER (ORDER BY SUM(amount)) with tied group totals —
+  semantic executor default-frame peer semantics.
+project_id: proj-agg-window-cumsum
+query: |
+  SELECT
+    customer_id,
+    SUM(amount) AS monetary,
+    SUM(SUM(amount)) OVER (ORDER BY SUM(amount)) AS running
+  FROM (
+    SELECT 1 AS customer_id, 100 AS amount UNION ALL
+    SELECT 2, 100 UNION ALL
+    SELECT 3, 200 UNION ALL
+    SELECT 4, 50
+  )
+  GROUP BY customer_id
+  ORDER BY customer_id
+expected:
+  route: semantic_executor
+  rows:
+    - {customer_id: "1", monetary: "100", running: "250"}
+    - {customer_id: "2", monetary: "100", running: "250"}
+    - {customer_id: "3", monetary: "200", running: "450"}
+    - {customer_id: "4", monetary: "50", running: "50"}

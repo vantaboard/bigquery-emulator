@@ -1,0 +1,31 @@
+# Aggregate window functions over GROUP BY on the semantic route
+# (share-of-total / "% of max" shape).
+#
+# Nested SUM inside the OVER / SELECT list (GROUP BY + window) promotes
+# the query to `semantic_executor` via ResolvedAnalyticScan(aggregate_input).
+name: aggregate_windows_share_of_total
+description: |
+  MAX/MIN/AVG/COUNT(*) OVER () next to SUM(...) GROUP BY — semantic
+  executor aggregate-window path.
+project_id: proj-agg-window-share
+query: |
+  SELECT
+    customer_id,
+    SUM(amount) AS monetary,
+    MAX(SUM(amount)) OVER () AS max_m,
+    MIN(SUM(amount)) OVER () AS min_m,
+    AVG(SUM(amount)) OVER () AS avg_m,
+    COUNT(*) OVER () AS n_groups
+  FROM (
+    SELECT 1 AS customer_id, 100 AS amount UNION ALL
+    SELECT 2, 200 UNION ALL
+    SELECT 3, 300
+  )
+  GROUP BY customer_id
+  ORDER BY customer_id
+expected:
+  route: semantic_executor
+  rows:
+    - {customer_id: "1", monetary: "100", max_m: "300", min_m: "100", avg_m: "200", n_groups: "3"}
+    - {customer_id: "2", monetary: "200", max_m: "300", min_m: "100", avg_m: "200", n_groups: "3"}
+    - {customer_id: "3", monetary: "300", max_m: "300", min_m: "100", avg_m: "200", n_groups: "3"}
