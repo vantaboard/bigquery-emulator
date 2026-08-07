@@ -120,11 +120,15 @@ WithEntryEmitResult EmitNonRecursiveWithEntry(
     const ::googlesql::ResolvedWithEntry* entry,
     const ::googlesql::ResolvedScan* sub_scan,
     bool body_needs_input_rn,
-    const EmitScanFn& emit_scan) {
+    const EmitScanFn& emit_scan,
+    const std::function<bool()>& body_uses_id_aliases) {
   WithEntryEmitResult result;
   bool cte_has_rn = false;
   std::string sub = emit_scan(sub_scan);
   if (sub.empty()) return result;
+  // Read after emit_scan: UNNEST/join bodies expose `__bq_j_<id>` and
+  // leave join_output_uses_id_aliases_ set; anchor by id in that case.
+  const bool use_id_aliases = body_uses_id_aliases && body_uses_id_aliases();
   if (body_needs_input_rn &&
       sub_scan->node_kind() == ::googlesql::RESOLVED_SET_OPERATION_SCAN &&
       sub_scan->GetAs<::googlesql::ResolvedSetOperationScan>()->op_type() ==
@@ -139,10 +143,12 @@ WithEntryEmitResult EmitNonRecursiveWithEntry(
   std::vector<std::string> cols;
   cols.reserve(sub_scan->column_list_size());
   for (int j = 0; j < sub_scan->column_list_size(); ++j) {
-    cols.push_back(
-        absl::StrCat(internal::QuoteIdent(sub_scan->column_list(j).name()),
-                     " AS ",
-                     internal::QuoteIdent(WithScanColumnAnchor(j))));
+    const ::googlesql::ResolvedColumn& col = sub_scan->column_list(j);
+    const std::string src = use_id_aliases
+                                ? internal::JoinColumnIdAlias(col.column_id())
+                                : internal::QuoteIdent(col.name());
+    cols.push_back(absl::StrCat(
+        src, " AS ", internal::QuoteIdent(WithScanColumnAnchor(j))));
   }
   std::string projected;
   if (cols.empty()) {

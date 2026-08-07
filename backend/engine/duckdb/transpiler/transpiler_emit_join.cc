@@ -293,6 +293,10 @@ std::string Transpiler::EmitJoinScan(
   if (node->parameter_list_size() > 0) {
     return "";
   }
+  // Clear before each side so a sibling/CTE emission that left the
+  // flag set cannot make a plain TableScan/WithRefScan look like it
+  // exposes `__bq_j_<id>` aliases (see R13).
+  join_output_uses_id_aliases_ = false;
   std::string left = EmitScan(node->left_scan());
   if (left.empty()) return "";
   const bool left_id_aliases = join_output_uses_id_aliases_;

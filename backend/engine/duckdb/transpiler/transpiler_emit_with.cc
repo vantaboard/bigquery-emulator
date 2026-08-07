@@ -167,7 +167,13 @@ std::string Transpiler::EmitWithScan(
   }
   const bool recursive = node->recursive();
   const bool saved_rn_at_with = input_rn_ordering_;
+  const bool saved_has_rn_at_with = input_has_rn_column_;
+  const bool saved_join_uses_at_with = join_output_uses_id_aliases_;
+  const bool saved_join_cols_at_with = join_output_columns_use_id_aliases_;
   input_rn_ordering_ = false;
+  input_has_rn_column_ = false;
+  join_output_uses_id_aliases_ = false;
+  join_output_columns_use_id_aliases_ = false;
   const bool body_needs_input_rn =
       internal::ScanTreeContainsAnalytic(node->query());
   const std::vector<std::string> saved_output_order = output_order_items_;
@@ -178,9 +184,20 @@ std::string Transpiler::EmitWithScan(
   const EmitScanFn emit_scan = [this](const ::googlesql::ResolvedScan* scan) {
     return EmitScan(scan);
   };
+  const std::function<bool()> body_uses_id_aliases = [this]() {
+    return join_output_uses_id_aliases_;
+  };
   for (int i = 0; i < node->with_entry_list_size(); ++i) {
+    // Isolate each CTE entry from sibling/parent alias + rn state
+    // (UNNEST inside a CTE must not leak into the outer join; R13).
     const bool saved_rn_in_cte = input_rn_ordering_;
+    const bool saved_has_rn_in_cte = input_has_rn_column_;
+    const bool saved_join_uses_in_cte = join_output_uses_id_aliases_;
+    const bool saved_join_cols_in_cte = join_output_columns_use_id_aliases_;
     input_rn_ordering_ = false;
+    input_has_rn_column_ = false;
+    join_output_uses_id_aliases_ = false;
+    join_output_columns_use_id_aliases_ = false;
     output_order_items_.clear();
     output_order_column_ids_.clear();
     const ::googlesql::ResolvedWithEntry* entry = node->with_entry_list(i);
@@ -204,19 +221,42 @@ std::string Transpiler::EmitWithScan(
       ctes.push_back(FormatRecursiveWithEntry(
           entry->with_query_name(), anchor_names, body_sql));
     } else {
-      WithEntryEmitResult emitted = EmitNonRecursiveWithEntry(
-          entry, sub_scan, body_needs_input_rn, emit_scan);
+      WithEntryEmitResult emitted =
+          EmitNonRecursiveWithEntry(entry,
+                                    sub_scan,
+                                    body_needs_input_rn,
+                                    emit_scan,
+                                    body_uses_id_aliases);
       if (emitted.cte_sql.empty()) return "";
       ctes.push_back(std::move(emitted.cte_sql));
       any_cte_has_rn = any_cte_has_rn || emitted.has_rn;
     }
     input_rn_ordering_ = saved_rn_in_cte;
+    input_has_rn_column_ = saved_has_rn_in_cte;
+    join_output_uses_id_aliases_ = saved_join_uses_in_cte;
+    join_output_columns_use_id_aliases_ = saved_join_cols_in_cte;
   }
+  // CTE bodies must not poison the main query's alias/rn flags.
+  input_has_rn_column_ = false;
+  join_output_uses_id_aliases_ = false;
+  join_output_columns_use_id_aliases_ = false;
   input_rn_ordering_ = any_cte_has_rn;
   output_order_items_ = saved_output_order;
   output_order_column_ids_ = saved_output_order_ids;
   std::string body = EmitScan(node->query());
+  // Body flags propagate to the parent of this WithScan; OR rn_ordering
+  // with the pre-WITH value (existing contract). Restore the other
+  // pre-WITH saves only when the body did not set them.
   input_rn_ordering_ = saved_rn_at_with || input_rn_ordering_;
+  if (!input_has_rn_column_) {
+    input_has_rn_column_ = saved_has_rn_at_with;
+  }
+  if (!join_output_uses_id_aliases_) {
+    join_output_uses_id_aliases_ = saved_join_uses_at_with;
+  }
+  if (!join_output_columns_use_id_aliases_) {
+    join_output_columns_use_id_aliases_ = saved_join_cols_at_with;
+  }
   if (body.empty()) return "";
   const char* keyword = recursive ? "WITH RECURSIVE " : "WITH ";
   return absl::StrCat(keyword, absl::StrJoin(ctes, ", "), " ", body);

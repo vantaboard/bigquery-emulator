@@ -95,6 +95,31 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
         });
     catalog_->AddOwnedTable(std::move(arrays));
 
+    const ::googlesql::ArrayType* collection_ids_type = nullptr;
+    ASSERT_TRUE(
+        type_factory_
+            ->MakeArrayType(type_factory_->get_int64(), &collection_ids_type)
+            .ok());
+    auto products = std::make_unique<::googlesql::SimpleTable>(
+        "products",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"title", type_factory_->get_string()},
+            {"is_published", type_factory_->get_bool()},
+            {"collection_ids", collection_ids_type},
+        });
+    catalog_->AddOwnedTable(std::move(products));
+
+    auto collections = std::make_unique<::googlesql::SimpleTable>(
+        "collections",
+        std::vector<::googlesql::SimpleTable::NameAndType>{
+            {"id", type_factory_->get_int64()},
+            {"title", type_factory_->get_string()},
+            {"is_published", type_factory_->get_bool()},
+            {"products_count", type_factory_->get_int64()},
+        });
+    catalog_->AddOwnedTable(std::move(collections));
+
     ExecDdl("CREATE TABLE bq_orders (order_id BIGINT, customer_id BIGINT)");
     ExecDdl("CREATE TABLE profiles (id BIGINT, name VARCHAR)");
     ExecDdl("CREATE TABLE people (id BIGINT, name VARCHAR)");
@@ -103,6 +128,12 @@ class TranspilerCompositionTest : public TranspilerBindFixture {
     ExecDdl(
         "CREATE TABLE dedup_profiles (id BIGINT, city VARCHAR, tags STRING[], "
         "source_updated_at TIMESTAMPTZ)");
+    ExecDdl(
+        "CREATE TABLE products (id BIGINT, title VARCHAR, is_published "
+        "BOOLEAN, collection_ids BIGINT[])");
+    ExecDdl(
+        "CREATE TABLE collections (id BIGINT, title VARCHAR, is_published "
+        "BOOLEAN, products_count BIGINT)");
   }
 };
 
@@ -134,6 +165,43 @@ TEST_F(TranspilerCompositionTest, CorrelatedUnnestFromTableBinds) {
 SELECT id, n
 FROM items, UNNEST(items.vals) AS n
 ORDER BY id, n
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
+
+// R13: UNNEST + GROUP BY inside a CTE, then outer LEFT JOIN on the
+// unnested value — CTE alias/rn state must not leak into the outer join.
+TEST_F(TranspilerCompositionTest, UnnestGroupByInCteThenJoinBinds) {
+  static constexpr const char kSql[] = R"sql(
+WITH product_counts AS (
+  SELECT col_id, COUNT(DISTINCT p.id) AS calculated_product_count
+  FROM products p, UNNEST(p.collection_ids) AS col_id
+  GROUP BY col_id
+)
+SELECT
+  c.id AS collection_id,
+  c.title AS collection_title,
+  c.products_count AS collection_table_count,
+  COALESCE(pc.calculated_product_count, 0) AS calculated_product_count,
+  (c.products_count - COALESCE(pc.calculated_product_count, 0)) AS discrepancy
+FROM collections c
+LEFT JOIN product_counts pc ON c.id = pc.col_id
+WHERE COALESCE(c.products_count, 0) != COALESCE(pc.calculated_product_count, 0)
+)sql";
+  AssertSqlTranspileBinds(kSql);
+}
+
+// R13: correlated UNNEST in CTE (no GROUP BY) + outer JOIN — anchors and
+// join sides must not reference stale `__bq_j_<id>` aliases.
+TEST_F(TranspilerCompositionTest, UnnestInCteThenJoinBinds) {
+  static constexpr const char kSql[] = R"sql(
+WITH product_collections AS (
+  SELECT p.id AS product_id, col_id
+  FROM products p, UNNEST(p.collection_ids) AS col_id
+)
+SELECT c.id AS collection_id, c.title AS collection_title, pc.product_id
+FROM collections c
+LEFT JOIN product_collections pc ON c.id = pc.col_id
 )sql";
   AssertSqlTranspileBinds(kSql);
 }

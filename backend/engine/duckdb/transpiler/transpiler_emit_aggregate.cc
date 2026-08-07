@@ -294,7 +294,8 @@ void FinalizeAggregateScanState(const ::googlesql::ResolvedAggregateScan* node,
                                 std::vector<int>* output_order_column_ids,
                                 bool* input_rn_ordering,
                                 bool* output_includes_input_rn,
-                                bool* join_output_columns_use_id_aliases) {
+                                bool* join_output_columns_use_id_aliases,
+                                bool* input_has_rn_column) {
   if (projections.empty()) return;
   absl::flat_hash_set<std::string> projected;
   projected.reserve(projections.size());
@@ -318,6 +319,10 @@ void FinalizeAggregateScanState(const ::googlesql::ResolvedAggregateScan* node,
   if (!projected.contains(internal::QuoteIdent(internal::kBqInputRnCol))) {
     *input_rn_ordering = false;
     *output_includes_input_rn = false;
+    // Aggregate output does not carry `__bq_input_rn` unless it was
+    // explicitly projected; clear so a CTE UNNEST cannot leak the
+    // flag into an outer ProjectScan (R13).
+    *input_has_rn_column = false;
   }
   *join_output_columns_use_id_aliases = false;
 }
@@ -337,6 +342,7 @@ std::string Transpiler::EmitAggregateScan(
   if (std::string special = TryEmitArrayAggDistinctUnnestScan(node, emit_expr);
       !special.empty()) {
     join_output_uses_id_aliases_ = false;
+    input_has_rn_column_ = false;
     return special;
   }
   if (node == nullptr) return "";
@@ -357,6 +363,7 @@ std::string Transpiler::EmitAggregateScan(
           TryEmitStringAggDistinctDedupeScan(node, input, emit_expr);
       !special.empty()) {
     join_output_uses_id_aliases_ = false;
+    input_has_rn_column_ = false;
     return special;
   }
 
@@ -375,8 +382,12 @@ std::string Transpiler::EmitAggregateScan(
                              &output_order_column_ids_,
                              &input_rn_ordering_,
                              &output_includes_input_rn_,
-                             &join_output_columns_use_id_aliases_);
+                             &join_output_columns_use_id_aliases_,
+                             &input_has_rn_column_);
   join_output_uses_id_aliases_ = false;
+  // Aggregate output columns never include `__bq_input_rn` (the stamp
+  // lives only on the input subquery when needed for ORDER BY).
+  input_has_rn_column_ = false;
   return sql;
 }
 

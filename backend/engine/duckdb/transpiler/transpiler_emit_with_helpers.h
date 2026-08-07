@@ -28,7 +28,8 @@ WithEntryEmitResult EmitNonRecursiveWithEntry(
     const ::googlesql::ResolvedWithEntry* entry,
     const ::googlesql::ResolvedScan* sub_scan,
     bool body_needs_input_rn,
-    const EmitScanFn& emit_scan);
+    const EmitScanFn& emit_scan,
+    const std::function<bool()>& body_uses_id_aliases);
 
 std::string FormatRecursiveWithEntry(
     absl::string_view query_name,

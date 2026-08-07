@@ -1,0 +1,66 @@
+# R13: UNNEST in CTE + GROUP BY on unnested value + LEFT JOIN
+# Reported: tester email (v0.8.0 Docker) — DuckDB Binder Error:
+# Referenced column "__bq_j_39" not found in FROM clause!
+# Index: conformance/REGRESSIONS.md
+#
+# Pins the cross-CTE-boundary state-leak family: UNNEST inside a CTE
+# sets join id-alias / `__bq_input_rn` flags on the Transpiler; those
+# must not leak into the outer join against a plain table scan.
+name: unnest_groupby_cte_then_join
+description: |
+  CTE unnests an array column with GROUP BY on the element; outer
+  query LEFT JOINs the CTE on the unnested value and filters on a
+  count discrepancy (tester-reported collections/products shape).
+project_id: proj-r13-unnest-cte-join
+dataset_id: ds_repro
+setup:
+  - dataset: ds_repro
+  - table:
+      dataset: ds_repro
+      id: products
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: title, type: STRING, mode: NULLABLE}
+        - {name: is_published, type: BOOL, mode: NULLABLE}
+        - {name: collection_ids, type: INT64, mode: REPEATED}
+  - table:
+      dataset: ds_repro
+      id: collections
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+        - {name: title, type: STRING, mode: NULLABLE}
+        - {name: is_published, type: BOOL, mode: NULLABLE}
+        - {name: products_count, type: INT64, mode: NULLABLE}
+  - rows:
+      dataset: ds_repro
+      table: products
+      rows:
+        - {id: 1, title: shirt, is_published: true, collection_ids: [10, 20]}
+        - {id: 2, title: hat, is_published: true, collection_ids: [10]}
+  - rows:
+      dataset: ds_repro
+      table: collections
+      rows:
+        - {id: 10, title: summer, is_published: true, products_count: 2}
+        - {id: 20, title: winter, is_published: true, products_count: 2}
+query: |
+  WITH product_counts AS (
+      SELECT
+          col_id,
+          COUNT(DISTINCT p.id) AS calculated_product_count
+      FROM ds_repro.products p,
+      UNNEST(p.collection_ids) AS col_id
+      GROUP BY col_id
+  )
+  SELECT
+      c.id AS collection_id,
+      c.title AS collection_title,
+      c.products_count AS collection_table_count,
+      COALESCE(pc.calculated_product_count, 0) AS calculated_product_count,
+      (c.products_count - COALESCE(pc.calculated_product_count, 0)) AS discrepancy
+  FROM ds_repro.collections c
+  LEFT JOIN product_counts pc ON c.id = pc.col_id
+  WHERE COALESCE(c.products_count, 0) != COALESCE(pc.calculated_product_count, 0)
+expected:
+  rows:
+    - {collection_id: "20", collection_title: winter, collection_table_count: "2", calculated_product_count: "1", discrepancy: "1"}

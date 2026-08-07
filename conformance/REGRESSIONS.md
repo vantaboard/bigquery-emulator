@@ -25,6 +25,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R10 | Correlated / cross-product UNNEST → DuckDB "column id not found" (only `__bq_input_rn`) | conformance + transpiler test | UNNEST id-alias output mapping fix |
 | R11 | `SELECT DISTINCT` after ROW_NUMBER dedup → DuckDB binder "source_updated_at not found" | core_usage + differential + transpiler + scenarios | aggregate scan + query root filter stale implicit ORDER BY |
 | R12 | TIMESTAMP wire `...+00` → "Failed to parse input string" on read/construct | core_usage + semantic + storage e2e | short-offset normalization before parse |
+| R13 | UNNEST in CTE then outer JOIN → DuckDB `__bq_j_N` / `__bq_input_rn` not found | cte_subquery + transpiler test | reset join-alias + rn flags across CTE boundaries |
 
 ## Paths by tag
 
@@ -84,6 +85,12 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 - `conformance/fixtures/fastpath/scan_array_unnest_cross_join_three.yaml`
 - `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`CorrelatedUnnestFromTableBinds`, `CoreUsageUnnestArrayShapeBinds`, `NestedUnnestCrossProductBinds`)
 
+### R13 — UNNEST in CTE then outer JOIN binder leak
+
+- `conformance/fixtures/cte_subquery/unnest_groupby_cte_then_join.yaml`
+- `conformance/fixtures/cte_subquery/unnest_cte_then_join.yaml`
+- `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`UnnestGroupByInCteThenJoinBinds`, `UnnestInCteThenJoinBinds`)
+
 ## Machine-readable index
 
 Parsed by `go test ./conformance/ -run TestRegressionsIndexPathsExist`.
@@ -138,4 +145,8 @@ R12:
   - backend/engine/semantic/value_test.cc
   - gateway/bqtypes/wire_test.go
   - gateway/e2e/storage_read_test.go
+R13:
+  - conformance/fixtures/cte_subquery/unnest_groupby_cte_then_join.yaml
+  - conformance/fixtures/cte_subquery/unnest_cte_then_join.yaml
+  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
 ```
