@@ -8,32 +8,19 @@
 // (scalar SELECT + arithmetic + parameter binding) and the
 // error-surface mappings the gateway depends on
 // (`SELECT 1 / 0 -> divisionByZero`, `SELECT INT64_MAX + 1 ->
-// overflow`).
+// overflow`). Analytic numbering/navigation tests live in
+// `executor_analytic_test.cc`.
 
-#include "backend/engine/semantic/executor.h"
-
-#include <algorithm>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "backend/engine/engine.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/executor_test_fixture.h"
 #include "backend/storage/storage.h"
-#include "googlesql/public/analyzer.h"
 #include "googlesql/public/analyzer_options.h"
-#include "googlesql/public/analyzer_output.h"
-#include "googlesql/public/builtin_function_options.h"
-#include "googlesql/public/catalog.h"
 #include "googlesql/public/id_string.h"
-#include "googlesql/public/language_options.h"
-#include "googlesql/public/options.pb.h"
-#include "googlesql/public/simple_catalog.h"
-#include "googlesql/public/types/type_factory.h"
 #include "googlesql/public/value.h"
-#include "googlesql/resolved_ast/resolved_ast.h"
 #include "googlesql/resolved_ast/resolved_column.h"
 #include "gtest/gtest.h"
 
@@ -42,66 +29,6 @@ namespace backend {
 namespace engine {
 namespace semantic {
 namespace {
-
-::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
-  ::googlesql::LanguageOptions language;
-  language.EnableMaximumLanguageFeatures();
-  language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
-  ::googlesql::AnalyzerOptions options(language);
-  options.CreateDefaultArenasIfNotSet();
-  return options;
-}
-
-class SemanticExecutorTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    type_factory_ = std::make_unique<::googlesql::TypeFactory>();
-    catalog_ = std::make_unique<::googlesql::SimpleCatalog>(
-        "exec_catalog", type_factory_.get());
-    catalog_->AddBuiltinFunctions(
-        ::googlesql::BuiltinFunctionOptions::AllReleasedFunctions());
-  }
-
-  const ::googlesql::ResolvedStatement* Analyze(
-      absl::string_view sql, const ::googlesql::AnalyzerOptions& options) {
-    last_output_.reset();
-    absl::Status s = ::googlesql::AnalyzeStatement(
-        sql, options, catalog_.get(), type_factory_.get(), &last_output_);
-    EXPECT_TRUE(s.ok()) << s;
-    if (!s.ok() || last_output_ == nullptr) return nullptr;
-    return last_output_->resolved_statement();
-  }
-
-  QueryRequest MakeRequest(absl::string_view sql) {
-    QueryRequest req;
-    req.project_id = "test-project";
-    req.sql = std::string(sql);
-    return req;
-  }
-
-  // Drain a single-row output and return the first cell.
-  absl::StatusOr<storage::Value> RunForFirstCell(
-      const std::string& sql,
-      ::googlesql::AnalyzerOptions options = MakeAnalyzerOptions(),
-      QueryRequest req = QueryRequest{}) {
-    const auto* stmt = Analyze(sql, options);
-    if (stmt == nullptr) return absl::InternalError("analyzer failed");
-    if (req.sql.empty()) req = MakeRequest(sql);
-    SemanticExecutor exec;
-    auto source = exec.ExecuteQuery(req, *stmt, catalog_.get());
-    if (!source.ok()) return source.status();
-    storage::Row row;
-    auto has = (*source)->Next(&row);
-    if (!has.ok()) return has.status();
-    if (!*has) return absl::InternalError("executor returned no rows");
-    if (row.cells.empty()) return absl::InternalError("row has no cells");
-    return row.cells[0];
-  }
-
-  std::unique_ptr<::googlesql::TypeFactory> type_factory_{};
-  std::unique_ptr<::googlesql::SimpleCatalog> catalog_{};
-  std::unique_ptr<const ::googlesql::AnalyzerOutput> last_output_{};
-};
 
 TEST_F(SemanticExecutorTest, ScalarSelectOneRoundTrips) {
   auto cell = RunForFirstCell("SELECT 1");
@@ -367,65 +294,6 @@ TEST_F(SemanticExecutorTest, ChainedCteWithRowNumberAnalyticScan) {
   ASSERT_TRUE(*has);
   ASSERT_EQ(row.cells.size(), 1u);
   EXPECT_EQ(row.cells[0].int64_value(), 1);
-}
-
-// R14: NTILE over aggregate input (RFM shape) — semantic executor path.
-TEST_F(SemanticExecutorTest, NtileOverAggregateInputUnevenBuckets) {
-  const std::string sql =
-      "WITH rfm_raw AS ("
-      "  SELECT customer_id, SUM(amount) AS monetary FROM ("
-      "    SELECT 1 AS customer_id, 100 AS amount UNION ALL"
-      "    SELECT 2, 200 UNION ALL SELECT 3, 300 UNION ALL"
-      "    SELECT 4, 400 UNION ALL SELECT 5, 500 UNION ALL"
-      "    SELECT 6, 600 UNION ALL SELECT 7, 700"
-      "  ) GROUP BY customer_id"
-      "), rfm_scored AS ("
-      "  SELECT customer_id, monetary,"
-      "         NTILE(5) OVER (ORDER BY monetary ASC) AS m_score"
-      "  FROM rfm_raw"
-      ") "
-      "SELECT customer_id, m_score FROM rfm_scored ORDER BY customer_id";
-  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
-  ASSERT_NE(stmt, nullptr);
-  SemanticExecutor exec;
-  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
-  ASSERT_TRUE(source.ok()) << source.status();
-  // 7 rows into 5 buckets → sizes 2,2,1,1,1 for customers 1..7.
-  const std::vector<int64_t> want_scores = {1, 1, 2, 2, 3, 4, 5};
-  for (size_t i = 0; i < want_scores.size(); ++i) {
-    storage::Row row;
-    auto has = (*source)->Next(&row);
-    ASSERT_TRUE(has.ok()) << has.status();
-    ASSERT_TRUE(*has) << "missing row " << i;
-    ASSERT_EQ(row.cells.size(), 2u);
-    EXPECT_EQ(row.cells[0].int64_value(), static_cast<int64_t>(i + 1));
-    EXPECT_EQ(row.cells[1].int64_value(), want_scores[i]) << "row " << i;
-  }
-  storage::Row extra;
-  auto has_extra = (*source)->Next(&extra);
-  ASSERT_TRUE(has_extra.ok());
-  EXPECT_FALSE(*has_extra);
-}
-
-TEST_F(SemanticExecutorTest, NtileNonPositiveBucketsRejectedAtAnalyze) {
-  // GoogleSQL rejects a constant non-positive NTILE argument before
-  // execution; ApplyAnalyticNtile also guards the runtime path for
-  // non-constant expressions that slip through.
-  const std::string sql =
-      "WITH rfm_raw AS ("
-      "  SELECT customer_id, SUM(amount) AS monetary FROM ("
-      "    SELECT 1 AS customer_id, 100 AS amount UNION ALL SELECT 2, 200"
-      "  ) GROUP BY customer_id"
-      ") "
-      "SELECT NTILE(0) OVER (ORDER BY monetary ASC) AS m_score FROM rfm_raw";
-  last_output_.reset();
-  absl::Status s = ::googlesql::AnalyzeStatement(sql,
-                                                 MakeAnalyzerOptions(),
-                                                 catalog_.get(),
-                                                 type_factory_.get(),
-                                                 &last_output_);
-  EXPECT_FALSE(s.ok());
-  EXPECT_NE(std::string(s.message()).find("NTILE"), std::string::npos) << s;
 }
 
 }  // namespace

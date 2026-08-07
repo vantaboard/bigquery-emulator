@@ -93,6 +93,38 @@ AnalyticGroupLayout BuildAnalyticGroupLayout(
     const ::googlesql::ResolvedAnalyticFunctionGroup& group,
     const ::googlesql::ResolvedWindowOrdering* order_spec,
     const std::vector<ColumnBindings>& input_rows);
+
+// True when all ORDER BY keys of `order_spec` compare equal on the two
+// rows (peer group for RANK / DENSE_RANK). Empty/missing ORDER BY is
+// treated as equal (entire partition is one peer group).
+bool OrderKeysEqual(const ::googlesql::ResolvedWindowOrdering* order_spec,
+                    const ColumnBindings& row_a,
+                    const ColumnBindings& row_b);
+
+absl::Status ApplyAnalyticNtile(
+    const ::googlesql::ResolvedAnalyticFunctionCall& afn,
+    const AnalyticGroupLayout& layout,
+    const std::vector<ColumnBindings>& input_rows,
+    int out_col_id,
+    const EvalContext& ctx,
+    std::vector<ColumnBindings>& out_rows);
+
+void ApplyAnalyticRank(const ::googlesql::ResolvedWindowOrdering* order_spec,
+                       const AnalyticGroupLayout& layout,
+                       const std::vector<ColumnBindings>& input_rows,
+                       int out_col_id,
+                       bool dense,
+                       std::vector<ColumnBindings>& out_rows);
+
+absl::Status ApplyAnalyticLagLead(
+    const ::googlesql::ResolvedAnalyticFunctionCall& afn,
+    const AnalyticGroupLayout& layout,
+    const std::vector<ColumnBindings>& input_rows,
+    int out_col_id,
+    const EvalContext& ctx,
+    int direction,
+    std::vector<ColumnBindings>& out_rows);
+
 Value LookupColumnValue(const ColumnBindings& row, int col_id);
 absl::StatusOr<Value> AddValues(const Value& a, const Value& b);
 absl::StatusOr<Value> FrameBoundValue(

@@ -202,65 +202,6 @@ absl::Status ApplyAnalyticSum(
   return absl::OkStatus();
 }
 
-absl::Status ApplyAnalyticNtile(
-    const ::googlesql::ResolvedAnalyticFunctionCall& afn,
-    const AnalyticGroupLayout& layout,
-    const std::vector<ColumnBindings>& input_rows,
-    int out_col_id,
-    const EvalContext& ctx,
-    std::vector<ColumnBindings>& out_rows) {
-  if (afn.argument_list_size() != 1 || afn.argument_list(0) == nullptr) {
-    return absl::InvalidArgumentError(
-        "semantic: analytic NTILE expects one argument");
-  }
-  EvalContext arg_ctx = ctx;
-  if (!input_rows.empty()) {
-    arg_ctx.columns = &input_rows[0];
-  }
-  auto buckets_or = EvalExpr(*afn.argument_list(0), arg_ctx);
-  if (!buckets_or.ok()) return buckets_or.status();
-  if (buckets_or->is_null() ||
-      buckets_or->type_kind() != ::googlesql::TYPE_INT64) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        "semantic: NTILE buckets argument must be a positive INT64");
-  }
-  const int64_t n_buckets = buckets_or->int64_value();
-  if (n_buckets <= 0) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        "semantic: NTILE buckets argument must be a positive INT64");
-  }
-
-  absl::flat_hash_map<std::string, int64_t> partition_sizes;
-  for (const std::string& fp : layout.partition_fps) {
-    partition_sizes[fp]++;
-  }
-
-  for (size_t r = 0; r < out_rows.size(); ++r) {
-    const int64_t S = partition_sizes[layout.partition_fps[r]];
-    const int64_t rn = layout.row_numbers[r];
-    if (S <= 0 || rn <= 0) {
-      out_rows[r][out_col_id] = Value::NullInt64();
-      continue;
-    }
-    // First (S % n) buckets get floor(S/n)+1 rows; the rest get
-    // floor(S/n). When n > S, each row gets its own bucket 1..S.
-    const int64_t q = S / n_buckets;
-    const int64_t rem = S % n_buckets;
-    int64_t bucket = 0;
-    if (q == 0) {
-      bucket = rn;
-    } else if (rn <= rem * (q + 1)) {
-      bucket = (rn - 1) / (q + 1) + 1;
-    } else {
-      bucket = rem + (rn - rem * (q + 1) - 1) / q + 1;
-    }
-    out_rows[r][out_col_id] = Value::Int64(bucket);
-  }
-  return absl::OkStatus();
-}
-
 absl::Status ApplyAnalyticPercentileCont(
     const ::googlesql::ResolvedAnalyticFunctionCall& afn,
     const AnalyticGroupLayout& layout,
@@ -343,6 +284,24 @@ absl::Status ApplyAnalyticFunction(
   if (fname == "ntile") {
     return ApplyAnalyticNtile(
         *afn, layout, input_rows, out_col_id, ctx, out_rows);
+  }
+  if (fname == "rank") {
+    ApplyAnalyticRank(
+        order_spec, layout, input_rows, out_col_id, /*dense=*/false, out_rows);
+    return absl::OkStatus();
+  }
+  if (fname == "dense_rank") {
+    ApplyAnalyticRank(
+        order_spec, layout, input_rows, out_col_id, /*dense=*/true, out_rows);
+    return absl::OkStatus();
+  }
+  if (fname == "lag") {
+    return ApplyAnalyticLagLead(
+        *afn, layout, input_rows, out_col_id, ctx, /*direction=*/-1, out_rows);
+  }
+  if (fname == "lead") {
+    return ApplyAnalyticLagLead(
+        *afn, layout, input_rows, out_col_id, ctx, /*direction=*/1, out_rows);
   }
   return MakeSemanticError(
       SemanticErrorReason::kNotImplemented,

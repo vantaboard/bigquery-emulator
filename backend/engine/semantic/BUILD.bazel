@@ -330,6 +330,7 @@ cc_library(
         "scan_eval_setops.cc",
         "scan_eval_analytic_layout.cc",
         "scan_eval_analytic_apply.cc",
+        "scan_eval_analytic_numbering.cc",
         "scan_eval_sample.cc",
         "scan_eval_match_recognize.cc",
         "scan_eval_scan_impl.cc",
@@ -512,7 +513,11 @@ cc_library(
 
 cc_test(
     name = "executor_test",
-    srcs = ["executor_test.cc"],
+    srcs = [
+        "executor_analytic_test.cc",
+        "executor_test.cc",
+        "executor_test_fixture.h",
+    ],
     deps = [
         ":error",
         ":executor",

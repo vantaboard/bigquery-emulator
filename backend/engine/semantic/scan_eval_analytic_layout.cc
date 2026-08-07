@@ -195,6 +195,25 @@ bool ValueInClosedRange(const Value& value,
   return true;
 }
 
+bool OrderKeysEqual(const ::googlesql::ResolvedWindowOrdering* order_spec,
+                    const ColumnBindings& row_a,
+                    const ColumnBindings& row_b) {
+  if (order_spec == nullptr || order_spec->order_by_item_list_size() == 0) {
+    return true;
+  }
+  for (int i = 0; i < order_spec->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item =
+        order_spec->order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) continue;
+    const int col_id = item->column_ref()->column().column_id();
+    if (!ValueEqual(LookupColumnValue(row_a, col_id),
+                    LookupColumnValue(row_b, col_id))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 AnalyticGroupLayout BuildAnalyticGroupLayout(
     const ::googlesql::ResolvedAnalyticFunctionGroup& group,
     const ::googlesql::ResolvedWindowOrdering* order_spec,

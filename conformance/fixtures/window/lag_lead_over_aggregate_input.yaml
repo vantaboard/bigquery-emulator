@@ -1,0 +1,31 @@
+# R15: LAG / LEAD over nested aggregate (offset + default)
+# Follow-up to R14 NTILE semantic analytic gap.
+# Index: conformance/REGRESSIONS.md
+#
+# Nested SUM as the LAG/LEAD value argument promotes the query to
+# `semantic_executor`. Pins offset=1 NULL default and LEAD(..., 2, 0).
+name: lag_lead_over_aggregate_input
+description: |
+  LAG(SUM(...), 1) and LEAD(SUM(...), 2, 0) with GROUP BY —
+  semantic executor navigation path.
+project_id: proj-r15-lag-lead-agg
+query: |
+  SELECT
+    customer_id,
+    LAG(SUM(amount), 1) OVER (ORDER BY customer_id) AS prev_m,
+    LEAD(SUM(amount), 2, 0) OVER (ORDER BY customer_id) AS next2_m
+  FROM (
+    SELECT 1 AS customer_id, 100 AS amount UNION ALL
+    SELECT 2, 200 UNION ALL
+    SELECT 3, 300 UNION ALL
+    SELECT 4, 400
+  )
+  GROUP BY customer_id
+  ORDER BY customer_id
+expected:
+  route: semantic_executor
+  rows:
+    - {customer_id: "1", prev_m: null, next2_m: "300"}
+    - {customer_id: "2", prev_m: "100", next2_m: "400"}
+    - {customer_id: "3", prev_m: "200", next2_m: "0"}
+    - {customer_id: "4", prev_m: "300", next2_m: "0"}

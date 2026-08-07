@@ -27,6 +27,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R12 | TIMESTAMP wire `...+00` → "Failed to parse input string" on read/construct | core_usage + semantic + storage e2e | short-offset normalization before parse |
 | R13 | UNNEST in CTE then outer JOIN → DuckDB `__bq_j_N` / `__bq_input_rn` not found | cte_subquery + transpiler test | reset join-alias + rn flags across CTE boundaries |
 | R14 | `NTILE` over aggregate input → "analytic function 'ntile' is not yet implemented" | window + semantic executor test | semantic `ApplyAnalyticNtile` |
+| R15 | `RANK`/`DENSE_RANK`/`LAG`/`LEAD` over aggregate input → "analytic function ... is not yet implemented" | window + semantic executor test | semantic rank/lag/lead apply |
 
 ## Paths by tag
 
@@ -95,7 +96,13 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 ### R14 — NTILE over aggregate input
 
 - `conformance/fixtures/window/ntile_over_aggregate_input.yaml`
-- `backend/engine/semantic/executor_test.cc` (`NtileOverAggregateInputUnevenBuckets`, `NtileNonPositiveBucketsRejectedAtAnalyze`)
+- `backend/engine/semantic/executor_analytic_test.cc` (`NtileOverAggregateInputUnevenBuckets`, `NtileNonPositiveBucketsRejectedAtAnalyze`)
+
+### R15 — RANK / DENSE_RANK / LAG / LEAD over aggregate input
+
+- `conformance/fixtures/window/rank_dense_rank_over_aggregate_input.yaml`
+- `conformance/fixtures/window/lag_lead_over_aggregate_input.yaml`
+- `backend/engine/semantic/executor_analytic_test.cc` (`RankDenseRankOverNestedAggregateTies`, `LagLeadOverNestedAggregate`)
 
 ## Machine-readable index
 
@@ -157,5 +164,9 @@ R13:
   - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
 R14:
   - conformance/fixtures/window/ntile_over_aggregate_input.yaml
-  - backend/engine/semantic/executor_test.cc
+  - backend/engine/semantic/executor_analytic_test.cc
+R15:
+  - conformance/fixtures/window/rank_dense_rank_over_aggregate_input.yaml
+  - conformance/fixtures/window/lag_lead_over_aggregate_input.yaml
+  - backend/engine/semantic/executor_analytic_test.cc
 ```
