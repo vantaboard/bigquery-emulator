@@ -150,7 +150,7 @@ semantic-executor / control-op code) so the doc stays honest.
 |-----------------------------------------------|-----------------------|-------------------------------------------------------------------------------------------|
 | `ResolvedOutputColumn`                        | `duckdb_native`       | `transpiler-select-core`: `<column-name> AS <output-name>` (alias collapsed when the names match). Used by `EmitQueryStmt` for the outermost projection. |
 | `ResolvedComputedColumn`                      | `duckdb_native`       | `transpiler-select-core`: `<expr> AS "<resolved-column-name>"`; child expression failures propagate the empty-string fallback contract. |
-| `ResolvedDeferredComputedColumn`              | `semantic_executor`   | Side-effect-aware computed column (deferred error capture via `side_effect_column`). Evaluated in `scan_eval_aggregate.cc`; pinned by `scan_eval_aggregate_deferred_test`. |
+| `ResolvedDeferredComputedColumn`              | `semantic_executor`   | Side-effect-aware computed column (deferred error capture via `side_effect_column`). Evaluated in `scan_eval_aggregate.cc`; pinned by `scan_eval_aggregate_deferred_test`. Aggregate-backed forms (`COALESCE(COUNT(*), 0)`) keep attribution INSERT shapes on semantic until DuckDB CTE/join aliasing is complete (R17 follow-up). |
 | `ResolvedOrderByItem`                         | `duckdb_native` (subset) | `transpiler-emit-join-agg`: lowered inside `EmitOrderByScan`; emits `<col> ASC|DESC [NULLS FIRST|LAST]`. `COLLATE` promotes to `semantic_executor` with the parent `ResolvedOrderByScan`. |
 
 ## Cross-scan ORDER BY invariant

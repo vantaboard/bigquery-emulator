@@ -160,19 +160,13 @@ TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
 TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
   // `docs/ENGINE_POLICY.md` Family 5. A
   // `ResolvedDeferredComputedColumn` is the side-effect-aware
-  // form of a computed column the analyzer emits when conditional
-  // / pipe-evaluation features capture errors in a companion
-  // BYTES `side_effect_column`. DuckDB has no native model for the
+  // form of a computed column. DuckDB has no native model for the
   // deferred-error semantic; the disposition table routes any
   // query containing one to the semantic executor.
   //
-  // The analyzer only emits this shape under specific feature
-  // flags that the engine does not enable today, so we exercise
-  // the YAML row by hand-building a `ResolvedAggregateScan` whose
-  // `aggregate_list` (typed as `ResolvedComputedColumnBase`) holds
-  // a `ResolvedDeferredComputedColumn`. The classifier walks the
-  // statement tree and promotes the route via the YAML lookup the
-  // moment it sees the deferred node.
+  // Hand-build a `ResolvedAggregateScan` whose `aggregate_list`
+  // holds a `ResolvedDeferredComputedColumn` so the classifier
+  // promotes via the YAML lookup.
   ::googlesql::ResolvedColumn out_col(
       /*column_id=*/300,
       /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),

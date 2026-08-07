@@ -5,6 +5,7 @@
 #include "absl/strings/str_cat.h"
 #include "backend/engine/coordinator/route_classifier_visitor.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
+#include "backend/engine/duckdb/transpiler/transpiler_emit_datetime.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/sql_function.h"
 #include "googlesql/public/type.h"
@@ -43,6 +44,44 @@ bool DecimalArithmeticNeedsSemantic(absl::string_view name,
   }
   if (name == "$add" || name == "$subtract" || name == "$multiply") {
     return type->IsBigNumericType();
+  }
+  return false;
+}
+
+// Value-list `IN` lowers to DuckDB `IN` only for types where DuckDB
+// equality matches BigQuery equality on the persisted representation.
+// Decimals are excluded (BIGNUMERIC persists as VARCHAR, so equality
+// would compare strings); composite/exotic types are excluded
+// (struct/array equality has BigQuery-specific NULL semantics).
+bool InListArgTypeIsDuckdbSafe(const ::googlesql::Type* type) {
+  if (type == nullptr) return false;
+  switch (type->kind()) {
+    case ::googlesql::TYPE_INT32:
+    case ::googlesql::TYPE_INT64:
+    case ::googlesql::TYPE_UINT32:
+    case ::googlesql::TYPE_UINT64:
+    case ::googlesql::TYPE_BOOL:
+    case ::googlesql::TYPE_FLOAT:
+    case ::googlesql::TYPE_DOUBLE:
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_BYTES:
+    case ::googlesql::TYPE_DATE:
+    case ::googlesql::TYPE_TIMESTAMP:
+    case ::googlesql::TYPE_TIME:
+    case ::googlesql::TYPE_DATETIME:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool InListNeedsSemantic(const ::googlesql::ResolvedFunctionCall* call) {
+  if (call == nullptr) return true;
+  for (int i = 0; i < call->argument_list_size(); ++i) {
+    const ::googlesql::ResolvedExpr* arg = call->argument_list(i);
+    if (arg == nullptr || !InListArgTypeIsDuckdbSafe(arg->type())) {
+      return true;
+    }
   }
   return false;
 }
@@ -104,8 +143,28 @@ void RouteClassifierVisitor::CheckFunction(
                  absl::StrCat("function:", name, "(decimal)"));
     return;
   }
-  MaybePromote(entry->disposition,
-               absl::StrCat("function:", absl::AsciiStrToLower(name)));
+  // TIMESTAMP_ADD / TIMESTAMP_SUB lower to `bq_timestamp_add` /
+  // `bq_timestamp_sub` only for the interval shapes
+  // `CanLowerTimestampAddSub` accepts; anything else must stay on
+  // the semantic executor (the DuckDB executor has no fallback once
+  // routed).
+  const std::string lower_name = absl::AsciiStrToLower(name);
+  if ((lower_name == "timestamp_add" || lower_name == "timestamp_sub") &&
+      node->Is<::googlesql::ResolvedFunctionCall>() &&
+      !transpiler::internal::CanLowerTimestampAddSub(
+          node->GetAs<::googlesql::ResolvedFunctionCall>())) {
+    MaybePromote(Disposition::kSemanticExecutor,
+                 absl::StrCat("function:", lower_name, "(interval_shape)"));
+    return;
+  }
+  // Value-list IN stays on DuckDB only for equality-safe scalar
+  // argument types; see `InListNeedsSemantic`.
+  if (lower_name == "$in" && node->Is<::googlesql::ResolvedFunctionCall>() &&
+      InListNeedsSemantic(node->GetAs<::googlesql::ResolvedFunctionCall>())) {
+    MaybePromote(Disposition::kSemanticExecutor, "function:$in(arg_types)");
+    return;
+  }
+  MaybePromote(entry->disposition, absl::StrCat("function:", lower_name));
 }
 
 void RouteClassifierVisitor::CheckTvf(

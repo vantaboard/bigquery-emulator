@@ -16,15 +16,18 @@
 //   * `bq_unix_date(date)`         -- BIGINT days since 1970-01-01.
 //
 // Out of scope (re-pointed to `docs/ENGINE_POLICY.md`
-// in the wrap-up commit): `date_add` / `date_sub` / `date_diff` /
-// `date_trunc` and the `datetime_*` / `timestamp_*` variants
-// (BigQuery's month-end snap semantics for interval addition,
-// calendar-week / ISO-year discrimination in DIFF, and the
-// DATETIME-vs-TIMESTAMP type discrimination all need richer
-// semantics than a thin macro can express). Same for
+// in the wrap-up commit): `date_sub` / `date_diff` / `date_trunc`
+// and the `datetime_*` variants plus `timestamp_diff` /
+// `timestamp_trunc` (BigQuery's month-end snap semantics for
+// interval addition, calendar-week / ISO-year discrimination in
+// DIFF, and the DATETIME-vs-TIMESTAMP type discrimination all need
+// richer semantics than a thin macro can express). Same for
 // `extract`, `format_*`, and `parse_*` (format-string dialect
 // differences between BQ's `%E*S` extensions and DuckDB's
-// strftime).
+// strftime). `timestamp_add` / `timestamp_sub` ARE in scope
+// (`bq_timestamp_add` / `bq_timestamp_sub` below): BigQuery
+// restricts them to fixed-width parts (MICROSECOND..DAY), so no
+// calendar semantics are involved.
 
 #include <string>
 
@@ -140,6 +143,48 @@ absl::Status RegisterDatetime(::duckdb_connection conn) {
         "  END) "
         "ELSE d + (CAST(n AS BIGINT) * INTERVAL 1 DAY) "
         "END)";
+    absl::Status s = internal::RunMacroDdl(conn, sql);
+    if (!s.ok()) return s;
+  }
+
+  // `bq_timestamp_add(t, n, part)` --- BigQuery TIMESTAMP_ADD.
+  // `part` is the analyzer's DateTimestampPart enum (DAY=3, HOUR=7,
+  // MINUTE=8, SECOND=9, MILLISECOND=10, MICROSECOND=11) -- the only
+  // parts BigQuery's analyzer accepts for TIMESTAMP_ADD. All are
+  // fixed-width, so the macro adds an exact microsecond interval via
+  // `to_microseconds`. Deliberately NOT `t + n * INTERVAL 1 DAY`:
+  // BigQuery TIMESTAMP addition is instant arithmetic (DAY == exactly
+  // 86400s), while DuckDB's calendar-day interval on TIMESTAMPTZ can
+  // shift by DST in a non-UTC session timezone.
+  //
+  // Edge cases the unit test pins:
+  //   * DAY addition is exactly 24h (independent of session zone).
+  //   * MICROSECOND granularity round-trips.
+  //   * Negative amounts subtract.
+  //   * NULL propagation.
+  {
+    const std::string sql =
+        "CREATE OR REPLACE MACRO bq_timestamp_add(t, n, part) AS ("
+        "t + to_microseconds(CAST(n AS BIGINT) * ("
+        "CASE "
+        "WHEN part = 3 THEN 86400000000 "
+        "WHEN part = 7 THEN 3600000000 "
+        "WHEN part = 8 THEN 60000000 "
+        "WHEN part = 9 THEN 1000000 "
+        "WHEN part = 10 THEN 1000 "
+        "WHEN part = 11 THEN 1 "
+        "ELSE NULL "
+        "END)))";
+    absl::Status s = internal::RunMacroDdl(conn, sql);
+    if (!s.ok()) return s;
+  }
+
+  // `bq_timestamp_sub(t, n, part)` --- BigQuery TIMESTAMP_SUB.
+  // Mirror of `bq_timestamp_add` with the amount negated.
+  {
+    const std::string sql =
+        "CREATE OR REPLACE MACRO bq_timestamp_sub(t, n, part) AS ("
+        "bq_timestamp_add(t, -CAST(n AS BIGINT), part))";
     absl::Status s = internal::RunMacroDdl(conn, sql);
     if (!s.ok()) return s;
   }

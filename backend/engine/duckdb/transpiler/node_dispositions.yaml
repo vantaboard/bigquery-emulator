@@ -201,6 +201,10 @@ ResolvedUpdateConstructor: unsupported
 # --- Per-row metadata / shape helpers ----------------------------------
 ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
+# Side-effect-aware computed column. Aggregate-backed forms
+# (`COALESCE(COUNT(*), 0)`) are ubiquitous; they stay on
+# `semantic_executor` until multi-CTE LEFT JOIN aliasing
+# (`__bq_j_*`) is solid on the DuckDB path (R17 follow-up).
 ResolvedDeferredComputedColumn: semantic_executor
 ResolvedOrderByItem: duckdb_native
 ResolvedColumnHolder: semantic_executor

@@ -321,6 +321,69 @@ TEST_F(RouteClassifierTest, InsertValuesStaysOnSemanticExecutor) {
   EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
   EXPECT_EQ(d.offending_node, "ResolvedInsertStmt");
 }
+
+// R17: COALESCE(agg, lit) uses ResolvedDeferredComputedColumn and
+// currently promotes to semantic_executor. Documented so the DuckDB
+// follow-up (after CTE/join `__bq_j_*` aliasing is fixed) has a pin.
+TEST_F(RouteClassifierTest, CoalesceAroundCountStarPromotesViaDeferredColumn) {
+  const auto* stmt = Analyze("SELECT COALESCE(COUNT(*), 0) AS c FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
+}
+
+// R17: TIMESTAMP_ADD with a fixed-width INTERVAL literal must stay
+// on the DuckDB UDF path (bq_timestamp_add), not semantic_executor.
+// FROM people avoids the scalar-only SELECT promotion.
+TEST_F(RouteClassifierTest, TimestampAddLiteralIntervalRoutesToDuckdbUdf) {
+  const auto* stmt = Analyze(
+      "SELECT TIMESTAMP_ADD(TIMESTAMP '2024-01-01 00:00:00+00', "
+      "INTERVAL 7 DAY) AS t FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbUdf) << d.offending_node;
+}
+
+TEST_F(RouteClassifierTest, TimestampSubRoutesToDuckdbUdf) {
+  const auto* stmt = Analyze(
+      "SELECT TIMESTAMP_SUB(TIMESTAMP '2024-01-01 00:00:00+00', "
+      "INTERVAL 90 MINUTE) AS t FROM people");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbUdf) << d.offending_node;
+}
+
+// R17: value-list IN / NOT IN over STRING stays on DuckDB native.
+TEST_F(RouteClassifierTest, StringNotInValueListStaysOnDuckdbNative) {
+  const auto* stmt = Analyze(
+      "SELECT id FROM people WHERE name NOT IN ('status_x', 'status_y')");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
+}
+
+// R17: INSERT...SELECT body using TIMESTAMP_ADD + NOT IN + ROW_NUMBER
+// must promote the whole INSERT onto DuckDB (not semantic_executor).
+TEST_F(RouteClassifierTest, InsertSelectAttributionShapeRoutesToDuckdb) {
+  const auto* stmt = Analyze(
+      "INSERT INTO people (id, name) "
+      "SELECT id, name FROM ("
+      "  SELECT id, name,"
+      "    ROW_NUMBER() OVER (PARTITION BY id ORDER BY name) AS rn "
+      "  FROM people "
+      "  WHERE name NOT IN ('status_x', 'status_y') "
+      "    AND TIMESTAMP_ADD(TIMESTAMP '2024-01-01 00:00:00+00', "
+      "                      INTERVAL 7 DAY) > TIMESTAMP '2024-01-02 "
+      "00:00:00+00'"
+      ") WHERE rn = 1");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_TRUE(d.disposition == Disposition::kDuckdbNative ||
+              d.disposition == Disposition::kDuckdbUdf)
+      << d.offending_node << " reason=" << d.reason;
+  EXPECT_NE(d.disposition, Disposition::kSemanticExecutor) << d.offending_node;
+}
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

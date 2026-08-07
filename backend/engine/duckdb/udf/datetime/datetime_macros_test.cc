@@ -55,6 +55,14 @@ class DatetimeMacrosTest : public ::testing::Test {
     return v;
   }
 
+  // Statement with no interesting result (e.g. SET TimeZone).
+  void RunOk(const std::string& sql) {
+    ::duckdb_result result;
+    auto rc = ::duckdb_query(conn_, sql.c_str(), &result);
+    EXPECT_EQ(rc, ::DuckDBSuccess) << "DuckDB rejected: " << sql;
+    ::duckdb_destroy_result(&result);
+  }
+
   ::duckdb_database db_ = nullptr;
   ::duckdb_connection conn_ = nullptr;
 };
@@ -162,6 +170,57 @@ TEST_F(DatetimeMacrosTest, DateAddMonthEndSnap) {
 
 TEST_F(DatetimeMacrosTest, ExtractYear) {
   EXPECT_EQ(RunInt64("SELECT bq_extract(1, DATE '2020-06-15')"), 2020);
+}
+
+// --- bq_timestamp_add / bq_timestamp_sub -------------------------
+
+TEST_F(DatetimeMacrosTest, TimestampAddSevenDaysLiteral) {
+  // Same shape the conformance fixture exercises: n=7, part=DAY.
+  EXPECT_TRUE(RunBool(
+      "SELECT CAST(bq_timestamp_add(TIMESTAMPTZ '2024-03-09 12:00:00+00', "
+      "7, 3) AS VARCHAR) = '2024-03-16 12:00:00+00'"));
+  EXPECT_TRUE(RunBool(
+      "SELECT typeof(bq_timestamp_add(TIMESTAMPTZ '2024-03-09 12:00:00+00', "
+      "7, 3)) = 'TIMESTAMP WITH TIME ZONE'"));
+}
+
+TEST_F(DatetimeMacrosTest, TimestampAddDayIsExactly24hAcrossDst) {
+  // Edge case pinned: BigQuery TIMESTAMP_ADD(t, INTERVAL 1 DAY) adds
+  // exactly 86400 seconds. DuckDB's calendar-day interval on
+  // TIMESTAMPTZ would add "one local day" (23h across the 2024-03-10
+  // US spring-forward) in a non-UTC session zone; the macro's
+  // to_microseconds arithmetic must not.
+  RunOk("SET TimeZone='America/Los_Angeles'");
+  EXPECT_EQ(RunInt64("SELECT epoch_us(bq_timestamp_add("
+                     "TIMESTAMPTZ '2024-03-09 12:00:00-08', 1, 3)) - "
+                     "epoch_us(TIMESTAMPTZ '2024-03-09 12:00:00-08')"),
+            int64_t{86400} * 1000 * 1000);
+}
+
+TEST_F(DatetimeMacrosTest, TimestampAddMicrosecondGranularity) {
+  EXPECT_EQ(RunInt64("SELECT bq_unix_micros(bq_timestamp_add("
+                     "TIMESTAMPTZ '2024-01-01 00:00:00+00', 123456, 11))"),
+            kUs2024_01_01 + 123456);
+}
+
+TEST_F(DatetimeMacrosTest, TimestampAddNegativeAmountSubtracts) {
+  EXPECT_EQ(RunInt64("SELECT bq_unix_seconds(bq_timestamp_add("
+                     "TIMESTAMPTZ '2024-01-01 00:00:00+00', -2, 7))"),
+            kSec2024_01_01 - 2 * 3600);
+}
+
+TEST_F(DatetimeMacrosTest, TimestampSubMirrorsAdd) {
+  EXPECT_EQ(RunInt64("SELECT bq_unix_seconds(bq_timestamp_sub("
+                     "TIMESTAMPTZ '2024-01-01 00:00:00+00', 90, 8))"),
+            kSec2024_01_01 - 90 * 60);
+}
+
+TEST_F(DatetimeMacrosTest, TimestampAddNullPropagation) {
+  EXPECT_TRUE(
+      RunBool("SELECT bq_timestamp_add(NULL::TIMESTAMPTZ, 1, 3) IS NULL"));
+  EXPECT_TRUE(
+      RunBool("SELECT bq_timestamp_add(TIMESTAMPTZ '2024-01-01 00:00:00+00', "
+              "NULL, 3) IS NULL"));
 }
 
 }  // namespace

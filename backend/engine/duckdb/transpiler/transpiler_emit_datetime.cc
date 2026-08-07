@@ -1,11 +1,13 @@
 #include "backend/engine/duckdb/transpiler/transpiler_emit_datetime.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
 #include "absl/strings/str_cat.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "googlesql/public/functions/date_time_util.h"
+#include "googlesql/public/interval_value.h"
 #include "googlesql/public/value.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
 
@@ -183,6 +185,93 @@ std::optional<std::string> TryEmitIntervalCall(
   return EmitIntervalProduct(amount_sql, iv->part_enum);
 }
 
+// TIMESTAMP_ADD / TIMESTAMP_SUB only accept fixed-width parts (BQ
+// analyzer contract); everything else stays on the semantic route.
+bool IsFixedWidthTimestampPart(int part_enum) {
+  switch (static_cast<DateTimestampPart>(part_enum)) {
+    case DateTimestampPart::DAY:
+    case DateTimestampPart::HOUR:
+    case DateTimestampPart::MINUTE:
+    case DateTimestampPart::SECOND:
+    case DateTimestampPart::MILLISECOND:
+    case DateTimestampPart::MICROSECOND:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// `INTERVAL 7 DAY` constant-folds to a ResolvedLiteral of INTERVAL
+// type. Decompose it to total microseconds when it has no calendar
+// (month) component and no sub-microsecond remainder. IntervalValue
+// bounds (|days| <= 3.66e6, |micros| <= 3.2e11 s) keep the result
+// far inside int64 range.
+std::optional<int64_t> TryLiteralIntervalMicros(
+    const ::googlesql::ResolvedExpr* expr) {
+  if (expr == nullptr || expr->node_kind() != ::googlesql::RESOLVED_LITERAL) {
+    return std::nullopt;
+  }
+  const auto* lit = expr->GetAs<::googlesql::ResolvedLiteral>();
+  if (lit == nullptr || lit->value().is_null() ||
+      lit->value().type_kind() != ::googlesql::TYPE_INTERVAL) {
+    return std::nullopt;
+  }
+  const ::googlesql::IntervalValue& iv = lit->value().interval_value();
+  if (iv.get_months() != 0 || iv.get_nano_fractions() != 0) {
+    return std::nullopt;
+  }
+  return iv.get_days() * int64_t{86400000000} + iv.get_micros();
+}
+
+constexpr int kMicrosecondPartEnum =
+    static_cast<int>(DateTimestampPart::MICROSECOND);
+
+// Emits `bq_timestamp_add(...)` / `bq_timestamp_sub(...)`. Always
+// returns a value for these function names: either the lowered SQL
+// or "" (transpile failure) -- never std::nullopt, which would fall
+// through to the generic dispatch and emit the macro with the wrong
+// arity. `CanLowerTimestampAddSub` mirrors the accepted shapes for
+// the route classifier.
+std::string EmitTimestampAddSubCall(
+    absl::string_view name,
+    const ::googlesql::ResolvedFunctionCall* node,
+    const EmitExprFn& emit_expr) {
+  const char* macro =
+      (name == "timestamp_sub") ? "bq_timestamp_sub" : "bq_timestamp_add";
+  if (node->argument_list_size() == 3) {
+    std::string ts_sql = emit_expr(node->argument_list(0));
+    std::string amount_sql = emit_expr(node->argument_list(1));
+    const auto part = TryIntervalPartEnum(node->argument_list(2));
+    if (ts_sql.empty() || amount_sql.empty() || !part.has_value() ||
+        !IsFixedWidthTimestampPart(*part)) {
+      return "";
+    }
+    return absl::StrCat(macro, "(", ts_sql, ", ", amount_sql, ", ", *part, ")");
+  }
+  if (node->argument_list_size() != 2) return "";
+  std::string ts_sql = emit_expr(node->argument_list(0));
+  if (ts_sql.empty()) return "";
+  const ::googlesql::ResolvedExpr* interval_expr = node->argument_list(1);
+  if (const auto micros = TryLiteralIntervalMicros(interval_expr);
+      micros.has_value()) {
+    return absl::StrCat(
+        macro, "(", ts_sql, ", ", *micros, ", ", kMicrosecondPartEnum, ")");
+  }
+  if (interval_expr == nullptr ||
+      interval_expr->node_kind() != ::googlesql::RESOLVED_FUNCTION_CALL) {
+    return "";
+  }
+  const auto* interval_call =
+      interval_expr->GetAs<::googlesql::ResolvedFunctionCall>();
+  const auto iv = TryDecomposeIntervalArgs(interval_call);
+  if (!iv.has_value() || !IsFixedWidthTimestampPart(iv->part_enum)) return "";
+  std::string amount_sql =
+      emit_expr(interval_call->argument_list(iv->amount_arg_index));
+  if (amount_sql.empty()) return "";
+  return absl::StrCat(
+      macro, "(", ts_sql, ", ", amount_sql, ", ", iv->part_enum, ")");
+}
+
 }  // namespace
 
 std::optional<std::string> TryEmitDateTimeFunctionCall(
@@ -196,10 +285,31 @@ std::optional<std::string> TryEmitDateTimeFunctionCall(
   if (name == "date_add") {
     return TryEmitDateAddCall(node, emit_expr);
   }
+  if (name == "timestamp_add" || name == "timestamp_sub") {
+    return EmitTimestampAddSubCall(name, node, emit_expr);
+  }
   if (name == "$interval") {
     return TryEmitIntervalCall(node, emit_expr);
   }
   return std::nullopt;
+}
+
+bool CanLowerTimestampAddSub(const ::googlesql::ResolvedFunctionCall* node) {
+  if (node == nullptr) return false;
+  if (node->argument_list_size() == 3) {
+    const auto part = TryIntervalPartEnum(node->argument_list(2));
+    return part.has_value() && IsFixedWidthTimestampPart(*part);
+  }
+  if (node->argument_list_size() != 2) return false;
+  const ::googlesql::ResolvedExpr* interval_expr = node->argument_list(1);
+  if (TryLiteralIntervalMicros(interval_expr).has_value()) return true;
+  if (interval_expr == nullptr ||
+      interval_expr->node_kind() != ::googlesql::RESOLVED_FUNCTION_CALL) {
+    return false;
+  }
+  const auto iv = TryDecomposeIntervalArgs(
+      interval_expr->GetAs<::googlesql::ResolvedFunctionCall>());
+  return iv.has_value() && IsFixedWidthTimestampPart(iv->part_enum);
 }
 
 }  // namespace internal

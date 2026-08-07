@@ -100,9 +100,23 @@ $or: duckdb_native duckdb_name=OR
 $not: duckdb_native duckdb_name=NOT
 $is_null: duckdb_native duckdb_name=IS_NULL
 $is_not_null: duckdb_native duckdb_name=IS_NOT_NULL
+# Ready for the R17 DuckDB follow-up: analyzer wraps deferred-aggregate
+# results in `$with_side_effects(value, side_effect_bytes)`. Emission
+# keeps `value` only. Harmless while DeferredComputedColumn stays on
+# semantic_executor.
+$with_side_effects: duckdb_native duckdb_name=IDENTITY
 $like: semantic_executor
 $between: semantic_executor
-$in: semantic_executor
+# Value-list `IN` lowers to DuckDB's `IN` (identical NULL semantics:
+# `x IN (a, b)` is sugar for `x = a OR x = b`). Emission is
+# special-cased in `TryEmitInternalOperator` (infix `IN (...)`, not
+# a function call); `duckdb_name=IN` satisfies the disposition table
+# generator. The route classifier re-promotes arguments of
+# decimal/composite/exotic types where DuckDB equality diverges from
+# BigQuery (`InListNeedsSemantic`). `IN UNNEST(...)` and
+# `IN (<subquery>)` resolve to different node shapes and keep their
+# existing routes.
+$in: duckdb_native duckdb_name=IN
 $is_true: semantic_executor
 $is_not_true: semantic_executor
 $is_false: semantic_executor
@@ -408,8 +422,13 @@ date_trunc: semantic_executor
 datetime_add: semantic_executor
 datetime_sub: semantic_executor
 datetime_diff: semantic_executor
-timestamp_add: semantic_executor
-timestamp_sub: semantic_executor
+# TIMESTAMP_ADD / TIMESTAMP_SUB only accept fixed-width parts
+# (MICROSECOND..DAY), so they lower to `bq_timestamp_add` /
+# `bq_timestamp_sub` (exact microsecond arithmetic, DST-independent).
+# Non-lowerable interval shapes are re-promoted to semantic_executor
+# by the route classifier via `CanLowerTimestampAddSub`.
+timestamp_add: duckdb_udf duckdb_name=bq_timestamp_add
+timestamp_sub: duckdb_udf duckdb_name=bq_timestamp_sub
 timestamp_diff: semantic_executor
 timestamp_trunc: semantic_executor
 timestamp_bucket: semantic_executor

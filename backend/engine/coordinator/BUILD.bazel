@@ -48,6 +48,9 @@ cc_library(
     ],
     deps = [
         "//backend/engine:disposition",
+        # `CanLowerTimestampAddSub` (interval-shape gate for the
+        # TIMESTAMP_ADD/SUB duckdb_udf rows) lives on the transpiler.
+        "//backend/engine/duckdb/transpiler",
         "//backend/engine/duckdb/transpiler:functions",
         "//backend/engine/duckdb/transpiler:node_dispositions",
         "@com_google_absl//absl/status",

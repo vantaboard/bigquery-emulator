@@ -363,6 +363,61 @@ TEST_F(TranspilerTest, TranspileDateAddIntervalColumnRef) {
   EXPECT_EQ(sql.find(" DAY"), std::string::npos) << sql;
 }
 
+TEST_F(TranspilerTest, TranspileTimestampAddLiteralInterval) {
+  // Analyzer keeps `$interval(7, DAY)` (DAY part enum = 3) rather than
+  // folding to a TYPE_INTERVAL literal for this shape.
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT TIMESTAMP_ADD(timestamp, INTERVAL 7 DAY) AS t2 "
+      "FROM transactions");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "TIMESTAMP_ADD literal interval must transpile";
+  EXPECT_NE(sql.find("bq_timestamp_add"), std::string::npos) << sql;
+  EXPECT_NE(sql.find(", 7, 3)"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileTimestampSubColumnAmountInterval) {
+  // Non-literal amount keeps the `$interval(amount, part)` shape; the
+  // emit forwards the amount SQL with the part enum (HOUR = 7).
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT TIMESTAMP_SUB(t.timestamp, INTERVAL p.id HOUR) AS t2 "
+      "FROM transactions t CROSS JOIN people p");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "TIMESTAMP_SUB column interval must transpile";
+  EXPECT_NE(sql.find("bq_timestamp_sub"), std::string::npos) << sql;
+  EXPECT_NE(sql.find(", 7)"), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileNotInStringList) {
+  const ::googlesql::ResolvedStatement* stmt = Analyze(
+      "SELECT origin FROM transactions "
+      "WHERE origin NOT IN ('status_x', 'status_y')");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "value-list NOT IN must transpile";
+  EXPECT_NE(sql.find(" IN ('status_x', 'status_y')"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("NOT "), std::string::npos) << sql;
+}
+
+TEST_F(TranspilerTest, TranspileCoalesceAroundCountStar) {
+  // Analyzer wraps the deferred aggregate in `$with_side_effects`;
+  // emission must strip the companion and keep COALESCE(COUNT(*), 0).
+  const ::googlesql::ResolvedStatement* stmt =
+      Analyze("SELECT COALESCE(COUNT(*), 0) AS c FROM transactions");
+  ASSERT_NE(stmt, nullptr);
+  TestTranspiler t;
+  std::string sql = t.Transpile(stmt);
+  ASSERT_FALSE(sql.empty()) << "COALESCE(COUNT(*),0) must transpile";
+  EXPECT_NE(sql.find("COALESCE"), std::string::npos) << sql;
+  EXPECT_NE(sql.find("COUNT(*)"), std::string::npos)
+      << "expected DuckDB COUNT(*): " << sql;
+  EXPECT_EQ(sql.find("with_side_effects"), std::string::npos) << sql;
+}
+
 TEST_F(TranspilerTest, TranspileDateFuncsBenchShape) {
   const ::googlesql::ResolvedStatement* stmt = Analyze(
       "SELECT EXTRACT(YEAR FROM DATE_ADD(DATE '2020-01-01', INTERVAL id "

@@ -13,6 +13,7 @@
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "backend/engine/disposition.h"
 #include "backend/engine/duckdb/transpiler/functions.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
@@ -69,10 +70,26 @@ std::string TryEmitInternalOperator(absl::string_view name,
     if (args.size() != 1) return "";
     return absl::StrCat("(", args[0], " IS NOT NULL)");
   }
+  if (name == "$with_side_effects") {
+    // Drop the BYTES companion; DuckDB evaluates the value only.
+    if (args.size() != 2) return "";
+    return args[0];
+  }
   if (name == "$and" || name == "$or") {
     if (args.size() < 2) return "";
     const char* joiner = (name == "$and") ? " AND " : " OR ";
     return absl::StrCat("(", absl::StrJoin(args, joiner), ")");
+  }
+  if (name == "$in") {
+    // `x IN (e1, ..., en)`; the analyzer flattens the value list
+    // into trailing arguments. Same NULL semantics in DuckDB.
+    if (args.size() < 2) return "";
+    return absl::StrCat(
+        "(",
+        args[0],
+        " IN (",
+        absl::StrJoin(absl::MakeConstSpan(args).subspan(1), ", "),
+        "))");
   }
   if (args.size() != 2 || entry->duckdb_name.empty()) return "";
   return absl::StrCat("(", args[0], " ", entry->duckdb_name, " ", args[1], ")");

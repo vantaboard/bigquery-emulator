@@ -155,12 +155,16 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
         # The function-call emit consults `Function::Name()` and the
         # column-ref / table-scan emits consult `Catalog`'s `Table` +
         # `Column` interfaces, so we pull in `:catalog` and
         # `:function` alongside the resolved-AST target.
         "@googlesql//googlesql/public:catalog",
         "@googlesql//googlesql/public:function",
+        # `TryLiteralIntervalMicros` decomposes constant-folded
+        # `INTERVAL n <part>` literals for the TIMESTAMP_ADD/SUB emit.
+        "@googlesql//googlesql/public:interval_value",
         # ProductMode enum (`PRODUCT_EXTERNAL`) lives on the
         # options_cc_proto target; `Value::GetSQLLiteral` takes it as
         # its first argument.
