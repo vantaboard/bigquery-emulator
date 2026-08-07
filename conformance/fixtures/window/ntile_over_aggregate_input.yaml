@@ -1,0 +1,41 @@
+# R14: NTILE over aggregate input (RFM shape)
+# Reported: tester email (v0.8.0 Docker) —
+#   semantic: analytic function 'ntile' is not yet implemented
+# Index: conformance/REGRESSIONS.md
+#
+# `NTILE(...) OVER (ORDER BY SUM(...))` nests an aggregate inside the
+# analytic call, which the route classifier promotes to
+# `semantic_executor` (`ResolvedAnalyticFunctionCall(nested_aggregate)`).
+# NTILE already lowers on the DuckDB path for plain window forms; this
+# fixture pins the semantic implementation the RFM-style nested shape
+# needs.
+name: ntile_over_aggregate_input
+description: |
+  NTILE(5) OVER (ORDER BY SUM(amount)) with GROUP BY — RFM scoring
+  shape that routes to the semantic executor via nested aggregate.
+project_id: proj-r14-ntile-agg
+query: |
+  SELECT
+    customer_id,
+    NTILE(5) OVER (ORDER BY SUM(amount) ASC) AS m_score
+  FROM (
+    SELECT 1 AS customer_id, 100 AS amount UNION ALL
+    SELECT 2, 200 UNION ALL
+    SELECT 3, 300 UNION ALL
+    SELECT 4, 400 UNION ALL
+    SELECT 5, 500 UNION ALL
+    SELECT 6, 600 UNION ALL
+    SELECT 7, 700
+  )
+  GROUP BY customer_id
+  ORDER BY customer_id
+expected:
+  route: semantic_executor
+  rows:
+    - {customer_id: "1", m_score: "1"}
+    - {customer_id: "2", m_score: "1"}
+    - {customer_id: "3", m_score: "2"}
+    - {customer_id: "4", m_score: "2"}
+    - {customer_id: "5", m_score: "3"}
+    - {customer_id: "6", m_score: "4"}
+    - {customer_id: "7", m_score: "5"}

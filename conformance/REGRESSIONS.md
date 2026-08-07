@@ -26,6 +26,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R11 | `SELECT DISTINCT` after ROW_NUMBER dedup → DuckDB binder "source_updated_at not found" | core_usage + differential + transpiler + scenarios | aggregate scan + query root filter stale implicit ORDER BY |
 | R12 | TIMESTAMP wire `...+00` → "Failed to parse input string" on read/construct | core_usage + semantic + storage e2e | short-offset normalization before parse |
 | R13 | UNNEST in CTE then outer JOIN → DuckDB `__bq_j_N` / `__bq_input_rn` not found | cte_subquery + transpiler test | reset join-alias + rn flags across CTE boundaries |
+| R14 | `NTILE` over aggregate input → "analytic function 'ntile' is not yet implemented" | window + semantic executor test | semantic `ApplyAnalyticNtile` |
 
 ## Paths by tag
 
@@ -91,6 +92,11 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 - `conformance/fixtures/cte_subquery/unnest_cte_then_join.yaml`
 - `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`UnnestGroupByInCteThenJoinBinds`, `UnnestInCteThenJoinBinds`)
 
+### R14 — NTILE over aggregate input
+
+- `conformance/fixtures/window/ntile_over_aggregate_input.yaml`
+- `backend/engine/semantic/executor_test.cc` (`NtileOverAggregateInputUnevenBuckets`, `NtileNonPositiveBucketsRejectedAtAnalyze`)
+
 ## Machine-readable index
 
 Parsed by `go test ./conformance/ -run TestRegressionsIndexPathsExist`.
@@ -149,4 +155,7 @@ R13:
   - conformance/fixtures/cte_subquery/unnest_groupby_cte_then_join.yaml
   - conformance/fixtures/cte_subquery/unnest_cte_then_join.yaml
   - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
+R14:
+  - conformance/fixtures/window/ntile_over_aggregate_input.yaml
+  - backend/engine/semantic/executor_test.cc
 ```

@@ -369,6 +369,65 @@ TEST_F(SemanticExecutorTest, ChainedCteWithRowNumberAnalyticScan) {
   EXPECT_EQ(row.cells[0].int64_value(), 1);
 }
 
+// R14: NTILE over aggregate input (RFM shape) — semantic executor path.
+TEST_F(SemanticExecutorTest, NtileOverAggregateInputUnevenBuckets) {
+  const std::string sql =
+      "WITH rfm_raw AS ("
+      "  SELECT customer_id, SUM(amount) AS monetary FROM ("
+      "    SELECT 1 AS customer_id, 100 AS amount UNION ALL"
+      "    SELECT 2, 200 UNION ALL SELECT 3, 300 UNION ALL"
+      "    SELECT 4, 400 UNION ALL SELECT 5, 500 UNION ALL"
+      "    SELECT 6, 600 UNION ALL SELECT 7, 700"
+      "  ) GROUP BY customer_id"
+      "), rfm_scored AS ("
+      "  SELECT customer_id, monetary,"
+      "         NTILE(5) OVER (ORDER BY monetary ASC) AS m_score"
+      "  FROM rfm_raw"
+      ") "
+      "SELECT customer_id, m_score FROM rfm_scored ORDER BY customer_id";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  // 7 rows into 5 buckets → sizes 2,2,1,1,1 for customers 1..7.
+  const std::vector<int64_t> want_scores = {1, 1, 2, 2, 3, 4, 5};
+  for (size_t i = 0; i < want_scores.size(); ++i) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << i;
+    ASSERT_EQ(row.cells.size(), 2u);
+    EXPECT_EQ(row.cells[0].int64_value(), static_cast<int64_t>(i + 1));
+    EXPECT_EQ(row.cells[1].int64_value(), want_scores[i]) << "row " << i;
+  }
+  storage::Row extra;
+  auto has_extra = (*source)->Next(&extra);
+  ASSERT_TRUE(has_extra.ok());
+  EXPECT_FALSE(*has_extra);
+}
+
+TEST_F(SemanticExecutorTest, NtileNonPositiveBucketsRejectedAtAnalyze) {
+  // GoogleSQL rejects a constant non-positive NTILE argument before
+  // execution; ApplyAnalyticNtile also guards the runtime path for
+  // non-constant expressions that slip through.
+  const std::string sql =
+      "WITH rfm_raw AS ("
+      "  SELECT customer_id, SUM(amount) AS monetary FROM ("
+      "    SELECT 1 AS customer_id, 100 AS amount UNION ALL SELECT 2, 200"
+      "  ) GROUP BY customer_id"
+      ") "
+      "SELECT NTILE(0) OVER (ORDER BY monetary ASC) AS m_score FROM rfm_raw";
+  last_output_.reset();
+  absl::Status s = ::googlesql::AnalyzeStatement(sql,
+                                                 MakeAnalyzerOptions(),
+                                                 catalog_.get(),
+                                                 type_factory_.get(),
+                                                 &last_output_);
+  EXPECT_FALSE(s.ok());
+  EXPECT_NE(std::string(s.message()).find("NTILE"), std::string::npos) << s;
+}
+
 }  // namespace
 }  // namespace semantic
 }  // namespace engine
