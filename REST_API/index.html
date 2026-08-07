@@ -2113,8 +2113,8 @@ the REST surface BigQuery exposes does not proxy it, and the
 shape:</p>
 <ul>
 <li>The <strong>REST gateway</strong> (<code>gateway_main</code>, default <code>:9050</code>) does <strong>not</strong>
-  expose any <code>bigquery_emulator.v1.StorageRead</code> surface. Plan 39
-  intentionally keeps the gateway focused on the REST-only halves of
+  expose any <code>bigquery_emulator.v1.StorageRead</code> surface. The gateway
+  is intentionally kept focused on the REST-only halves of
   the public API (<code>projects</code>, <code>datasets</code>, <code>tables</code>, <code>jobs</code>,
   <code>tabledata.list</code>, <code>jobs.query</code>, <code>tabledata.insertAll</code>).</li>
 <li>The <strong>C++ engine</strong> (<code>emulator_main</code>, default <code>:9060</code> via
