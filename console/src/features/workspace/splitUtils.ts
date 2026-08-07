@@ -197,7 +197,7 @@ export function closeTabInSplit(state: WorkspaceSession, tabId: string): Workspa
     const activeTabId =
         group.activeTabId === tabId ? nextActiveInGroup(group.tabOrder, tabId) : group.activeTabId;
 
-    let split = setPaneGroup(state.split, pane, { tabOrder, activeTabId });
+    const split = setPaneGroup(state.split, pane, { tabOrder, activeTabId });
     const tabs = state.tabs.filter((t) => t.id !== tabId);
 
     let next: WorkspaceSession = {

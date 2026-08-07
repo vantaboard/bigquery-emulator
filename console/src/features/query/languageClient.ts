@@ -79,9 +79,9 @@ function lspRangeToMarker(
     Monaco.editor.IMarkerData,
     'startLineNumber' | 'startColumn' | 'endLineNumber' | 'endColumn'
 > {
-    let startLineNumber = range.start.line + 1;
+    const startLineNumber = range.start.line + 1;
     let startColumn = range.start.character + 1;
-    let endLineNumber = range.end.line + 1;
+    const endLineNumber = range.end.line + 1;
     let endColumn = range.end.character + 1;
 
     if (endLineNumber === startLineNumber) {
