@@ -1,0 +1,154 @@
+# R17: tester-reported attribution INSERT…SELECT hang at ~10k events.
+#
+# Shape: CTEs + COUNT(DISTINCT IF…) / COUNTIF / COALESCE(SUM…) +
+# TIMESTAMP_ADD window + NOT IN + ROW_NUMBER attribution + LEFT JOIN.
+# COALESCE(agg, 0) keeps the statement on semantic_executor (the path
+# that hung). The timed query aggregates that same SELECT body to one
+# row so iterations stay idempotent (CTAS/INSERT would either hit a
+# DuckDB `__bq_j_*` binder bug or accumulate rows across iterations).
+#
+# Scale mirrors the /tmp/perf_10k_float repro: 10k events, 1k users,
+# 1k transactions.
+name: attribution_insert_10k
+tags: [semantic, join, aggregate, analytic, heavy, r17]
+skip_targets: [goccy]
+skip_reason: "complex TIMESTAMP_ADD / COALESCE(agg) / multi-CTE shape; R17 tracks vantaboard semantic path"
+setup:
+  - sql: |
+      CREATE TABLE {{ds}}.activity_events AS
+      SELECT
+        CONCAT('t', CAST(MOD(id, 3) AS STRING)) AS tenant_id,
+        CONCAT('a', CAST(MOD(id, 50) AS STRING)) AS activity_id,
+        CONCAT('u', CAST(MOD(id, 1000) AS STRING)) AS user_public_id,
+        CASE MOD(id, 5)
+          WHEN 0 THEN 'action_1'
+          WHEN 1 THEN 'action_2'
+          WHEN 2 THEN 'action_3'
+          WHEN 3 THEN 'action_4'
+          ELSE 'action_5'
+        END AS action_type,
+        IF(MOD(id, 2) = 0, 'ch1', 'ch2') AS channel,
+        TIMESTAMP_ADD(
+          TIMESTAMP '2024-03-01 10:00:00 UTC',
+          INTERVAL MOD(id, 20) DAY
+        ) AS occurred_at,
+        CAST(MOD(id * 17, 500) AS FLOAT64) / 100.0 AS spend
+      FROM UNNEST(GENERATE_ARRAY(0, 9999)) AS id
+  - sql: |
+      CREATE TABLE {{ds}}.users AS
+      SELECT
+        id,
+        CONCAT('u', CAST(id AS STRING)) AS public_id
+      FROM UNNEST(GENERATE_ARRAY(0, 999)) AS id
+  - sql: |
+      CREATE TABLE {{ds}}.transactions AS
+      SELECT
+        id,
+        MOD(id * 31, 1000) AS user_id,
+        CAST(5 + MOD(id * 13, 195) AS FLOAT64) AS total_amount,
+        CAST(MOD(id * 7, 5) AS FLOAT64) AS total_reversed,
+        FALSE AS is_deleted,
+        CASE MOD(id, 4)
+          WHEN 0 THEN 'ok'
+          WHEN 1 THEN 'done'
+          WHEN 2 THEN 'status_x'
+          ELSE 'status_y'
+        END AS status,
+        TIMESTAMP_ADD(
+          TIMESTAMP '2024-03-02 15:00:00 UTC',
+          INTERVAL MOD(id, 24) DAY
+        ) AS source_created_at
+      FROM UNNEST(GENERATE_ARRAY(0, 999)) AS id
+query: |
+  WITH ActivityLogs AS (
+    SELECT tenant_id, activity_id, user_public_id, action_type, channel,
+           occurred_at, spend
+    FROM {{ds}}.activity_events
+  ),
+  MetricStats AS (
+    SELECT
+      tenant_id,
+      activity_id,
+      COUNT(DISTINCT IF(action_type = 'action_1', user_public_id, NULL))
+        AS metric_a,
+      COUNT(DISTINCT IF(action_type = 'action_2', user_public_id, NULL))
+        AS metric_b,
+      COUNTIF(action_type = 'action_3') AS metric_c_total,
+      COUNTIF(action_type = 'action_3' AND channel = 'ch1') AS metric_c_ch1,
+      COUNTIF(action_type = 'action_3' AND channel = 'ch2') AS metric_c_ch2,
+      COALESCE(SUM(spend), 0) AS total_spend,
+      COUNT(DISTINCT IF(action_type = 'action_4', user_public_id, NULL))
+        AS unique_metric_d,
+      COUNT(DISTINCT IF(action_type = 'action_5', user_public_id, NULL))
+        AS unique_metric_e,
+      COUNT(DISTINCT IF(
+        action_type = 'action_5' AND channel = 'ch1', user_public_id, NULL
+      )) AS unique_metric_e_ch1,
+      COUNT(DISTINCT IF(
+        action_type = 'action_5' AND channel = 'ch2', user_public_id, NULL
+      )) AS unique_metric_e_ch2
+    FROM ActivityLogs
+    GROUP BY tenant_id, activity_id
+  ),
+  ValidActivityDispatches AS (
+    SELECT user_public_id, activity_id, channel, occurred_at AS dispatched_at
+    FROM ActivityLogs
+    WHERE action_type = 'action_3'
+  ),
+  LatestTransactions AS (
+    SELECT * FROM {{ds}}.transactions
+  ),
+  AttributedTransactionsRaw AS (
+    SELECT
+      logs.activity_id,
+      logs.channel,
+      txn.id AS txn_id,
+      txn.total_amount,
+      COALESCE(txn.total_reversed, 0) AS reversed_amount,
+      ROW_NUMBER() OVER (
+        PARTITION BY txn.id ORDER BY logs.dispatched_at DESC
+      ) AS attribution_rank
+    FROM ValidActivityDispatches logs
+    JOIN {{ds}}.users users ON logs.user_public_id = users.public_id
+    JOIN LatestTransactions txn ON users.id = txn.user_id
+    WHERE txn.source_created_at > logs.dispatched_at
+      AND txn.source_created_at <= TIMESTAMP_ADD(
+        logs.dispatched_at, INTERVAL 7 DAY
+      )
+      AND COALESCE(txn.is_deleted, FALSE) = FALSE
+      AND txn.status NOT IN ('status_x', 'status_y')
+  ),
+  ValueStats AS (
+    SELECT
+      activity_id,
+      COUNT(txn_id) AS total_transactions,
+      COALESCE(SUM(total_amount), 0) AS gross_value,
+      COALESCE(SUM(total_amount - reversed_amount), 0) AS net_value,
+      COUNTIF(channel = 'ch1') AS ch1_transactions,
+      COUNTIF(channel = 'ch2') AS ch2_transactions,
+      COALESCE(
+        SUM(IF(channel = 'ch1', total_amount - reversed_amount, 0)), 0
+      ) AS ch1_net_value,
+      COALESCE(
+        SUM(IF(channel = 'ch2', total_amount - reversed_amount, 0)), 0
+      ) AS ch2_net_value
+    FROM AttributedTransactionsRaw
+    WHERE attribution_rank = 1
+    GROUP BY activity_id
+  ),
+  Attribution AS (
+    SELECT
+      p.activity_id AS id,
+      COALESCE(r.total_transactions, 0) AS total_transactions,
+      COALESCE(r.gross_value, 0) AS gross_value
+    FROM MetricStats p
+    LEFT JOIN ValueStats r ON p.activity_id = r.activity_id
+  )
+  SELECT
+    COUNT(*) AS activity_rows,
+    COALESCE(SUM(total_transactions), 0) AS txn_sum,
+    COALESCE(SUM(gross_value), 0) AS gross_sum
+  FROM Attribution
+iterations: 5
+warmup: 1
+max_ms: 180000

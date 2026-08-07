@@ -49,6 +49,12 @@ raised `max_ms` so slower targets (notably goccy) can finish. Capture a fresh
 BigQuery baseline (`task bench:baseline`) after adding heavy cases so they are
 gated and charted.
 
+`attribution_insert_10k` (tag `r17`) pins the tester-reported attribution
+`INSERT…SELECT` hang: ~10k activity events, 1k users, 1k transactions, with
+CTEs, `COALESCE(SUM…)`, `TIMESTAMP_ADD`, `NOT IN`, `ROW_NUMBER`, and a final
+LEFT JOIN. The timed statement is a `SELECT` over that same body (aggregated
+to one row) so iterations stay idempotent on the semantic path that hung.
+
 > **`GENERATE_ARRAY` cap:** BigQuery rejects a single `GENERATE_ARRAY` that
 > produces more than 1,048,576 elements (`Error 400: ... produced too many
 > elements`). The heavy 2M-row cases build tables with a `CROSS JOIN` of two
