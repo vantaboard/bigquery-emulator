@@ -7,6 +7,7 @@ import {
     createProtocolConnection,
     type ProtocolConnection,
     type Diagnostic as LspDiagnostic,
+    type DiagnosticSeverity,
     type CompletionItem,
     type Hover,
     type TextEdit,
@@ -116,7 +117,7 @@ function markersAtLineForHover(
 function markerSeverityToLsp(
     monaco: typeof Monaco,
     severity: Monaco.MarkerSeverity,
-): number {
+): DiagnosticSeverity {
     switch (severity) {
         case monaco.MarkerSeverity.Error:
             return 1;

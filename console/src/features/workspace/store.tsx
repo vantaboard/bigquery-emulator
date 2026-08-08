@@ -41,7 +41,6 @@ import {
     mergeSplitToGlobal,
     migrateSplit,
     pickSecondaryTabId,
-    sanitizeSplit,
     setPaneGroup,
 } from './splitUtils';
 

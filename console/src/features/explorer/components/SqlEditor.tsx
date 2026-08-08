@@ -171,7 +171,7 @@ export function SqlEditor({
                     editContext: false,
                     fixedOverflowWidgets: true,
                     hover: { enabled: true, sticky: true, delay: 100 },
-                    lightbulb: { enabled: 'on' },
+                    lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.On },
                     quickSuggestions: { other: true, comments: false, strings: false },
                     suggestOnTriggerCharacters: true,
                     wordBasedSuggestions: 'off',
