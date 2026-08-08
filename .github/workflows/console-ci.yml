@@ -50,6 +50,10 @@ jobs:
         run: pnpm --filter @bigquery-emulator/console test
 
       - name: Build console
+        env:
+          # Match docker-compose.e2e / seed project so the sidebar lists it
+          # even when the emulator's projects.list omits the default id.
+          VITE_DEFAULT_PROJECT: local-project
         run: pnpm --filter @bigquery-emulator/console build
 
       - name: Install Playwright browsers

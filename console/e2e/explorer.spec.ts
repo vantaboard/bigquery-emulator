@@ -36,6 +36,12 @@ async function selectTable(page: Page) {
     await expect(page.getByTestId('table-tab-page')).toBeVisible();
 }
 
+async function openTableSchemaTab(page: Page) {
+    await selectTable(page);
+    await page.getByTestId('table-resource-tab-schema').click();
+    await expect(page.getByTestId('table-tab-schema')).toBeVisible();
+}
+
 async function openQueryFromTable(page: Page) {
     await selectTable(page);
     await expect(page.getByTestId('table-tab-page')).toBeVisible();
