@@ -122,7 +122,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 - `conformance/fixtures/scalar/operator_in_not_in_value_list.yaml`
 - `backend/engine/coordinator/route_classifier_core_test.cc` (`TimestampAddLiteralIntervalRoutesToDuckdbUdf`, `InsertSelectAttributionShapeRoutesToDuckdb`, `CoalesceAroundCountStarStaysOnDuckdb`, `AttributionSelectWithCoalesceSumRoutesToDuckdb`)
 - `backend/engine/duckdb/transpiler/transpiler_integration_test.cc` (`TranspileTimestampAddLiteralInterval`, `TranspileNotInStringList`, `TranspileCoalesceAroundCountStar`)
-- `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`AttributionMultiCteSelectBinds`, `AttributionInsertSelectBinds`, `AttributionCtasSelectBinds`)
+- `backend/engine/duckdb/transpiler/transpiler_emit_attribution_composition_test.cc` (`AttributionMultiCteSelectBinds`, `AttributionCompactInsertSelectBinds`, `AttributionInsertSelectBinds`, `AttributionCtasSelectBinds`)
 - `backend/engine/semantic/executor_join_test.cc` (hash equi-join)
 - `bench/cases/attribution_insert_10k.yaml` (10k-event latency pin)
 
@@ -200,7 +200,7 @@ R17:
   - conformance/fixtures/functions/datetime/function_timestamp_sub.yaml
   - conformance/fixtures/scalar/operator_in_not_in_value_list.yaml
   - backend/engine/coordinator/route_classifier_core_test.cc
+  - backend/engine/duckdb/transpiler/transpiler_emit_attribution_composition_test.cc
   - backend/engine/semantic/executor_join_test.cc
-  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
   - bench/cases/attribution_insert_10k.yaml
 ```

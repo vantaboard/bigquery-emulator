@@ -4,8 +4,6 @@
 #include <string>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
@@ -425,9 +423,26 @@ std::string Transpiler::EmitAnalyticScan(
   }
 
   if (projections.empty()) return "";
-  std::string select_list =
+  const std::string select_list =
       absl::StrCat("*, ", absl::StrJoin(projections, ", "));
-  return absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
+  std::string sql = absl::StrCat("SELECT ", select_list, " FROM (", input, ")");
+
+  // Join outputs expose `__bq_j_<id>` while analytic AS aliases use
+  // user names. Normalize so later ProjectScan / CTE anchors do not
+  // remap analytic columns to missing `__bq_j_<analytic_id>` (R17).
+  const bool input_used_join_aliases =
+      join_output_uses_id_aliases_ || join_output_columns_use_id_aliases_;
+  sql = MaybeNormalizeAnalyticJoinAliases(node,
+                                          std::move(sql),
+                                          input_used_join_aliases,
+                                          input_has_rn_column_,
+                                          &output_order_items_,
+                                          output_order_column_ids_);
+  if (input_used_join_aliases) {
+    join_output_uses_id_aliases_ = false;
+    join_output_columns_use_id_aliases_ = false;
+  }
+  return sql;
 }
 
 }  // namespace transpiler

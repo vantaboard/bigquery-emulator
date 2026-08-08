@@ -193,6 +193,7 @@ cc_test(
         "transpiler_emit_scans_test.cc",
         "transpiler_emit_aggregate_test.cc",
         "transpiler_emit_composition_test.cc",
+        "transpiler_emit_attribution_composition_test.cc",
         "transpiler_functions_table_test.cc",
         "transpiler_emit_analytic_test.cc",
         "transpiler_emit_query_test.cc",

@@ -3,8 +3,11 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/types/span.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 
 namespace bigquery_emulator {
@@ -148,6 +151,70 @@ std::string WrapInputWithPctCoalesce(absl::string_view input,
                       " FROM (",
                       input,
                       ")");
+}
+
+std::string MaybeNormalizeAnalyticJoinAliases(
+    const ::googlesql::ResolvedAnalyticScan* node,
+    std::string sql,
+    bool input_used_join_aliases,
+    bool input_has_rn_column,
+    std::vector<std::string>* order_items,
+    absl::Span<const int> order_column_ids) {
+  if (!input_used_join_aliases || node == nullptr) {
+    return sql;
+  }
+
+  absl::flat_hash_set<int> analytic_ids;
+  for (int g = 0; g < node->function_group_list_size(); ++g) {
+    const ::googlesql::ResolvedAnalyticFunctionGroup* group =
+        node->function_group_list(g);
+    if (group == nullptr) continue;
+    for (int f = 0; f < group->analytic_function_list_size(); ++f) {
+      const ::googlesql::ResolvedComputedColumnBase* col =
+          group->analytic_function_list(f);
+      if (col != nullptr) {
+        analytic_ids.insert(col->column().column_id());
+      }
+    }
+  }
+
+  std::vector<std::string> normalized;
+  normalized.reserve(static_cast<size_t>(node->column_list_size()) + 1);
+  absl::flat_hash_map<int, std::string> id_to_name;
+  id_to_name.reserve(static_cast<size_t>(node->column_list_size()));
+  for (int i = 0; i < node->column_list_size(); ++i) {
+    const ::googlesql::ResolvedColumn& col = node->column_list(i);
+    id_to_name[col.column_id()] = col.name();
+    if (analytic_ids.contains(col.column_id())) {
+      normalized.push_back(internal::QuoteIdent(col.name()));
+    } else {
+      normalized.push_back(
+          absl::StrCat(internal::JoinColumnIdAlias(col.column_id()),
+                       " AS ",
+                       internal::QuoteIdent(col.name())));
+    }
+  }
+  if (input_has_rn_column) {
+    normalized.push_back(internal::QuoteIdent(internal::kBqInputRnCol));
+  }
+  sql = absl::StrCat(
+      "SELECT ", absl::StrJoin(normalized, ", "), " FROM (", sql, ")");
+
+  if (order_items != nullptr) {
+    for (size_t i = 0; i < order_items->size(); ++i) {
+      const int col_id = i < order_column_ids.size() ? order_column_ids[i] : -1;
+      if (col_id < 0) continue;
+      auto it = id_to_name.find(col_id);
+      if (it == id_to_name.end()) continue;
+      const std::string leading =
+          internal::OrderItemLeadingColumn((*order_items)[i]);
+      if (leading.empty()) continue;
+      (*order_items)[i] =
+          absl::StrCat(internal::QuoteIdent(it->second),
+                       (*order_items)[i].substr(leading.size()));
+    }
+  }
+  return sql;
 }
 
 }  // namespace transpiler
