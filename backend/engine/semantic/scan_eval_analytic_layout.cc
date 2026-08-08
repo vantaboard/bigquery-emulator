@@ -5,13 +5,9 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "backend/engine/semantic/error.h"
-#include "backend/engine/semantic/eval_expr.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
-#include "googlesql/public/functions/date_time_util.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {
@@ -72,106 +68,12 @@ std::vector<Value> PartitionKeysForRow(
   return keys;
 }
 
-absl::StatusOr<int64_t> EvalFrameOffsetInt64(
-    const ::googlesql::ResolvedExpr* expr, EvalContext& ctx) {
-  if (expr == nullptr) {
-    return absl::InvalidArgumentError("semantic: frame offset missing");
-  }
-  auto value_or = EvalExpr(*expr, ctx);
-  if (!value_or.ok()) return value_or.status();
-  if (value_or->is_null()) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "semantic: frame offset must not be NULL");
-  }
-  if (value_or->type_kind() == ::googlesql::TYPE_INT64) {
-    return value_or->int64_value();
-  }
-  if (value_or->type_kind() == ::googlesql::TYPE_DOUBLE) {
-    return static_cast<int64_t>(value_or->double_value());
-  }
-  return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                           "semantic: frame offset must be INT64");
-}
-
-absl::StatusOr<Value> AddDateOffset(Value date, int64_t offset_days) {
-  if (date.is_null()) return date;
-  int32_t out = 0;
-  if (auto s = ::googlesql::functions::AddDate(
-          date.date_value(),
-          ::googlesql::functions::DateTimestampPart::DAY,
-          offset_days,
-          &out);
-      !s.ok()) {
-    return s;
-  }
-  return Value::Date(out);
-}
-
-absl::StatusOr<Value> AddTimestampOffset(Value ts, int64_t offset_micros) {
-  if (ts.is_null()) return ts;
-  return Value::TimestampFromUnixMicros(ts.ToUnixMicros() + offset_micros);
-}
-
 }  // namespace
 
 Value LookupColumnValue(const ColumnBindings& row, int col_id) {
   auto it = row.find(col_id);
   if (it == row.end()) return Value();
   return it->second;
-}
-
-absl::StatusOr<Value> FrameBoundValue(
-    const ::googlesql::ResolvedWindowFrameExpr* bound,
-    const Value& current_order,
-    EvalContext& ctx) {
-  if (bound == nullptr) {
-    return absl::InvalidArgumentError("semantic: frame bound missing");
-  }
-  switch (bound->boundary_type()) {
-    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_PRECEDING:
-    case ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_FOLLOWING:
-      return Value::NullInt64();
-    case ::googlesql::ResolvedWindowFrameExpr::CURRENT_ROW:
-      return current_order;
-    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_PRECEDING: {
-      auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
-      if (!offset_or.ok()) return offset_or.status();
-      if (current_order.type_kind() == ::googlesql::TYPE_INT64) {
-        return Value::Int64(current_order.int64_value() - *offset_or);
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_DOUBLE) {
-        return Value::Double(current_order.double_value() -
-                             static_cast<double>(*offset_or));
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
-        return AddDateOffset(current_order, -*offset_or);
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
-        return AddTimestampOffset(current_order, -*offset_or);
-      }
-      break;
-    }
-    case ::googlesql::ResolvedWindowFrameExpr::OFFSET_FOLLOWING: {
-      auto offset_or = EvalFrameOffsetInt64(bound->expression(), ctx);
-      if (!offset_or.ok()) return offset_or.status();
-      if (current_order.type_kind() == ::googlesql::TYPE_INT64) {
-        return Value::Int64(current_order.int64_value() + *offset_or);
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_DOUBLE) {
-        return Value::Double(current_order.double_value() +
-                             static_cast<double>(*offset_or));
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_DATE) {
-        return AddDateOffset(current_order, *offset_or);
-      }
-      if (current_order.type_kind() == ::googlesql::TYPE_TIMESTAMP) {
-        return AddTimestampOffset(current_order, *offset_or);
-      }
-      break;
-    }
-  }
-  return MakeSemanticError(SemanticErrorReason::kNotImplemented,
-                           "semantic: unsupported frame bound for order key");
 }
 
 bool ValueInClosedRange(const Value& value,

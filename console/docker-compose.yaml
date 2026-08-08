@@ -16,7 +16,8 @@ services:
 
   bq-ui:
     build:
-      context: .
+      context: ..
+      dockerfile: console/Dockerfile
       args:
         VITE_DEFAULT_PROJECT: local-project
     ports:

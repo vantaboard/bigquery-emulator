@@ -59,6 +59,7 @@ jobs:
       - name: E2E tests
         working-directory: console
         run: |
-          pnpm run e2e:up
+          # dist/ already produced by "Build console"; compose serves it via nginx.
+          docker compose -f docker-compose.e2e.yaml up -d --wait
           pnpm run test:e2e
           pnpm run e2e:down

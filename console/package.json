@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "task console:e2e:local",
     "test:e2e:ui": "playwright test --ui",
-    "e2e:up": "docker compose -f docker-compose.e2e.yaml up -d --wait --build",
+    "e2e:up": "pnpm run build && docker compose -f docker-compose.e2e.yaml up -d --wait",
     "e2e:down": "docker compose -f docker-compose.e2e.yaml down -v"
   },
   "dependencies": {

@@ -1,5 +1,7 @@
 # E2E stack: pinned Vantaboard emulator + static UI (nginx proxies /bigquery to emulator).
-# Usage: docker compose -f docker-compose.e2e.yaml up -d --wait --build
+# Expects `console/dist` from `pnpm --filter @bigquery-emulator/console build`
+# (CI runs build before e2e:up; locally `e2e:up` builds first).
+# Usage: pnpm run e2e:up
 services:
   bigquery:
     image: ghcr.io/vantaboard/bigquery-emulator:v0.5.0
@@ -15,10 +17,10 @@ services:
       start_period: 45s
 
   bq-ui:
-    build:
-      context: .
-      args:
-        VITE_DEFAULT_PROJECT: local-project
+    image: nginx:1.27-alpine
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8080:80"
     depends_on:
