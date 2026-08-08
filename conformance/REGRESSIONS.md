@@ -29,7 +29,7 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 | R14 | `NTILE` over aggregate input → "analytic function 'ntile' is not yet implemented" | window + semantic executor test | semantic `ApplyAnalyticNtile` |
 | R15 | `RANK`/`DENSE_RANK`/`LAG`/`LEAD` over aggregate input → "analytic function ... is not yet implemented" | window + semantic executor test | semantic rank/lag/lead apply |
 | R16 | `MAX(date_col)` on semantic route → "aggregate 'max' is not implemented" | aggregate + semantic executor test | MIN/MAX over all orderable types via `Value::LessThan` |
-| R17 | INSERT…SELECT with `TIMESTAMP_ADD` + `NOT IN` + `COALESCE(SUM…)` hangs at ~1k–10k rows (semantic nested-loop joins) | dml + datetime + scalar + classifier/transpiler/semantic tests | `$in` + `timestamp_add/sub` → DuckDB; semantic hash equi-join; `COALESCE(agg)` still forces semantic (DuckDB CTE/`__bq_j_*` follow-up) |
+| R17 | INSERT…SELECT with `TIMESTAMP_ADD` + `NOT IN` + `COALESCE(SUM…)` hangs at ~1k–10k rows (semantic nested-loop joins) | dml + datetime + scalar + classifier/transpiler/semantic tests | `$in` + `timestamp_add/sub` → DuckDB; semantic hash equi-join; `COALESCE(agg)` / `ResolvedDeferredComputedColumn` → DuckDB after multi-CTE `__bq_j_*` bind pins |
 
 ## Paths by tag
 
@@ -115,11 +115,14 @@ in the v0.3.0 → v0.5.0 email thread, so fixed bugs can never silently re-break
 
 - `conformance/fixtures/dml/insert_select_attribution_window.yaml`
 - `conformance/fixtures/dml/insert_select_attribution_window_route.yaml`
+- `conformance/fixtures/dml/insert_select_attribution_coalesce_route.yaml`
+- `conformance/fixtures/aggregate/aggregate_coalesce_count_star_duckdb.yaml`
 - `conformance/fixtures/functions/datetime/function_timestamp_add.yaml`
 - `conformance/fixtures/functions/datetime/function_timestamp_sub.yaml`
 - `conformance/fixtures/scalar/operator_in_not_in_value_list.yaml`
-- `backend/engine/coordinator/route_classifier_core_test.cc` (`TimestampAddLiteralIntervalRoutesToDuckdbUdf`, `InsertSelectAttributionShapeRoutesToDuckdb`, `CoalesceAroundCountStarPromotesViaDeferredColumn`)
+- `backend/engine/coordinator/route_classifier_core_test.cc` (`TimestampAddLiteralIntervalRoutesToDuckdbUdf`, `InsertSelectAttributionShapeRoutesToDuckdb`, `CoalesceAroundCountStarStaysOnDuckdb`, `AttributionSelectWithCoalesceSumRoutesToDuckdb`)
 - `backend/engine/duckdb/transpiler/transpiler_integration_test.cc` (`TranspileTimestampAddLiteralInterval`, `TranspileNotInStringList`, `TranspileCoalesceAroundCountStar`)
+- `backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc` (`AttributionMultiCteSelectBinds`, `AttributionInsertSelectBinds`, `AttributionCtasSelectBinds`)
 - `backend/engine/semantic/executor_join_test.cc` (hash equi-join)
 - `bench/cases/attribution_insert_10k.yaml` (10k-event latency pin)
 
@@ -191,10 +194,13 @@ R16:
 R17:
   - conformance/fixtures/dml/insert_select_attribution_window.yaml
   - conformance/fixtures/dml/insert_select_attribution_window_route.yaml
+  - conformance/fixtures/dml/insert_select_attribution_coalesce_route.yaml
+  - conformance/fixtures/aggregate/aggregate_coalesce_count_star_duckdb.yaml
   - conformance/fixtures/functions/datetime/function_timestamp_add.yaml
   - conformance/fixtures/functions/datetime/function_timestamp_sub.yaml
   - conformance/fixtures/scalar/operator_in_not_in_value_list.yaml
   - backend/engine/coordinator/route_classifier_core_test.cc
   - backend/engine/semantic/executor_join_test.cc
+  - backend/engine/duckdb/transpiler/transpiler_emit_composition_test.cc
   - bench/cases/attribution_insert_10k.yaml
 ```

@@ -322,15 +322,35 @@ TEST_F(RouteClassifierTest, InsertValuesStaysOnSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "ResolvedInsertStmt");
 }
 
-// R17: COALESCE(agg, lit) uses ResolvedDeferredComputedColumn and
-// currently promotes to semantic_executor. Documented so the DuckDB
-// follow-up (after CTE/join `__bq_j_*` aliasing is fixed) has a pin.
-TEST_F(RouteClassifierTest, CoalesceAroundCountStarPromotesViaDeferredColumn) {
+// R17 follow-up: COALESCE(agg, lit) uses ResolvedDeferredComputedColumn
+// and now stays on DuckDB (transpiler strips $with_side_effects).
+TEST_F(RouteClassifierTest, CoalesceAroundCountStarStaysOnDuckdb) {
   const auto* stmt = Analyze("SELECT COALESCE(COUNT(*), 0) AS c FROM people");
   ASSERT_NE(stmt, nullptr);
   RouteDecision d = classifier_.Classify(*stmt);
-  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
-  EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
+  EXPECT_TRUE(d.disposition == Disposition::kDuckdbNative ||
+              d.disposition == Disposition::kDuckdbUdf)
+      << d.offending_node << " reason=" << d.reason;
+  EXPECT_NE(d.disposition, Disposition::kSemanticExecutor) << d.offending_node;
+}
+
+// R17 follow-up: multi-CTE attribution SELECT with COALESCE(SUM) must
+// not promote to semantic_executor once DeferredComputedColumn is native.
+TEST_F(RouteClassifierTest, AttributionSelectWithCoalesceSumRoutesToDuckdb) {
+  const auto* stmt = Analyze(
+      "WITH logs AS ("
+      "  SELECT name AS activity_id, id AS spend FROM people"
+      "), stats AS ("
+      "  SELECT activity_id, COALESCE(SUM(spend), 0) AS total_spend "
+      "  FROM logs GROUP BY activity_id"
+      ") "
+      "SELECT COUNT(*) AS n, COALESCE(SUM(total_spend), 0) AS s FROM stats");
+  ASSERT_NE(stmt, nullptr);
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_TRUE(d.disposition == Disposition::kDuckdbNative ||
+              d.disposition == Disposition::kDuckdbUdf)
+      << d.offending_node << " reason=" << d.reason;
+  EXPECT_NE(d.disposition, Disposition::kSemanticExecutor) << d.offending_node;
 }
 
 // R17: TIMESTAMP_ADD with a fixed-width INTERVAL literal must stay

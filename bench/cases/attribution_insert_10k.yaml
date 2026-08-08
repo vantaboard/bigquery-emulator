@@ -2,17 +2,17 @@
 #
 # Shape: CTEs + COUNT(DISTINCT IF…) / COUNTIF / COALESCE(SUM…) +
 # TIMESTAMP_ADD window + NOT IN + ROW_NUMBER attribution + LEFT JOIN.
-# COALESCE(agg, 0) keeps the statement on semantic_executor (the path
-# that hung). The timed query aggregates that same SELECT body to one
-# row so iterations stay idempotent (CTAS/INSERT would either hit a
-# DuckDB `__bq_j_*` binder bug or accumulate rows across iterations).
+# After the R17 DuckDB follow-up, COALESCE(agg) / DeferredComputedColumn
+# routes to DuckDB (not semantic_executor). The timed query aggregates
+# that same SELECT body to one row so iterations stay idempotent
+# (CTAS/INSERT would accumulate rows across iterations).
 #
 # Scale mirrors the /tmp/perf_10k_float repro: 10k events, 1k users,
 # 1k transactions.
 name: attribution_insert_10k
-tags: [semantic, join, aggregate, analytic, heavy, r17]
+tags: [join, aggregate, analytic, heavy, r17]
 skip_targets: [goccy]
-skip_reason: "complex TIMESTAMP_ADD / COALESCE(agg) / multi-CTE shape; R17 tracks vantaboard semantic path"
+skip_reason: "complex TIMESTAMP_ADD / COALESCE(agg) / multi-CTE shape; R17 tracks vantaboard DuckDB path"
 setup:
   - sql: |
       CREATE TABLE {{ds}}.activity_events AS

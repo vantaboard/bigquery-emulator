@@ -202,10 +202,10 @@ ResolvedUpdateConstructor: unsupported
 ResolvedOutputColumn: duckdb_native
 ResolvedComputedColumn: duckdb_native
 # Side-effect-aware computed column. Aggregate-backed forms
-# (`COALESCE(COUNT(*), 0)`) are ubiquitous; they stay on
-# `semantic_executor` until multi-CTE LEFT JOIN aliasing
-# (`__bq_j_*`) is solid on the DuckDB path (R17 follow-up).
-ResolvedDeferredComputedColumn: semantic_executor
+# (`COALESCE(COUNT(*), 0)`) lower via `$with_side_effects` strip
+# (IDENTITY) on the DuckDB path. R17 follow-up: multi-CTE LEFT JOIN
+# `__bq_j_*` aliasing is pinned by Attribution* composition bind tests.
+ResolvedDeferredComputedColumn: duckdb_native
 ResolvedOrderByItem: duckdb_native
 ResolvedColumnHolder: semantic_executor
 # `ResolvedGroupingSet*` / `ResolvedRollup` / `ResolvedCube` row

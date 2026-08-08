@@ -1,0 +1,64 @@
+# R17 follow-up: INSERT...SELECT with COALESCE(SUM…) must stay on DuckDB
+# once ResolvedDeferredComputedColumn is duckdb_native.
+name: insert_select_attribution_coalesce_route
+description: |
+  Attribution INSERT body with COALESCE(SUM(total_amount), 0) must not
+  promote to semantic_executor.
+project_id: proj-dml-attr-coalesce
+dataset_id: ds_attr_coalesce
+setup:
+  - dataset: ds_attr_coalesce
+  - sql: |
+      CREATE TABLE ds_attr_coalesce.dispatches (
+        user_public_id STRING, activity_id STRING,
+        dispatched_at TIMESTAMP
+      )
+  - sql: |
+      CREATE TABLE ds_attr_coalesce.users (id INT64, public_id STRING)
+  - sql: |
+      CREATE TABLE ds_attr_coalesce.transactions (
+        id INT64, user_id INT64, total_amount FLOAT64,
+        status STRING, source_created_at TIMESTAMP
+      )
+  - sql: |
+      CREATE TABLE ds_attr_coalesce.summary (
+        activity_id STRING, total_transactions INT64, gross_value FLOAT64
+      )
+  - sql: |
+      INSERT INTO ds_attr_coalesce.users VALUES (1, 'u1')
+  - sql: |
+      INSERT INTO ds_attr_coalesce.dispatches VALUES
+        ('u1', 'a1', TIMESTAMP '2024-03-01 10:00:00 UTC')
+  - sql: |
+      INSERT INTO ds_attr_coalesce.transactions VALUES
+        (10, 1, 100.0, 'ok', TIMESTAMP '2024-03-03 15:00:00 UTC')
+query: |
+  INSERT INTO ds_attr_coalesce.summary
+    (activity_id, total_transactions, gross_value)
+  WITH Attributed AS (
+    SELECT
+      logs.activity_id,
+      txn.id AS txn_id,
+      txn.total_amount,
+      ROW_NUMBER() OVER (
+        PARTITION BY txn.id ORDER BY logs.dispatched_at DESC
+      ) AS attribution_rank
+    FROM ds_attr_coalesce.dispatches logs
+    JOIN ds_attr_coalesce.users users ON logs.user_public_id = users.public_id
+    JOIN ds_attr_coalesce.transactions txn ON users.id = txn.user_id
+    WHERE txn.source_created_at > logs.dispatched_at
+      AND txn.source_created_at <= TIMESTAMP_ADD(
+        logs.dispatched_at, INTERVAL 7 DAY
+      )
+      AND txn.status NOT IN ('status_x', 'status_y')
+  )
+  SELECT
+    activity_id,
+    COUNT(txn_id) AS total_transactions,
+    COALESCE(SUM(total_amount), 0) AS gross_value
+  FROM Attributed
+  WHERE attribution_rank = 1
+  GROUP BY activity_id
+expected:
+  route: duckdb_udf
+  rows: []

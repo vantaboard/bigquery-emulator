@@ -1,9 +1,10 @@
 # R17: INSERT...SELECT attribution shape must stay on DuckDB.
 #
 # Compact form of the tester's activity-summary INSERT: CTE + JOIN +
-# TIMESTAMP_ADD window filter + NOT IN + ROW_NUMBER + outer aggregates.
-# Before R17, `$in` and `timestamp_add` forced semantic_executor and
-# the nested-loop join path hung at ~1k–10k rows.
+# TIMESTAMP_ADD window filter + NOT IN + ROW_NUMBER + outer aggregates
+# including COALESCE(SUM…). Before R17, `$in` / `timestamp_add` forced
+# semantic_executor; the R17 follow-up also routes COALESCE(agg) /
+# ResolvedDeferredComputedColumn to DuckDB.
 name: insert_select_attribution_window
 description: |
   INSERT...SELECT with TIMESTAMP_ADD / NOT IN / ROW_NUMBER attribution
@@ -93,8 +94,9 @@ query: |
   FROM ds_attr.summary
   ORDER BY activity_id
 expected:
-  # Final SELECT is duckdb_native; INSERT route is pinned separately
-  # by insert_select_attribution_window_route.yaml.
+  # Final SELECT is duckdb_native; INSERT with COALESCE(SUM) is pinned
+  # by insert_select_attribution_coalesce_route.yaml (and the
+  # TIMESTAMP_ADD-only INSERT by insert_select_attribution_window_route.yaml).
   route: duckdb_native
   rows:
     # txn10 → a2 (later dispatch wins ROW_NUMBER); txn12 → a1;

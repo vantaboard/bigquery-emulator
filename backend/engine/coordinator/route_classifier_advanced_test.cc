@@ -157,16 +157,11 @@ TEST_F(RouteClassifierTest, RecursiveScanRoutesToDuckdbRewrite) {
   EXPECT_EQ(d.disposition, Disposition::kDuckdbRewrite);
 }
 
-TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
-  // `docs/ENGINE_POLICY.md` Family 5. A
-  // `ResolvedDeferredComputedColumn` is the side-effect-aware
-  // form of a computed column. DuckDB has no native model for the
-  // deferred-error semantic; the disposition table routes any
-  // query containing one to the semantic executor.
-  //
-  // Hand-build a `ResolvedAggregateScan` whose `aggregate_list`
-  // holds a `ResolvedDeferredComputedColumn` so the classifier
-  // promotes via the YAML lookup.
+TEST_F(RouteClassifierTest, DeferredComputedColumnStaysOnDuckdbNative) {
+  // R17 follow-up: ResolvedDeferredComputedColumn is duckdb_native.
+  // Hand-build an AggregateScan whose aggregate_list holds a
+  // DeferredComputedColumn so the classifier resolves via YAML lookup
+  // without depending on analyzer side-effect rewriting.
   ::googlesql::ResolvedColumn out_col(
       /*column_id=*/300,
       /*table_name=*/::googlesql::IdString::MakeGlobal("$query"),
@@ -196,8 +191,8 @@ TEST_F(RouteClassifierTest, DeferredComputedColumnPromotesToSemanticExecutor) {
       std::move(outputs), /*is_value_table=*/false, std::move(agg_scan));
 
   RouteDecision d = classifier_.Classify(*query_stmt);
-  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
-  EXPECT_EQ(d.offending_node, "ResolvedDeferredComputedColumn");
+  EXPECT_EQ(d.disposition, Disposition::kDuckdbNative) << d.offending_node;
+  EXPECT_NE(d.disposition, Disposition::kSemanticExecutor) << d.offending_node;
 }
 
 TEST_F(RouteClassifierTest, DifferentialPrivacyAggregateScanRoutesToLocalStub) {

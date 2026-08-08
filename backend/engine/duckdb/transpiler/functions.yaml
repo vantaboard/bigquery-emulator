@@ -100,10 +100,10 @@ $or: duckdb_native duckdb_name=OR
 $not: duckdb_native duckdb_name=NOT
 $is_null: duckdb_native duckdb_name=IS_NULL
 $is_not_null: duckdb_native duckdb_name=IS_NOT_NULL
-# Ready for the R17 DuckDB follow-up: analyzer wraps deferred-aggregate
-# results in `$with_side_effects(value, side_effect_bytes)`. Emission
-# keeps `value` only. Harmless while DeferredComputedColumn stays on
-# semantic_executor.
+# Analyzer wraps deferred-aggregate results in
+# `$with_side_effects(value, side_effect_bytes)`. Emission keeps
+# `value` only (DuckDB evaluates eagerly). Used by R17 COALESCE(agg)
+# shapes now that ResolvedDeferredComputedColumn is duckdb_native.
 $with_side_effects: duckdb_native duckdb_name=IDENTITY
 $like: semantic_executor
 $between: semantic_executor

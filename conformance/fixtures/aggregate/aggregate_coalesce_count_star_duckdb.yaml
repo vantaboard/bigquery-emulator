@@ -1,0 +1,31 @@
+# R17 follow-up: COALESCE(COUNT(*), 0) uses ResolvedDeferredComputedColumn
+# and must stay on DuckDB (not semantic_executor). DuckDB evaluates the
+# aggregate eagerly; dead-branch error suppression from GoogleSQL's
+# side-effect scopes is not preserved on this route.
+name: aggregate_coalesce_count_star_duckdb
+description: |
+  COALESCE around COUNT(*) routes to duckdb_native and returns the
+  group count (including 0 for an empty table via a filtered scan).
+project_id: proj-agg-coalesce-count
+dataset_id: ds_agg_coalesce_count
+setup:
+  - dataset: ds_agg_coalesce_count
+  - table:
+      dataset: ds_agg_coalesce_count
+      id: t
+      schema:
+        - {name: id, type: INT64, mode: REQUIRED}
+  - rows:
+      dataset: ds_agg_coalesce_count
+      table: t
+      rows:
+        - {id: 1}
+        - {id: 2}
+query: |
+  SELECT COALESCE(COUNT(*), 0) AS c
+  FROM ds_agg_coalesce_count.t
+  WHERE id > 100
+expected:
+  route: duckdb_native
+  rows:
+    - {c: "0"}
