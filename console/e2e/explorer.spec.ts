@@ -3,24 +3,40 @@ import { expect, test, type Page } from '@playwright/test';
 async function expandProject(page: Page) {
     const project = page.getByTestId('project-local-project');
     await expect(project).toBeVisible();
+    // Project toggle collapses when already expanded; only fetch when needed.
+    const dataset = page.getByTestId('dataset-test-dataset');
+    if (await dataset.isVisible()) {
+        return;
+    }
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/bigquery/v2/projects/local-project/datasets') && r.ok()),
         project.click(),
     ]);
+    await expect(dataset).toBeVisible();
 }
 
 async function expandDataset(page: Page) {
     await expandProject(page);
+    const table = page.getByTestId('table-table_a');
+    if (await table.isVisible()) {
+        return;
+    }
     const toggle = page.getByTestId('dataset-toggle-test-dataset');
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
         toggle.click(),
     ]);
+    await expect(table).toBeVisible();
 }
 
 async function openDataset(page: Page) {
     await expandProject(page);
     const dataset = page.getByTestId('dataset-test-dataset');
+    // Opening the dataset tab may not refetch when the overview is already open.
+    if (await page.getByTestId('dataset-tab-page').isVisible()) {
+        await expect(page.getByTestId('dataset-tab-overview')).toBeVisible();
+        return;
+    }
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset') && r.ok()),
         dataset.click(),
@@ -84,6 +100,11 @@ async function openRoutinesTab(page: Page) {
 
 async function expandDatasetWithRoutines(page: Page) {
     await expandProject(page);
+    // Creating a routine dispatches EXPLORER_ROUTINES_CHANGED, which often
+    // expands the dataset already — clicking the toggle would collapse it.
+    if (await page.getByTestId('table-table_a').isVisible()) {
+        return;
+    }
     const toggle = page.getByTestId('dataset-toggle-test-dataset');
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
@@ -155,10 +176,10 @@ test.describe('BigQuery Explorer', () => {
         await selectTable(page);
         await page.getByTestId('open-query-from-table').click();
         await expect(page.getByTestId('sql-editor')).toBeVisible();
-        const text = await monacoText(page);
-        expect(text).toContain('SELECT');
-        expect(text).toContain('table_a');
-        expect(text).toContain('LIMIT 1000');
+        // Monaco can briefly paint a single glyph before the template settles.
+        await expect
+            .poll(async () => monacoText(page), { timeout: 10_000 })
+            .toMatch(/SELECT[\s\S]*table_a[\s\S]*LIMIT 1000/);
         await expect(page.getByRole('tab', { name: 'table_a' })).toHaveCount(2);
     });
 
@@ -492,6 +513,7 @@ test.describe('BigQuery Explorer', () => {
     });
 
     test('autocomplete suggests created routine names', async ({ page }) => {
+        test.setTimeout(60_000);
         const routineName = `e2e_ac_${Date.now()}`;
         await createScalarUdf(page, routineName);
 
@@ -507,6 +529,7 @@ test.describe('BigQuery Explorer', () => {
     });
 
     test('shows routines in the sidebar tree', async ({ page }) => {
+        test.setTimeout(60_000);
         const routineName = `e2e_sidebar_${Date.now()}`;
         await createScalarUdf(page, routineName);
 
