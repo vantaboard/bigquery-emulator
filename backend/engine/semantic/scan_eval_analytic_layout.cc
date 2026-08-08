@@ -190,6 +190,50 @@ bool ValueInClosedRange(const Value& value,
   return true;
 }
 
+// ASC partition-key order with NULLs last (DuckDB ORDER BY default).
+bool PartitionKeysLess(const std::vector<Value>& keys_a,
+                       const std::vector<Value>& keys_b,
+                       const std::string& fp_a,
+                       const std::string& fp_b) {
+  const size_t n = std::min(keys_a.size(), keys_b.size());
+  for (size_t k = 0; k < n; ++k) {
+    if (ValueEqual(keys_a[k], keys_b[k])) continue;
+    if (keys_a[k].is_null() != keys_b[k].is_null()) {
+      return keys_b[k].is_null();
+    }
+    return ValueLess(keys_a[k], keys_b[k]);
+  }
+  if (keys_a.size() != keys_b.size()) {
+    return keys_a.size() < keys_b.size();
+  }
+  return fp_a < fp_b;
+}
+
+bool OrderSpecLess(const ::googlesql::ResolvedWindowOrdering* order_spec,
+                   const ColumnBindings& row_a,
+                   const ColumnBindings& row_b) {
+  if (order_spec == nullptr) return false;
+  for (int i = 0; i < order_spec->order_by_item_list_size(); ++i) {
+    const ::googlesql::ResolvedOrderByItem* item =
+        order_spec->order_by_item_list(i);
+    if (item == nullptr || item->column_ref() == nullptr) {
+      continue;
+    }
+    const int col_id = item->column_ref()->column().column_id();
+    switch (CompareOrderByItem(item,
+                               LookupColumnValue(row_a, col_id),
+                               LookupColumnValue(row_b, col_id))) {
+      case -1:
+        return true;
+      case 1:
+        return false;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
 bool OrderKeysEqual(const ::googlesql::ResolvedWindowOrdering* order_spec,
                     const ColumnBindings& row_a,
                     const ColumnBindings& row_b) {
@@ -227,45 +271,13 @@ AnalyticGroupLayout BuildAnalyticGroupLayout(
         // Order partitions by key values (ASC), not fingerprint strings,
         // so output order matches DuckDB CaptureAnalyticOutputOrder.
         if (layout.partition_fps[a_idx] != layout.partition_fps[b_idx]) {
-          const std::vector<Value> keys_a =
-              PartitionKeysForRow(group, input_rows[a_idx]);
-          const std::vector<Value> keys_b =
-              PartitionKeysForRow(group, input_rows[b_idx]);
-          const size_t n = std::min(keys_a.size(), keys_b.size());
-          for (size_t k = 0; k < n; ++k) {
-            if (ValueEqual(keys_a[k], keys_b[k])) continue;
-            if (keys_a[k].is_null() != keys_b[k].is_null()) {
-              // ASC default: NULLs last.
-              return keys_b[k].is_null();
-            }
-            return ValueLess(keys_a[k], keys_b[k]);
-          }
-          if (keys_a.size() != keys_b.size()) {
-            return keys_a.size() < keys_b.size();
-          }
-          return layout.partition_fps[a_idx] < layout.partition_fps[b_idx];
+          return PartitionKeysLess(
+              PartitionKeysForRow(group, input_rows[a_idx]),
+              PartitionKeysForRow(group, input_rows[b_idx]),
+              layout.partition_fps[a_idx],
+              layout.partition_fps[b_idx]);
         }
-        if (order_spec == nullptr) return false;
-        for (int i = 0; i < order_spec->order_by_item_list_size(); ++i) {
-          const ::googlesql::ResolvedOrderByItem* item =
-              order_spec->order_by_item_list(i);
-          if (item == nullptr || item->column_ref() == nullptr) {
-            continue;
-          }
-          const int col_id = item->column_ref()->column().column_id();
-          switch (CompareOrderByItem(
-              item,
-              LookupColumnValue(input_rows[a_idx], col_id),
-              LookupColumnValue(input_rows[b_idx], col_id))) {
-            case -1:
-              return true;
-            case 1:
-              return false;
-            default:
-              break;
-          }
-        }
-        return false;
+        return OrderSpecLess(order_spec, input_rows[a_idx], input_rows[b_idx]);
       });
 
   absl::flat_hash_map<std::string, int64_t> next_in_partition;
