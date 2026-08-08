@@ -87,6 +87,11 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
 struct AnalyticGroupLayout {
   std::vector<std::string> partition_fps{};
   std::vector<int64_t> row_numbers{};
+  // Row indices sorted by PARTITION BY then ORDER BY (stable). Used to
+  // emit analytic results in the same stable order the DuckDB route
+  // appends via CaptureAnalyticOutputOrder when the query has no
+  // explicit ORDER BY.
+  std::vector<size_t> sorted_indices{};
 };
 
 AnalyticGroupLayout BuildAnalyticGroupLayout(

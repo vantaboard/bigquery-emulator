@@ -187,6 +187,12 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
   std::vector<ColumnBindings> input_rows = *std::move(input_or);
   std::vector<ColumnBindings> out_rows = input_rows;
 
+  // Mirror DuckDB CaptureAnalyticOutputOrder: stabilize on the first
+  // analytic group's PARTITION BY / ORDER BY keys when the query has
+  // no explicit ORDER BY.
+  std::vector<size_t> output_order;
+  bool have_output_order = false;
+
   for (int g = 0; g < analytic.function_group_list_size(); ++g) {
     const ::googlesql::ResolvedAnalyticFunctionGroup* group =
         analytic.function_group_list(g);
@@ -195,6 +201,10 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
     const ::googlesql::ResolvedWindowOrdering* order_spec = group->order_by();
     const AnalyticGroupLayout layout =
         BuildAnalyticGroupLayout(*group, order_spec, input_rows);
+    if (!have_output_order) {
+      output_order = layout.sorted_indices;
+      have_output_order = true;
+    }
 
     for (int f = 0; f < group->analytic_function_list_size(); ++f) {
       const ::googlesql::ResolvedComputedColumnBase* cc =
@@ -204,6 +214,15 @@ absl::StatusOr<std::vector<ColumnBindings>> MaterializeAnalyticScan(
           *cc, *group, order_spec, layout, input_rows, ctx, out_rows);
       if (!applied.ok()) return applied;
     }
+  }
+
+  if (have_output_order && output_order.size() == out_rows.size()) {
+    std::vector<ColumnBindings> reordered;
+    reordered.reserve(out_rows.size());
+    for (size_t idx : output_order) {
+      reordered.push_back(std::move(out_rows[idx]));
+    }
+    out_rows = std::move(reordered);
   }
 
   return out_rows;

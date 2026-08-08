@@ -122,6 +122,61 @@ TEST_F(SemanticExecutorTest, RankDenseRankOverNestedAggregateTies) {
   EXPECT_FALSE(*has_extra);
 }
 
+// Analytic output is stabilized on PARTITION BY + ORDER BY (no outer
+// ORDER BY), matching DuckDB CaptureAnalyticOutputOrder. Pins the
+// gateway e2e LEAD/NTILE finishers shape when FORMAT_TIMESTAMP promotes
+// the query onto the semantic route.
+TEST_F(SemanticExecutorTest, LeadOutputOrderFollowsPartitionAndOrderBy) {
+  const std::string sql =
+      "WITH finishers AS ("
+      "  SELECT 'Sophia' AS name, TIMESTAMP '2016-10-18 02:51:45+00' AS "
+      "finish_time, 'F30-34' AS division UNION ALL"
+      "  SELECT 'Lisa', TIMESTAMP '2016-10-18 02:54:11+00', 'F35-39' UNION ALL"
+      "  SELECT 'Nikki', TIMESTAMP '2016-10-18 02:59:01+00', 'F30-34' UNION ALL"
+      "  SELECT 'Carly', TIMESTAMP '2016-10-18 03:08:58+00', 'F25-29'"
+      ") "
+      "SELECT name, division,"
+      "       LEAD(name) OVER (PARTITION BY division ORDER BY finish_time ASC) "
+      "AS followed_by "
+      "FROM finishers";
+  const auto* stmt = Analyze(sql, MakeAnalyzerOptions());
+  ASSERT_NE(stmt, nullptr);
+  SemanticExecutor exec;
+  auto source = exec.ExecuteQuery(MakeRequest(sql), *stmt, catalog_.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  struct Want {
+    const char* name;
+    const char* division;
+    bool followed_null;
+    const char* followed;
+  };
+  const std::vector<Want> want = {
+      {"Carly", "F25-29", true, nullptr},
+      {"Sophia", "F30-34", false, "Nikki"},
+      {"Nikki", "F30-34", true, nullptr},
+      {"Lisa", "F35-39", true, nullptr},
+  };
+  for (size_t i = 0; i < want.size(); ++i) {
+    storage::Row row;
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    ASSERT_TRUE(*has) << "missing row " << i;
+    ASSERT_EQ(row.cells.size(), 3u);
+    EXPECT_EQ(row.cells[0].string_value(), want[i].name) << "row " << i;
+    EXPECT_EQ(row.cells[1].string_value(), want[i].division) << "row " << i;
+    if (want[i].followed_null) {
+      EXPECT_TRUE(row.cells[2].is_null()) << "lead row " << i;
+    } else {
+      ASSERT_FALSE(row.cells[2].is_null()) << "lead row " << i;
+      EXPECT_EQ(row.cells[2].string_value(), want[i].followed) << "row " << i;
+    }
+  }
+  storage::Row extra;
+  auto has_extra = (*source)->Next(&extra);
+  ASSERT_TRUE(has_extra.ok());
+  EXPECT_FALSE(*has_extra);
+}
+
 // R15: LAG / LEAD over nested aggregate with offset and default.
 TEST_F(SemanticExecutorTest, LagLeadOverNestedAggregate) {
   const std::string sql =

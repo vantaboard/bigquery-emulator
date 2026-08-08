@@ -224,7 +224,25 @@ AnalyticGroupLayout BuildAnalyticGroupLayout(
   std::iota(order.begin(), order.end(), 0);
   std::stable_sort(
       order.begin(), order.end(), [&](size_t a_idx, size_t b_idx) -> bool {
+        // Order partitions by key values (ASC), not fingerprint strings,
+        // so output order matches DuckDB CaptureAnalyticOutputOrder.
         if (layout.partition_fps[a_idx] != layout.partition_fps[b_idx]) {
+          const std::vector<Value> keys_a =
+              PartitionKeysForRow(group, input_rows[a_idx]);
+          const std::vector<Value> keys_b =
+              PartitionKeysForRow(group, input_rows[b_idx]);
+          const size_t n = std::min(keys_a.size(), keys_b.size());
+          for (size_t k = 0; k < n; ++k) {
+            if (ValueEqual(keys_a[k], keys_b[k])) continue;
+            if (keys_a[k].is_null() != keys_b[k].is_null()) {
+              // ASC default: NULLs last.
+              return keys_b[k].is_null();
+            }
+            return ValueLess(keys_a[k], keys_b[k]);
+          }
+          if (keys_a.size() != keys_b.size()) {
+            return keys_a.size() < keys_b.size();
+          }
           return layout.partition_fps[a_idx] < layout.partition_fps[b_idx];
         }
         if (order_spec == nullptr) return false;
@@ -257,6 +275,7 @@ AnalyticGroupLayout BuildAnalyticGroupLayout(
     n++;
     layout.row_numbers[sorted_idx] = n;
   }
+  layout.sorted_indices = std::move(order);
   return layout;
 }
 

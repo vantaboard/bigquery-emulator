@@ -23,23 +23,21 @@ namespace semantic {
 namespace scan_eval_internal {
 namespace {
 
-using PartitionOrder =
-    absl::flat_hash_map<std::string, std::vector<size_t>>;
+using PartitionOrder = absl::flat_hash_map<std::string, std::vector<size_t>>;
 
 PartitionOrder BuildPartitionOrder(const AnalyticGroupLayout& layout) {
   PartitionOrder by_fp;
   // Dense row_numbers are 1-based within each partition after the layout
   // sort; collect indices into ascending rn order per partition.
   std::vector<size_t> order(layout.row_numbers.size());
-  for (size_t i = 0; i < order.size(); ++i) order[i] = i;
-  std::stable_sort(order.begin(),
-                   order.end(),
-                   [&](size_t a, size_t b) {
-                     if (layout.partition_fps[a] != layout.partition_fps[b]) {
-                       return layout.partition_fps[a] < layout.partition_fps[b];
-                     }
-                     return layout.row_numbers[a] < layout.row_numbers[b];
-                   });
+  for (size_t i = 0; i < order.size(); ++i)
+    order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    if (layout.partition_fps[a] != layout.partition_fps[b]) {
+      return layout.partition_fps[a] < layout.partition_fps[b];
+    }
+    return layout.row_numbers[a] < layout.row_numbers[b];
+  });
   for (size_t idx : order) {
     by_fp[layout.partition_fps[idx]].push_back(idx);
   }
@@ -145,11 +143,10 @@ absl::StatusOr<int64_t> RowsBoundRn(
       return rn > max_rn ? max_rn : rn;
     }
     default:
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          absl::StrCat("semantic: unsupported ROWS ",
-                       is_start ? "start" : "end",
-                       " bound"));
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               absl::StrCat("semantic: unsupported ROWS ",
+                                            is_start ? "start" : "end",
+                                            " bound"));
   }
 }
 
@@ -184,16 +181,14 @@ absl::StatusOr<std::vector<size_t>> ResolveRangeValueOffsetFrame(
     const EvalContext& ctx) {
   const ::googlesql::ResolvedWindowFrame* wf = afn.window_frame();
   if (order_spec == nullptr || order_spec->order_by_item_list_size() == 0) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: RANGE value offset requires ORDER BY");
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: RANGE value offset requires ORDER BY");
   }
   const ::googlesql::ResolvedOrderByItem* order_item =
       order_spec->order_by_item_list(0);
   if (order_item == nullptr || order_item->column_ref() == nullptr) {
-    return MakeSemanticError(
-        SemanticErrorReason::kNotImplemented,
-        "semantic: RANGE value offset missing order key");
+    return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                             "semantic: RANGE value offset missing order key");
   }
   const int order_col_id = order_item->column_ref()->column().column_id();
   const ::googlesql::Type* order_type = order_item->column_ref()->type();
@@ -221,8 +216,7 @@ absl::StatusOr<std::vector<size_t>> ResolveRangeValueOffsetFrame(
   for (size_t other : ordered) {
     const Value other_order =
         LookupColumnValue(input_rows[other], order_col_id);
-    if (ValueInClosedRange(
-            other_order, *low_or, has_low, *high_or, has_high)) {
+    if (ValueInClosedRange(other_order, *low_or, has_low, *high_or, has_high)) {
       out.push_back(other);
     }
   }
@@ -249,8 +243,7 @@ absl::StatusOr<std::vector<size_t>> ResolvePeerRangeFrame(
           ::googlesql::ResolvedWindowFrameExpr::UNBOUNDED_FOLLOWING;
   const bool start_current =
       wf != nullptr && BoundIsCurrentRow(wf->start_expr());
-  const bool end_current =
-      wf == nullptr || BoundIsCurrentRow(wf->end_expr());
+  const bool end_current = wf == nullptr || BoundIsCurrentRow(wf->end_expr());
 
   if (wf != nullptr &&
       (BoundIsOffset(wf->start_expr()) || BoundIsOffset(wf->end_expr()))) {
@@ -265,18 +258,16 @@ absl::StatusOr<std::vector<size_t>> ResolvePeerRangeFrame(
     if (start_current) {
       start = PeerStartIndex(ordered, cur_pos, order_spec, input_rows);
     } else {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: unsupported RANGE start bound");
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               "semantic: unsupported RANGE start bound");
     }
   }
   if (!end_unbounded) {
     if (end_current) {
       end = PeerEndIndex(ordered, cur_pos, order_spec, input_rows);
     } else {
-      return MakeSemanticError(
-          SemanticErrorReason::kNotImplemented,
-          "semantic: unsupported RANGE end bound");
+      return MakeSemanticError(SemanticErrorReason::kNotImplemented,
+                               "semantic: unsupported RANGE end bound");
     }
   }
   if (start > end) return std::vector<size_t>{};
@@ -329,8 +320,7 @@ absl::StatusOr<std::vector<size_t>> ResolveWindowFrameRows(
       BoundIsUnbounded(wf->start_expr()) && BoundIsUnbounded(wf->end_expr())) {
     return ordered;
   }
-  return ResolvePeerRangeFrame(
-      wf, order_spec, input_rows, ordered, cur_pos);
+  return ResolvePeerRangeFrame(wf, order_spec, input_rows, ordered, cur_pos);
 }
 
 }  // namespace
@@ -357,9 +347,9 @@ absl::Status ApplyAnalyticAggregate(
   }
   if (!is_count_star &&
       (afn.argument_list_size() != 1 || afn.argument_list(0) == nullptr)) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "semantic: analytic ", absl::AsciiStrToUpper(fname),
-        " expects one argument"));
+    return absl::InvalidArgumentError(absl::StrCat("semantic: analytic ",
+                                                   absl::AsciiStrToUpper(fname),
+                                                   " expects one argument"));
   }
 
   std::vector<Value> arg_values(input_rows.size());
@@ -409,8 +399,8 @@ absl::Status ApplyAnalyticAggregate(
       continue;
     }
     std::vector<std::vector<Value>> cols{std::move(cells)};
-    auto agg_or = functions::EvalAggregateBuiltin(
-        fname, return_type, distinct, cols);
+    auto agg_or =
+        functions::EvalAggregateBuiltin(fname, return_type, distinct, cols);
     if (!agg_or.ok()) return agg_or.status();
     out_rows[r][out_col_id] = *std::move(agg_or);
   }
