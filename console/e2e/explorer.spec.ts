@@ -64,7 +64,8 @@ async function monacoSetValue(page: Page, value: string) {
 
 async function monacoText(page: Page): Promise<string> {
     const root = await monacoEditor(page);
-    return (await root.locator('.view-lines').innerText()) ?? '';
+    // Monaco may render ordinary spaces as NBSP in the view lines.
+    return ((await root.locator('.view-lines').innerText()) ?? '').replace(/\u00a0/g, ' ');
 }
 
 async function openRoutinesTab(page: Page) {

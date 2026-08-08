@@ -4,7 +4,7 @@
 # Usage: pnpm run e2e:up
 services:
   bigquery:
-    image: ghcr.io/vantaboard/bigquery-emulator:v0.5.0
+    image: ghcr.io/vantaboard/bigquery-emulator:v0.9.0
     platform: linux/x86_64
     volumes:
       - ./e2e/fixtures/seed.yaml:/data/seed.yaml:ro
