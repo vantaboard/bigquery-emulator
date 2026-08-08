@@ -528,9 +528,19 @@ test.describe('BigQuery Explorer', () => {
         await createScalarUdf(page, routineName);
 
         await openQueryFromTable(page);
-        await monacoSetValue(page, `SELECT ${routineName}(`);
+        // Complete at the function-name token (not after '('), matching the
+        // SAFE_ADD e2e and sqltools routine-candidate context.
+        await monacoSetValue(page, `SELECT ${routineName}`);
 
+        const root = await monacoEditor(page);
+        await root.locator('.monaco-editor').click({ force: true });
+        const completeResponsePromise = page.waitForResponse(
+            (r) => r.url().includes('/api/emulator/sql/complete') && r.ok(),
+            { timeout: 15_000 },
+        );
         await page.keyboard.press('Control+Space');
+        await completeResponsePromise;
+
         const suggest = page.locator('.suggest-widget');
         await expect(suggest).toBeVisible({ timeout: 15_000 });
         await expect(suggest.locator('.monaco-list-row', { hasText: routineName }).first()).toBeVisible({
