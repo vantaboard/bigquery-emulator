@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-07-02 05:13:22</td>
+            <td class="headerValue">2026-08-08 06:47:41</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">41.7&nbsp;%</td>
@@ -94,17 +94,17 @@
 <span id="L32"><span class="lineNum">      32</span>              : // Double-quote escape a DuckDB identifier. DuckDB doubles embedded</span>
 <span id="L33"><span class="lineNum">      33</span>              : // `&quot;` characters; we do the same so column / table names with quotes</span>
 <span id="L34"><span class="lineNum">      34</span>              : // or hyphens round-trip safely through the emitted SQL.</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        2843 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        2843 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        2843 : }</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">        3051 : inline std::string QuoteIdent(absl::string_view name) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        3051 :   return absl::StrCat(&quot;\&quot;&quot;, absl::StrReplaceAll(name, {{&quot;\&quot;&quot;, &quot;\&quot;\&quot;&quot;}}), &quot;\&quot;&quot;);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        3051 : }</span></span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span>              : // Single-quote escape a DuckDB string literal. DuckDB doubles embedded</span>
 <span id="L40"><span class="lineNum">      40</span>              : // `'` characters; we do the same so BQ string literals with embedded</span>
 <span id="L41"><span class="lineNum">      41</span>              : // apostrophes round-trip safely. Used for both ResolvedLiteral</span>
 <span id="L42"><span class="lineNum">      42</span>              : // strings and for STRUCT field-name keys in `{'k': v}` literals.</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          65 : inline std::string QuoteString(absl::string_view text) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          65 :   return absl::StrCat(&quot;'&quot;, absl::StrReplaceAll(text, {{&quot;'&quot;, &quot;''&quot;}}), &quot;'&quot;);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          65 : }</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          67 : inline std::string QuoteString(absl::string_view text) {</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          67 :   return absl::StrCat(&quot;'&quot;, absl::StrReplaceAll(text, {{&quot;'&quot;, &quot;''&quot;}}), &quot;'&quot;);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          67 : }</span></span>
 <span id="L46"><span class="lineNum">      46</span>              : </span>
 <span id="L47"><span class="lineNum">      47</span>              : inline std::string ResolveFunctionName(const ::googlesql::Function* fn) {</span>
 <span id="L48"><span class="lineNum">      48</span>              :   if (fn == nullptr) return &quot;&quot;;</span>
