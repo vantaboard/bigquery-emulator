@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-06-19T03:11:46.385555873Z",
+  "captured_at": "2026-08-08T03:27:09.589246284Z",
   "project": "bigquery-emulator",
   "cases": {
     "agg_group_by_100k": {
@@ -31,6 +31,16 @@
       "bytes_processed": 32000000,
       "result_hash": "2154ce50971a805165baf5cc0e19814c1299c1f385779868c4b9c027ae464beb",
       "row_count": 1000
+    },
+    "attribution_insert_10k": {
+      "content_hash": "f728e23057efe001",
+      "total_p50_ms": 1655,
+      "execution_p50_ms": 211,
+      "queue_p50_ms": 207,
+      "total_slot_ms_p50": 52,
+      "bytes_processed": 381290,
+      "result_hash": "088bae66588524a2735dcda8f689e4b6c704d749b24eedbc91870f64aaa6db27",
+      "row_count": 1
     },
     "case_when": {
       "content_hash": "96fa558b3887315e",
