@@ -22,6 +22,14 @@ async function expandDataset(page: Page) {
         return;
     }
     const toggle = page.getByTestId('dataset-toggle-test-dataset');
+    await expect(toggle).toBeVisible();
+    // ROUTINES_CHANGED expands the dataset without fetching tables. A toggle
+    // click would collapse it and never hit /tables — collapse first if needed.
+    const aria = (await toggle.getAttribute('aria-label')) ?? '';
+    if (aria.startsWith('Collapse')) {
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-label', /Expand/);
+    }
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
         toggle.click(),
@@ -100,12 +108,14 @@ async function openRoutinesTab(page: Page) {
 
 async function expandDatasetWithRoutines(page: Page) {
     await expandProject(page);
-    // Creating a routine dispatches EXPLORER_ROUTINES_CHANGED, which often
-    // expands the dataset already — clicking the toggle would collapse it.
-    if (await page.getByTestId('table-table_a').isVisible()) {
+    const toggle = page.getByTestId('dataset-toggle-test-dataset');
+    await expect(toggle).toBeVisible();
+    // Creating a routine dispatches EXPLORER_ROUTINES_CHANGED, which expands
+    // the dataset (often without tables). Do not toggle again.
+    const aria = (await toggle.getAttribute('aria-label')) ?? '';
+    if (aria.startsWith('Collapse')) {
         return;
     }
-    const toggle = page.getByTestId('dataset-toggle-test-dataset');
     await Promise.all([
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/tables') && r.ok()),
         page.waitForResponse((r) => r.url().includes('/datasets/test-dataset/routines') && r.ok()),
