@@ -124,6 +124,11 @@ std::string Transpiler::EmitCtasSelect(
   if (stmt == nullptr || stmt->query() == nullptr) return "";
   output_order_items_.clear();
   output_order_column_ids_.clear();
+  // Match EmitQueryStmt: clear join-alias bookkeeping so a prior
+  // Emit* on a reused Transpiler (or a CTE body that left flags set)
+  // cannot leak `__bq_j_<id>` aliases into CTAS materialization (R17).
+  join_id_aliases_in_query_ = false;
+  join_output_columns_use_id_aliases_ = false;
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -136,17 +141,29 @@ std::string Transpiler::EmitCtasSelect(
   }
   std::string inner = EmitScan(stmt->query());
   if (inner.empty()) return "";
+  // Prefer output_column_list (same contract as EmitQueryStmt): it
+  // carries the scan's ResolvedColumn names (e.g. `id`) plus the
+  // user/table alias (`activity_id`). column_definition_list alone
+  // renames both sides to the table column and breaks bind when a
+  // no-op ProjectScan elided the AS rename (R17 CTAS attribution).
   std::vector<std::string> outputs;
-  outputs.reserve(stmt->column_definition_list_size());
-  std::vector<std::string> outer_refs;
-  outer_refs.reserve(stmt->column_definition_list_size());
-  for (const auto& def : stmt->column_definition_list()) {
-    if (def == nullptr) return "";
-    auto oc = ::googlesql::MakeResolvedOutputColumn(def->name(), def->column());
-    std::string emitted = EmitOutputColumn(oc.get());
-    if (emitted.empty()) return "";
-    outputs.push_back(std::move(emitted));
-    outer_refs.push_back(internal::QuoteIdent(def->name()));
+  if (stmt->output_column_list_size() > 0) {
+    outputs.reserve(stmt->output_column_list_size());
+    for (int i = 0; i < stmt->output_column_list_size(); ++i) {
+      std::string emitted = EmitOutputColumn(stmt->output_column_list(i));
+      if (emitted.empty()) return "";
+      outputs.push_back(std::move(emitted));
+    }
+  } else {
+    outputs.reserve(stmt->column_definition_list_size());
+    for (const auto& def : stmt->column_definition_list()) {
+      if (def == nullptr) return "";
+      auto oc =
+          ::googlesql::MakeResolvedOutputColumn(def->name(), def->column());
+      std::string emitted = EmitOutputColumn(oc.get());
+      if (emitted.empty()) return "";
+      outputs.push_back(std::move(emitted));
+    }
   }
   if (outputs.empty()) return "";
   std::string sql = absl::StrCat(
@@ -160,6 +177,10 @@ std::string Transpiler::EmitInsertSelect(
   if (stmt == nullptr || stmt->query() == nullptr) return "";
   output_order_items_.clear();
   output_order_column_ids_.clear();
+  // Match EmitQueryStmt: clear join-alias bookkeeping so INSERT...SELECT
+  // materialization cannot bind stale `__bq_j_<id>` aliases (R17).
+  join_id_aliases_in_query_ = false;
+  join_output_columns_use_id_aliases_ = false;
   input_has_rn_column_ = false;
   input_rn_ordering_ = false;
   output_includes_input_rn_ = false;
@@ -261,9 +282,15 @@ std::string Transpiler::EmitProjectScan(
     }
   }
 
+  // Remap order keys to `__bq_j_<id>` only when *this* ProjectScan's
+  // input still exposes join id aliases. The sticky
+  // `join_id_aliases_in_query_` must not be used here: a renaming
+  // ProjectScan under an AnalyticScan clears the aliases, and pulling
+  // stale `__bq_j_*` into the outer projection fails DuckDB bind
+  // (R17 attribution multi-CTE LEFT JOIN + ROW_NUMBER).
   AppendProjectScanOrderColumns(output_order_items_,
                                 output_order_column_ids_,
-                                join_id_aliases_in_query_,
+                                /*join_id_aliases=*/false,
                                 input_id_aliases,
                                 input_has_rn_column_,
                                 suppress_rn_in_project_,

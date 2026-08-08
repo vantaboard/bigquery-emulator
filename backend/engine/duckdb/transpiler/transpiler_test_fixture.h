@@ -45,6 +45,9 @@ inline ::googlesql::AnalyzerOptions MakeAnalyzerOptions() {
   language.EnableMaximumLanguageFeatures();
   language.set_product_mode(::googlesql::PRODUCT_EXTERNAL);
   language.set_name_resolution_mode(::googlesql::NAME_RESOLUTION_DEFAULT);
+  // Match the engine / route-classifier fixture so INSERT / CTAS bind
+  // tests (R17 attribution materialization) can AnalyzeStatement.
+  language.SetSupportsAllStatementKinds();
   ::googlesql::AnalyzerOptions options(language);
   options.set_error_message_mode(::googlesql::ERROR_MESSAGE_ONE_LINE);
   // Match the engine: keep PIVOT / UNPIVOT in their raw resolved-AST
