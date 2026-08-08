@@ -151,4 +151,6 @@ query: |
   FROM Attribution
 iterations: 5
 warmup: 1
-max_ms: 180000
+# Absolute ceiling uses the harness default (30s). Against the BigQuery
+# execution baseline (~211ms) the default max_ratio 1.5 (~316ms) is the
+# binding regression gate now that this case rides duckdb_udf (~50ms).
