@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
@@ -76,7 +77,11 @@ DecodedAppendBatch DecodeAppendRowBatch(
       !s.ok()) {
     return s;
   }
-  if (!bound_stream_name->empty() && *bound_stream_name != req.write_stream()) {
+  const bool multiplexing =
+      stream_id == "_default" &&
+      absl::EndsWith(*bound_stream_name, "/streams/_default");
+  if (!bound_stream_name->empty() && *bound_stream_name != req.write_stream() &&
+      !multiplexing) {
     return ::grpc::Status(
         ::grpc::StatusCode::INVALID_ARGUMENT,
         absl::StrCat("StorageWrite.AppendRows: cannot rebind stream "
@@ -84,7 +89,7 @@ DecodedAppendBatch DecodeAppendRowBatch(
                      *bound_stream_name,
                      ", later message: ",
                      req.write_stream(),
-                     ")"));
+                     "); only _default streams can share a call"));
   }
   if (stream_id == "_default") {
     if (auto s = EnsureDefaultStream(req.write_stream(), table); !s.ok()) {

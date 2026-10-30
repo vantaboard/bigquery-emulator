@@ -18,7 +18,7 @@ func RegisterAll(srv grpc.ServiceRegistrar, eng *engine.Client, deps handlers.De
 	if srv == nil {
 		return
 	}
-	bqstorage.RegisterGRPC(srv, eng)
+	bqstorage.RegisterGRPC(srv, eng, deps.Metadata)
 	bqconnection.RegisterGRPC(srv, deps)
 	bqreservation.RegisterGRPC(srv)
 	bqanalyticshub.RegisterGRPC(srv)

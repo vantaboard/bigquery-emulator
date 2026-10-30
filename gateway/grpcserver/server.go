@@ -16,6 +16,11 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// MaxRequestBytes is the largest request the public gRPC server accepts:
+// the Storage Write API's limit for one AppendRows request, which client
+// libraries check before sending. gRPC's default is 4 MiB.
+const MaxRequestBytes = 20 << 20
+
 // Server wraps the public Storage gRPC listener the gateway owns.
 type Server struct {
 	srv *grpc.Server
@@ -33,7 +38,7 @@ func Start(address string, eng *engine.Client, deps handlers.Dependencies) (*Ser
 	if err != nil {
 		return nil, fmt.Errorf("grpcserver: listen %s: %w", address, err)
 	}
-	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	srv := grpc.NewServer(grpc.Creds(insecure.NewCredentials()), grpc.MaxRecvMsgSize(MaxRequestBytes))
 	RegisterAll(srv, eng, deps)
 	return &Server{srv: srv, lis: lis}, nil
 }

@@ -82,7 +82,7 @@ class StorageWriteGrpcTest : public ::testing::Test {
     fs::remove_all(data_dir_, ec);
   }
 
-  void CreatePeopleTable() {
+  void CreatePeopleTable(const std::string& table_id = "t") {
     backend::schema::TableSchema schema;
     backend::schema::ColumnSchema id;
     id.name = "id";
@@ -94,8 +94,10 @@ class StorageWriteGrpcTest : public ::testing::Test {
     name.type = backend::schema::ColumnType::kString;
     name.mode = backend::schema::ColumnMode::kNullable;
     schema.columns.push_back(name);
-    ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
-    ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", "t"}, schema).ok());
+    if (table_id == "t") {
+      ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+    }
+    ASSERT_TRUE(storage_->CreateTable({"proj-test", "ds", table_id}, schema).ok());
   }
 
   v1::AppendRowsRequest BuildAppendRequest(const std::string& stream_name,
@@ -185,6 +187,48 @@ TEST_F(StorageWriteGrpcTest, AppendRowsToDefaultStreamMintsLazily) {
   ASSERT_TRUE(stream_rw->WritesDone());
   ASSERT_TRUE(stream_rw->Finish().ok());
   EXPECT_EQ(service_->StreamsForTesting(), 1u);
+}
+
+TEST_F(StorageWriteGrpcTest, AppendRowsMultiplexesDefaultStreams) {
+  CreatePeopleTable();
+  CreatePeopleTable("t2");
+  ::grpc::ClientContext append_ctx;
+  auto stream_rw = stub_->AppendRows(&append_ctx);
+  ASSERT_NE(stream_rw, nullptr);
+  const std::string first =
+      "projects/proj-test/datasets/ds/tables/t/streams/_default";
+  const std::string second =
+      "projects/proj-test/datasets/ds/tables/t2/streams/_default";
+  for (const std::string& stream_name : {first, second, first}) {
+    ASSERT_TRUE(stream_rw->Write(BuildAppendRequest(stream_name, 0, 2)));
+    v1::AppendRowsResponse resp;
+    ASSERT_TRUE(stream_rw->Read(&resp));
+    ASSERT_EQ(resp.response_case(), v1::AppendRowsResponse::kAppendResult)
+        << stream_name;
+  }
+  ASSERT_TRUE(stream_rw->WritesDone());
+  ASSERT_TRUE(stream_rw->Finish().ok());
+}
+
+TEST_F(StorageWriteGrpcTest, AppendRowsRejectsSwitchingFromAnExplicitStream) {
+  CreatePeopleTable();
+  v1::CreateWriteStreamRequest create_req;
+  create_req.set_parent("projects/proj-test/datasets/ds/tables/t");
+  v1::WriteStream stream;
+  ::grpc::ClientContext create_ctx;
+  ASSERT_TRUE(stub_->CreateWriteStream(&create_ctx, create_req, &stream).ok());
+
+  ::grpc::ClientContext append_ctx;
+  auto stream_rw = stub_->AppendRows(&append_ctx);
+  ASSERT_NE(stream_rw, nullptr);
+  ASSERT_TRUE(stream_rw->Write(BuildAppendRequest(stream.name(), 0, 1)));
+  v1::AppendRowsResponse resp;
+  ASSERT_TRUE(stream_rw->Read(&resp));
+  ASSERT_TRUE(stream_rw->Write(BuildAppendRequest(
+      "projects/proj-test/datasets/ds/tables/t/streams/_default", 1, 1)));
+  while (stream_rw->Read(&resp)) {}
+  EXPECT_EQ(stream_rw->Finish().error_code(),
+            ::grpc::StatusCode::INVALID_ARGUMENT);
 }
 
 TEST_F(StorageWriteGrpcTest, AppendRowsShapeMismatchSurfaceOnEnvelope) {

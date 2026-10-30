@@ -14,6 +14,7 @@ import (
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/engine"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/handlers"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -24,7 +25,28 @@ import (
 // WriteServer implements the public BigQueryWrite gRPC service.
 type WriteServer struct {
 	storagepb.UnimplementedBigQueryWriteServer
-	engine *engine.Client
+	engine   *engine.Client
+	metadata *handlers.MetadataStore
+}
+
+// defaultLocation is the location datasets.get reports for a dataset
+// created without one.
+const defaultLocation = "US"
+
+// location returns the location of the dataset that holds the stream
+// or table named by name (`projects/{p}/datasets/{d}/tables/{t}`, with
+// or without a `/streams/{s}` suffix). BigQuery reports it on every
+// WriteStream, and the Java client's connection pool refuses a stream
+// without one.
+func (s *WriteServer) location(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) < 4 || parts[0] != "projects" || parts[2] != "datasets" {
+		return defaultLocation
+	}
+	if ds, ok := s.metadata.GetDataset(parts[1], parts[3]); ok && ds.Location != "" {
+		return ds.Location
+	}
+	return defaultLocation
 }
 
 func (s *WriteServer) requireEngine() error {
@@ -57,7 +79,9 @@ func (s *WriteServer) CreateWriteStream(
 	if err != nil {
 		return nil, err
 	}
-	return publicWriteStreamFromEngine(stream), nil
+	out := publicWriteStreamFromEngine(stream)
+	out.Location = s.location(out.GetName())
+	return out, nil
 }
 
 func defaultWriteStreamName(parent string) string {
@@ -76,6 +100,7 @@ func (s *WriteServer) defaultWriteStream(
 		out := publicWriteStreamFromEngine(existing)
 		out.Name = name
 		out.Type = storagepb.WriteStream_COMMITTED
+		out.Location = s.location(name)
 		return out, nil
 	}
 	// Mint schema metadata via CreateWriteStream; the engine registers the
@@ -92,6 +117,7 @@ func (s *WriteServer) defaultWriteStream(
 	out := publicWriteStreamFromEngine(probe)
 	out.Name = name
 	out.Type = storagepb.WriteStream_COMMITTED
+	out.Location = s.location(name)
 	return out, nil
 }
 
@@ -105,7 +131,8 @@ func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer
 		return err
 	}
 
-	var cachedProtoDesc *descriptorpb.DescriptorProto
+	var currentStream string
+	protoDescs := map[string]*descriptorpb.DescriptorProto{}
 	for {
 		req, recvErr := stream.Recv()
 		if errors.Is(recvErr, io.EOF) {
@@ -114,7 +141,12 @@ func (s *WriteServer) AppendRows(stream storagepb.BigQueryWrite_AppendRowsServer
 		if recvErr != nil {
 			return recvErr
 		}
-		engineReq, convErr := s.publicAppendRequestToEngine(ctx, req, &cachedProtoDesc)
+		if ws := req.GetWriteStream(); ws != "" {
+			currentStream = ws
+		}
+		protoDesc := protoDescs[currentStream]
+		engineReq, convErr := s.publicAppendRequestToEngine(ctx, req, &protoDesc)
+		protoDescs[currentStream] = protoDesc
 		if convErr != nil {
 			return status.Errorf(codes.InvalidArgument, "decode AppendRows: %v", convErr)
 		}
@@ -142,7 +174,9 @@ func (s *WriteServer) GetWriteStream(
 		Name: req.GetName(),
 	})
 	if err == nil {
-		return publicWriteStreamFromEngine(stream), nil
+		out := publicWriteStreamFromEngine(stream)
+		out.Location = s.location(out.GetName())
+		return out, nil
 	}
 	if before, ok := strings.CutSuffix(req.GetName(), "/streams/_default"); ok {
 		parent := before

@@ -160,6 +160,10 @@ std::unique_ptr<Server> Server::Create(const Options& options) {
   int bound_port = 0;
   builder.AddListeningPort(
       options.server_address, ::grpc::InsecureServerCredentials(), &bound_port);
+  // The gateway forwards AppendRows requests of up to
+  // grpcserver.MaxRequestBytes (20 MiB), the Storage Write API's limit;
+  // gRPC's default is 4 MiB.
+  builder.SetMaxReceiveMessageSize(20 << 20);
   builder.RegisterService(catalog.get());
   builder.RegisterService(query.get());
   builder.RegisterService(sqltools.get());
