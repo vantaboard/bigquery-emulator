@@ -20,9 +20,8 @@ Each release publishes four tags to GHCR:
 
 Pre-release tags (`v0.0.1-rc1`) skip the `latest` tag promotion so
 `docker pull ...:latest` always lands on a non-pre-release version. The Docker
-image is `linux/amd64` only — upstream GoogleSQL's hermetic LLVM toolchain does
-not yet cross-build cleanly to linux/arm64, and macOS engine builds are out of
-scope for the preview series. See [Releases & install](./RELEASES.md) for
+image is multi-arch (`linux/amd64` and `linux/arm64`, each built natively), so
+Apple Silicon and Graviton hosts run it without emulation. See [Releases & install](./RELEASES.md) for
 release archives when you need a native gateway binary without Docker.
 
 Verify the emulator is up:

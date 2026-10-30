@@ -10,7 +10,7 @@
 #
 # Local sanity targets (these never push):
 #   task release:check     - `goreleaser check` on .goreleaser.yml
-#   task release:snapshot  - `goreleaser release --snapshot --clean`
+#   task release:snapshot  - `goreleaser release --snapshot --clean --single-target`
 #                            (requires bin/emulator_main +
 #                             bin/libduckdb.so; run
 #                             `task emulator:build-engine:bazel`
@@ -58,18 +58,24 @@ tasks:
           root="$(git rev-parse --show-toplevel)"
           cd "$root"
 
-          if [ ! -x bin/emulator_main ] || [ ! -f bin/libduckdb.so ]; then
-            echo "release:snapshot: bin/emulator_main and/or bin/libduckdb.so missing." >&2
-            echo "The .goreleaser.yml before.hooks will block the build until those" >&2
-            echo "files exist (engine binary is linux/amd64 only and is bundled into" >&2
-            echo "every archive). Stage them first:" >&2
-            echo "" >&2
-            echo "  task emulator:build-engine:bazel" >&2
-            echo "" >&2
-            exit 1
+          # Snapshots build the host platform only. A linux archive
+          # bundles the engine from bin/linux_<arch>/, the layout the
+          # release workflow stages; darwin archives ship no engine.
+          if [ "$(go env GOOS)" = "linux" ]; then
+            if [ ! -x bin/emulator_main ] || [ ! -f bin/libduckdb.so ]; then
+              echo "release:snapshot: bin/emulator_main and/or bin/libduckdb.so missing." >&2
+              echo "The linux archive bundles the engine. Stage it first:" >&2
+              echo "" >&2
+              echo "  task emulator:build-engine:bazel" >&2
+              echo "" >&2
+              exit 1
+            fi
+            arch_dir="bin/linux_$(go env GOARCH)"
+            mkdir -p "$arch_dir"
+            cp bin/emulator_main bin/libduckdb.so "$arch_dir/"
           fi
 
-          {{.GORELEASER}} release --snapshot --clean
+          {{.GORELEASER}} release --snapshot --clean --single-target
         '
 
   tag:

@@ -280,6 +280,7 @@ SCRIPTING_WRAPPERS: list[tuple[str, list[str], list[str]]] = [
         "script_executor",
         ["script_executor.h"],
         [
+            "@com_google_absl//absl/container:node_hash_map",
             "@com_google_absl//absl/status:statusor",
             "@com_google_protobuf//:protobuf",
         ],

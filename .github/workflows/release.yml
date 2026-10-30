@@ -2,38 +2,37 @@
 #
 # Cuts a release on tag push (`vX.Y.Z`) or via manual dispatch
 # (`inputs.ref` lets the operator re-release a previously pushed tag
-# without having to delete-and-retag). One job, one runner: the
-# canonical Bazel-built C++ engine, the Docker image push to GHCR, and
-# the goreleaser archive upload all share the same checkout so the
-# version numbers cannot drift.
+# without having to delete-and-retag). Two jobs:
 #
-# Steps in order:
-#   1. Checkout the triggering ref (or `inputs.ref` for dispatch).
-#   2. Set up Go + Task + Bazelisk and resolve a pinned GoogleSQL
-#      prebuilt artifact (CI/Docker/release prebuilt-mode wiring; see
-#      `docs/dev/googlesql-prebuilt/README.md`). The pin lives in
-#      `env.RELEASE_GOOGLESQL_PREBUILT_*` below; the release maintainer
-#      updates both values whenever a new GoogleSQL prebuilt is
-#      published. Tag-push runs refuse to start when the pin is empty —
-#      release builds never silently fall back to a slow GoogleSQL
-#      source compile.
-#   3. Build the C++ engine via `task emulator:build-engine:bazel`
-#      (default `GOOGLESQL_SOURCE=prebuilt` consumes the pinned
-#      artifact). This stages `bin/emulator_main` + `bin/libduckdb.so`.
-#      The goreleaser config's `before.hooks` block on these existing.
-#   4. Push the Docker runtime image (multi-stage `Dockerfile`) to
-#      GHCR. Tags are derived from the SemVer triplet by
-#      `docker/metadata-action@v6` (`vX.Y.Z`, `vX.Y`, `vX`, `latest`);
-#      `latest` is suppressed for pre-release tags (`v0.0.1-rc1`).
-#      Linux/amd64 only — the engine binary is linux/amd64 only and
-#      the README documents the caveat. Multi-arch is explicitly out
-#      of scope for the release pipeline today.
-#   5. Run `goreleaser release --clean`. Goreleaser writes the
-#      gateway archives + checksums to the GitHub release the tag
-#      push opened. Engine binary is deliberately bundled into all
-#      four archives. Release notes include the
-#      pinned GoogleSQL artifact URL + SHA-256 so consumers can
-#      reproduce the build from the same artifact.
+#   `engine` (matrix: linux/amd64 on `ubuntu-latest`, linux/arm64 on
+#   `ubuntu-24.04-arm`), each leg on its own native runner:
+#     1. Checkout the triggering ref (or `inputs.ref` for dispatch).
+#     2. Set up Go + Task + Bazelisk and resolve the leg's pinned
+#        GoogleSQL prebuilt artifact (CI/Docker/release prebuilt-mode
+#        wiring; see `docs/dev/googlesql-prebuilt/README.md`). The pins
+#        live in `env.RELEASE_GOOGLESQL_PREBUILT_*` below; the release
+#        maintainer updates them whenever a new GoogleSQL prebuilt is
+#        published. Tag-push runs refuse to start when a pin is empty —
+#        release builds never silently fall back to a slow GoogleSQL
+#        source compile.
+#     3. Build the C++ engine via `task emulator:build-engine:bazel`
+#        (default `GOOGLESQL_SOURCE=prebuilt` consumes the pinned
+#        artifact) and upload `bin/emulator_main` + `bin/libduckdb.so`
+#        as the `linux_<arch>` artifact.
+#     4. Push the leg's Docker runtime image (multi-stage `Dockerfile`)
+#        to GHCR by digest only, without tags.
+#
+#   `release`, once both legs are green:
+#     5. Merge the two digests into one multi-arch manifest and tag it.
+#        Tags are derived from the SemVer triplet by
+#        `docker/metadata-action@v6` (`vX.Y.Z`, `vX.Y`, `vX`, `latest`);
+#        `latest` is suppressed for pre-release tags (`v0.0.1-rc1`).
+#     6. Run `goreleaser release --clean`. Goreleaser writes the
+#        gateway archives + checksums to the GitHub release the tag
+#        push opened. Each linux archive bundles the engine built for
+#        its arch; darwin archives ship the gateway only. Release notes
+#        include each pinned GoogleSQL artifact URL + SHA-256 so
+#        consumers can reproduce the build from the same artifact.
 #
 # Time budget: the cold Bazel cache dominates. With prebuilt
 # GoogleSQL the first cut should land in roughly 15-30 min on a
@@ -57,13 +56,13 @@
 #        -f publish=true
 #    The producer publishes a GitHub Release at
 #      `googlesql-prebuilt/v<artifact_version>+gs-<short_sha>`
-#    with three assets: `<asset>.tar.gz`, `<asset>.tar.gz.sha256`,
-#    and `<asset>.manifest.json`.
-# 2. Read the new tarball URL + SHA-256:
+#    with three assets per arch (amd64, arm64): `<asset>.tar.gz`,
+#    `<asset>.tar.gz.sha256`, and `<asset>.manifest.json`.
+# 2. Read the new tarball URLs + SHA-256s:
 #      gh release view googlesql-prebuilt/v<...>+gs-<...> --json assets
 # 3. Update `env.RELEASE_GOOGLESQL_PREBUILT_URL` /
-#    `env.RELEASE_GOOGLESQL_PREBUILT_SHA256` below in this file to the
-#    new values. Commit the change with a `chore(release): pin
+#    `env.RELEASE_GOOGLESQL_PREBUILT_SHA256` and their `_ARM64`
+#    counterparts below in this file to the new values. Commit the change with a `chore(release): pin
 #    GoogleSQL prebuilt v<...>+gs-<...>` message.
 # 4. Tag the new release as usual (`git tag -a vX.Y.Z`); the workflow
 #    consumes the pin.
@@ -103,16 +102,16 @@ env:
   # ------------------------------------------------------------------
   # GoogleSQL prebuilt pin (CI/Docker/release prebuilt-mode wiring).
   #
-  # Both values must be filled in by the release maintainer (see the
+  # All four values must be filled in by the release maintainer (see the
   # playbook in this workflow's header) before a tag-push release.
   # The "Validate GoogleSQL prebuilt pin" step below refuses to run a
-  # tag-push release with either value empty so the release path
-  # cannot silently fall back to a multi-hour source compile.
+  # tag-push release with a value empty so the release path cannot
+  # silently fall back to a multi-hour source compile.
   #
   # Format:
   #   * URL  — `https://github.com/<owner>/<repo>/releases/download/
   #             googlesql-prebuilt/v<artifact_version>+gs-<short>/
-  #             googlesql-prebuilt-linux-amd64-clang18-<short>-v<artifact_version>.tar.gz`
+  #             googlesql-prebuilt-linux-<arch>-clang18-<short>-v<artifact_version>.tar.gz`
   #   * SHA  — 64 lowercase hex chars from the producer's
   #            `<asset>.tar.gz.sha256` sidecar.
   #
@@ -121,12 +120,21 @@ env:
   # ------------------------------------------------------------------
   RELEASE_GOOGLESQL_PREBUILT_URL: "https://github.com/vantaboard/bigquery-emulator/releases/download/googlesql-prebuilt/v0.1.3+gs-36dd14aa0657/googlesql-prebuilt-linux-amd64-clang18-36dd14aa0657-v0.1.3.tar.gz"
   RELEASE_GOOGLESQL_PREBUILT_SHA256: "be3b298245baef90aa8d0fd061be0f2d35cd0247ff3150e92b50962af09b44b4"
+  RELEASE_GOOGLESQL_PREBUILT_URL_ARM64: ""
+  RELEASE_GOOGLESQL_PREBUILT_SHA256_ARM64: ""
 
 jobs:
-  release:
-    name: release
-    runs-on: ubuntu-latest
+  engine:
+    name: engine (linux/${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
@@ -155,6 +163,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang \
+            libclang-rt-18-dev \
             libprotobuf-dev \
             protobuf-compiler \
             libgrpc++-dev \
@@ -168,7 +177,7 @@ jobs:
           # `release` keeps the cache distinct from ci/conformance so
           # tag re-cuts share their own cache key but do not invalidate
           # the on-PR caches.
-          disk-cache: release
+          disk-cache: release-${{ matrix.arch }}
           repository-cache: true
 
       - name: Validate GoogleSQL prebuilt pin
@@ -180,26 +189,32 @@ jobs:
         # `workflow_dispatch` runs may opt into source mode by setting
         # `inputs.googlesql_source=true`; tag pushes cannot.
         env:
-          PIN_URL: ${{ env.RELEASE_GOOGLESQL_PREBUILT_URL }}
-          PIN_SHA: ${{ env.RELEASE_GOOGLESQL_PREBUILT_SHA256 }}
           FORCE_SOURCE: ${{ github.event_name == 'workflow_dispatch' && inputs.googlesql_source || 'false' }}
         run: |
           set -euo pipefail
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            PIN_URL="$RELEASE_GOOGLESQL_PREBUILT_URL_ARM64"
+            PIN_SHA="$RELEASE_GOOGLESQL_PREBUILT_SHA256_ARM64"
+          else
+            PIN_URL="$RELEASE_GOOGLESQL_PREBUILT_URL"
+            PIN_SHA="$RELEASE_GOOGLESQL_PREBUILT_SHA256"
+          fi
+          printf 'PIN_URL=%s\nPIN_SHA=%s\n' "$PIN_URL" "$PIN_SHA" >> "$GITHUB_ENV"
           if [ "$FORCE_SOURCE" = "true" ]; then
             echo "::warning::workflow_dispatch with googlesql_source=true; this release will compile GoogleSQL from source (slow)."
             exit 0
           fi
           if [ -z "$PIN_URL" ] || [ -z "$PIN_SHA" ]; then
-            echo "::error::release.yml has no GoogleSQL prebuilt pin set." >&2
-            echo "Update env.RELEASE_GOOGLESQL_PREBUILT_URL and" >&2
-            echo "env.RELEASE_GOOGLESQL_PREBUILT_SHA256 at the top of" >&2
+            echo "::error::release.yml has no linux/${{ matrix.arch }} GoogleSQL prebuilt pin set." >&2
+            echo "Update env.RELEASE_GOOGLESQL_PREBUILT_URL* and" >&2
+            echo "env.RELEASE_GOOGLESQL_PREBUILT_SHA256* at the top of" >&2
             echo ".github/workflows/release.yml — see the playbook in" >&2
             echo "the workflow header. Or, for a debug rebuild only," >&2
             echo "use 'workflow_dispatch' with googlesql_source=true." >&2
             exit 1
           fi
           if ! [[ "$PIN_SHA" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "::error::RELEASE_GOOGLESQL_PREBUILT_SHA256 must be 64 lowercase hex chars" >&2
+            echo "::error::the linux/${{ matrix.arch }} GoogleSQL prebuilt SHA-256 must be 64 lowercase hex chars" >&2
             exit 1
           fi
 
@@ -220,8 +235,9 @@ jobs:
         # to source mode mid-release.
         uses: ./.github/actions/setup-googlesql
         with:
-          prebuilt-url: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.RELEASE_GOOGLESQL_PREBUILT_URL }}
-          prebuilt-sha256: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.RELEASE_GOOGLESQL_PREBUILT_SHA256 }}
+          target-arch: ${{ matrix.arch }}
+          prebuilt-url: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.PIN_URL }}
+          prebuilt-sha256: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && '' || env.PIN_SHA }}
           fail-on-source-fallback: ${{ (github.event_name == 'workflow_dispatch' && inputs.googlesql_source) && 'false' || 'true' }}
 
       - name: Build C++ engine via Bazel (full GoogleSQL + DuckDB)
@@ -240,10 +256,21 @@ jobs:
           EMULATOR_VERSION: ${{ inputs.ref || github.ref_name }}
           EMULATOR_COMMIT: ${{ github.sha }}
           GOOGLESQL_SOURCE: ${{ steps.googlesql.outputs.googlesql-source }}
+          GOOGLESQL_PREBUILT_ARCH: ${{ matrix.arch }}
         run: |
           export EMULATOR_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "::notice::Release engine build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
+          echo "::notice::Release linux/${{ matrix.arch }} engine build with GoogleSQL ${{ steps.googlesql.outputs.mode }} (artifact_version=${{ steps.googlesql.outputs.artifact-version }} googlesql=${{ steps.googlesql.outputs.googlesql-commit }})"
           task emulator:build-engine:bazel
+
+      - name: Upload engine binaries
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux_${{ matrix.arch }}
+          path: |
+            bin/emulator_main
+            bin/libduckdb.so
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Pre-pull BuildKit image (GCR mirror)
         run: bash scripts/docker_pull_retry.sh mirror.gcr.io/moby/buildkit:buildx-stable-1
@@ -259,6 +286,198 @@ jobs:
         # GHCR rejects mixed-case owners, so the owner must be
         # lowercased before tagging. `tr` is the cheap, portable
         # normalizer.
+        run: |
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "owner_lc=$owner_lc" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute Docker labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
+          labels: |
+            org.opencontainers.image.title=bigquery-emulator
+            org.opencontainers.image.source=https://github.com/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push Docker image by digest
+        id: build
+        # `continue-on-error: true` so a GHCR `permission_denied:
+        # write_package` failure (the v0.0.1 cut hit this — the
+        # `vantaboard` user namespace had not yet bootstrapped the
+        # `bigquery-emulator` container package, so the GITHUB_TOKEN
+        # had `packages: write` scope but no permission to create the
+        # package) does NOT block the goreleaser step that ships the
+        # gateway archives + engine binaries to the GitHub release.
+        # Releases stay binary-shipped even when the Docker image push
+        # is broken. Once GHCR is unblocked (manual `docker push` of a
+        # placeholder under a PAT with `write:packages`, or enabling
+        # "Inherit access from repository" on the package settings),
+        # subsequent tag pushes get the image too. See gh#26495700505.
+        continue-on-error: true
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=release-${{ matrix.arch }}
+          cache-to: type=gha,scope=release-${{ matrix.arch }},mode=max
+          # ENGINE_SOURCE=prebuilt tells the Dockerfile to skip the
+          # in-container Bazel build and COPY `bin/emulator_main` +
+          # `bin/libduckdb.so` from the build context — the previous
+          # `task emulator:build-engine:bazel` step already staged both.
+          # Without this, the workflow does the cold-cache GoogleSQL +
+          # gRPC compile twice (once on the host, once inside the
+          # `engine-builder` stage) and blows past the job timeout.
+          # See the cancelled run gh#26485361700 for context.
+          build-args: |
+            VERSION=${{ inputs.ref || github.ref_name }}
+            ENGINE_SOURCE=prebuilt
+
+      - name: Upload Docker image digest
+        if: steps.build.outcome == 'success'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@v6
+        if: steps.build.outcome == 'success'
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Write GoogleSQL build provenance
+        # The `release` job appends one block per arch to the release
+        # notes. Reproducibility: surface the exact GoogleSQL artifact
+        # this engine was built against so consumers can rebuild from the
+        # same pin. The safety-gate identity widening: in addition to the
+        # URL + SHA-256, we publish the upstream tag, manifest
+        # `schema_version`, `platform.libc`, and the compiler
+        # `<name>-<version>` so a release reader can fully trace the
+        # build back to a specific GoogleSQL artifact contract.
+        env:
+          REL_TAG: ${{ inputs.ref || github.ref_name }}
+          GSQ_ARCH: ${{ matrix.arch }}
+          GSQ_MODE: ${{ steps.googlesql.outputs.mode }}
+          GSQ_VER: ${{ steps.googlesql.outputs.artifact-version }}
+          GSQ_COMMIT: ${{ steps.googlesql.outputs.googlesql-commit }}
+          GSQ_COMMIT_FULL: ${{ steps.googlesql.outputs.googlesql-commit-full }}
+          GSQ_TAG: ${{ steps.googlesql.outputs.googlesql-tag }}
+          GSQ_SCHEMA: ${{ steps.googlesql.outputs.schema-version }}
+          GSQ_LIBC: ${{ steps.googlesql.outputs.platform-libc }}
+          GSQ_COMPILER: ${{ steps.googlesql.outputs.compiler }}
+          GSQ_URL: ${{ env.PIN_URL }}
+          GSQ_SHA: ${{ env.PIN_SHA }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/provenance"
+          {
+            printf '\n### linux/%s\n\n' "$GSQ_ARCH"
+            if [ "$GSQ_MODE" = "prebuilt" ]; then
+              printf -- '- mode: **prebuilt** (release-pinned, safety-gate validated)\n'
+              printf -- '- artifact_version: `%s`\n' "${GSQ_VER:-?}"
+              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+              printf -- '- googlesql upstream tag: `%s`\n' "${GSQ_TAG:-?}"
+              printf -- '- manifest schema_version: `%s`\n' "${GSQ_SCHEMA:-?}"
+              printf -- '- platform.libc: `%s`\n' "${GSQ_LIBC:-?}"
+              printf -- '- compiler: `%s`\n' "${GSQ_COMPILER:-?}"
+              printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
+              printf -- '- artifact SHA-256: `%s`\n' "${GSQ_SHA:-?}"
+              printf '\nReproduce locally with:\n\n```\nGOOGLESQL_PREBUILT_ARCH=%s task googlesql:fetch-prebuilt URL=%s SHA256=%s\nGOOGLESQL_PREBUILT_ARCH=%s task emulator:build-engine:bazel\n```\n' "$GSQ_ARCH" "${GSQ_URL}" "${GSQ_SHA}" "$GSQ_ARCH"
+            else
+              printf -- '- mode: **source** (debug rebuild; not the standard release path)\n'
+              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+              printf -- '- googlesql ref: `%s`\n' "${GSQ_TAG:-?}"
+            fi
+          } > "$RUNNER_TEMP/provenance/$GSQ_ARCH.md"
+          # Also surface in the workflow summary so the run page shows it.
+          # The setup-googlesql composite already wrote a table; append a
+          # second block here that ties the build to the release tag.
+          {
+            printf '## Release-time GoogleSQL build provenance (linux/%s)\n\n' "$GSQ_ARCH"
+            printf -- '- release tag: %s\n' "$REL_TAG"
+            printf -- '- mode: %s\n' "$GSQ_MODE"
+            printf -- '- artifact_version: %s\n' "${GSQ_VER:-?}"
+            printf -- '- googlesql commit: %s\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
+            printf -- '- googlesql tag: %s\n' "${GSQ_TAG:-?}"
+            printf -- '- schema_version: %s\n' "${GSQ_SCHEMA:-?}"
+            printf -- '- platform.libc: %s\n' "${GSQ_LIBC:-?}"
+            printf -- '- compiler: %s\n' "${GSQ_COMPILER:-?}"
+            printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
+            printf -- '- artifact SHA-256: %s\n' "${GSQ_SHA:-?}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: provenance-${{ matrix.arch }}
+          path: ${{ runner.temp }}/provenance/${{ matrix.arch }}.md
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Release Bazel daemon
+        if: always()
+        run: timeout 60 bazel shutdown || true
+
+  release:
+    name: release
+    needs: engine
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download engine binaries
+        # One `linux_<arch>` artifact per engine leg lands in
+        # `bin/linux_<arch>/`, the layout `.goreleaser.yml` archives
+        # from. Artifacts drop the executable bit, so restore it.
+        uses: actions/download-artifact@v8
+        with:
+          pattern: linux_*
+          path: bin
+
+      - run: chmod +x bin/linux_*/emulator_main
+
+      - name: Download Docker image digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Pre-pull BuildKit image (GCR mirror)
+        run: bash scripts/docker_pull_retry.sh mirror.gcr.io/moby/buildkit:buildx-stable-1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+
+      - name: Normalize repository owner (lowercase)
+        id: owner
         run: |
           owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "owner_lc=$owner_lc" >> "$GITHUB_OUTPUT"
@@ -286,55 +505,22 @@ jobs:
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
-          labels: |
-            org.opencontainers.image.title=bigquery-emulator
-            org.opencontainers.image.source=https://github.com/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
-            org.opencontainers.image.licenses=MIT
 
-      - name: Build and push Docker image
-        # `continue-on-error: true` so a GHCR `permission_denied:
-        # write_package` failure (the v0.0.1 cut hit this — the
-        # `vantaboard` user namespace had not yet bootstrapped the
-        # `bigquery-emulator` container package, so the GITHUB_TOKEN
-        # had `packages: write` scope but no permission to create the
-        # package) does NOT block the goreleaser step that ships the
-        # gateway archives + engine binaries to the GitHub release.
-        # Releases stay binary-shipped even when the Docker image push
-        # is broken. Once GHCR is unblocked (manual `docker push` of a
-        # placeholder under a PAT with `write:packages`, or enabling
-        # "Inherit access from repository" on the package settings),
-        # subsequent tag pushes get the image too. See gh#26495700505.
+      - name: Create multi-arch Docker manifest
+        # Same `continue-on-error` posture as the per-arch pushes: a GHCR
+        # failure must not block the goreleaser archives. The manifest
+        # needs both digests, so a failed leg push fails this step too.
         continue-on-error: true
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Linux/amd64 only — engine is amd64-only (see README and the
-          # release notes header). Multi-arch is out of scope.
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          # ENGINE_SOURCE=prebuilt tells the Dockerfile to skip the
-          # in-container Bazel build and COPY `bin/emulator_main` +
-          # `bin/libduckdb.so` from the build context — the previous
-          # `task emulator:build-engine:bazel` step already staged both.
-          # Without this, the workflow does the cold-cache GoogleSQL +
-          # gRPC compile twice (once on the host, once inside the
-          # `engine-builder` stage) and blows past the job timeout.
-          # See the cancelled run gh#26485361700 for context.
-          build-args: |
-            VERSION=${{ inputs.ref || github.ref_name }}
-            ENGINE_SOURCE=prebuilt
-
-      - name: Restore bazel lockfile drift
-        # The engine-build step above lets Bazel rewrite
-        # MODULE.bazel.lock in place (registry metadata reordering, not
-        # a semantic change). goreleaser hard-fails on a dirty worktree
-        # (https://goreleaser.com/errors/dirty), so restore the
-        # committed lockfile before releasing.
-        run: git checkout -- MODULE.bazel.lock
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/${{ steps.owner.outputs.owner_lc }}/bigquery-emulator
+        run: |
+          set -euo pipefail
+          [ "$(ls | wc -l)" -eq 2 ] || { echo "::error::expected 2 image digests, got: $(ls)" >&2; exit 1; }
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:${{ steps.meta.outputs.version }}"
 
       - name: Run goreleaser
         uses: goreleaser/goreleaser-action@v7
@@ -344,72 +530,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download GoogleSQL build provenance
+        uses: actions/download-artifact@v8
+        with:
+          pattern: provenance-*
+          path: ${{ runner.temp }}/provenance
+          merge-multiple: true
+
       - name: Append GoogleSQL artifact identity to release notes
-        # Reproducibility: surface the exact GoogleSQL artifact this
-        # release was built against so consumers can rebuild from the
-        # same pin. `gh release edit --notes` overwrites the existing
-        # notes, so first read goreleaser's output then append.
-        #
-        # The safety-gate identity widening: in addition to the URL
-        # + SHA-256, we now publish the upstream tag, manifest
-        # `schema_version`, `platform.libc`, and the compiler
-        # `<name>-<version>` so a release reader can fully trace the
-        # build back to a specific GoogleSQL artifact contract.
+        # `gh release edit --notes` overwrites the existing notes, so
+        # first read goreleaser's output then append the per-arch blocks
+        # the engine legs wrote.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REL_TAG: ${{ inputs.ref || github.ref_name }}
-          GSQ_MODE: ${{ steps.googlesql.outputs.mode }}
-          GSQ_VER: ${{ steps.googlesql.outputs.artifact-version }}
-          GSQ_COMMIT: ${{ steps.googlesql.outputs.googlesql-commit }}
-          GSQ_COMMIT_FULL: ${{ steps.googlesql.outputs.googlesql-commit-full }}
-          GSQ_TAG: ${{ steps.googlesql.outputs.googlesql-tag }}
-          GSQ_SCHEMA: ${{ steps.googlesql.outputs.schema-version }}
-          GSQ_LIBC: ${{ steps.googlesql.outputs.platform-libc }}
-          GSQ_COMPILER: ${{ steps.googlesql.outputs.compiler }}
-          GSQ_URL: ${{ env.RELEASE_GOOGLESQL_PREBUILT_URL }}
-          GSQ_SHA: ${{ env.RELEASE_GOOGLESQL_PREBUILT_SHA256 }}
         run: |
           set -euo pipefail
           existing="$(gh release view "$REL_TAG" --json body --jq .body 2>/dev/null || echo "")"
           appended="$(mktemp)"
           {
             printf '%s\n' "$existing"
-            printf '\n---\n\n## GoogleSQL build provenance\n\n'
-            if [ "$GSQ_MODE" = "prebuilt" ]; then
-              printf -- '- mode: **prebuilt** (release-pinned, safety-gate validated)\n'
-              printf -- '- artifact_version: `%s`\n' "${GSQ_VER:-?}"
-              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
-              printf -- '- googlesql upstream tag: `%s`\n' "${GSQ_TAG:-?}"
-              printf -- '- manifest schema_version: `%s`\n' "${GSQ_SCHEMA:-?}"
-              printf -- '- platform.libc: `%s`\n' "${GSQ_LIBC:-?}"
-              printf -- '- compiler: `%s`\n' "${GSQ_COMPILER:-?}"
-              printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
-              printf -- '- artifact SHA-256: `%s`\n' "${GSQ_SHA:-?}"
-              printf '\nReproduce locally with:\n\n```\ntask googlesql:fetch-prebuilt URL=%s SHA256=%s\ntask emulator:build-engine:bazel\n```\n' "${GSQ_URL}" "${GSQ_SHA}"
-            else
-              printf -- '- mode: **source** (debug rebuild; not the standard release path)\n'
-              printf -- '- googlesql commit: `%s`\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
-              printf -- '- googlesql ref: `%s`\n' "${GSQ_TAG:-?}"
-            fi
+            printf '\n---\n\n## GoogleSQL build provenance\n'
+            cat "$RUNNER_TEMP/provenance/amd64.md" "$RUNNER_TEMP/provenance/arm64.md"
           } > "$appended"
           gh release edit "$REL_TAG" --notes-file "$appended"
           rm -f "$appended"
-          # Also surface in the workflow summary so the run page shows it.
-          # The setup-googlesql composite already wrote a table; append a
-          # second block here that ties the build to the release tag.
-          {
-            printf '## Release-time GoogleSQL build provenance\n\n'
-            printf -- '- release tag: %s\n' "$REL_TAG"
-            printf -- '- mode: %s\n' "$GSQ_MODE"
-            printf -- '- artifact_version: %s\n' "${GSQ_VER:-?}"
-            printf -- '- googlesql commit: %s\n' "${GSQ_COMMIT_FULL:-${GSQ_COMMIT:-?}}"
-            printf -- '- googlesql tag: %s\n' "${GSQ_TAG:-?}"
-            printf -- '- schema_version: %s\n' "${GSQ_SCHEMA:-?}"
-            printf -- '- platform.libc: %s\n' "${GSQ_LIBC:-?}"
-            printf -- '- compiler: %s\n' "${GSQ_COMPILER:-?}"
-            printf -- '- artifact URL: %s\n' "${GSQ_URL:-?}"
-            printf -- '- artifact SHA-256: %s\n' "${GSQ_SHA:-?}"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate release badge JSON
         env:
@@ -449,7 +594,3 @@ jobs:
             git commit -m "chore(release): bump README release badge cache buster to ${cache_ver} [skip ci]"
             git push origin main
           fi
-
-      - name: Release Bazel daemon
-        if: always()
-        run: timeout 60 bazel shutdown || true

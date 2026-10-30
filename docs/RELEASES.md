@@ -45,12 +45,10 @@ Each archive bundles `bigquery-emulator-gateway` (the Go REST gateway) plus
 binary, so `./bigquery-emulator-gateway` works out of the tarball without extra
 flags.
 
-> **Engine binary is linux/amd64 in release archives today.** Native
-> `linux/arm64` engine builds are in CI (non-blocking); see
-> [`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./dev/googlesql-prebuilt/arm64-feasibility.md).
-> macOS engine builds remain out of scope. The macOS + linux/arm64 gateway
-> archives still bundle the linux/amd64 engine binary until arm64 engine
-> releases ship, so you cannot run the bundled engine on a non-linux/amd64
-> host today. The recommended path on macOS or linux/arm64 is the published
+> **No macOS engine binary.** The linux/amd64 and linux/arm64 archives
+> bundle a native engine binary for their arch, built on native runners;
+> see [`docs/dev/googlesql-prebuilt/arm64-feasibility.md`](./dev/googlesql-prebuilt/arm64-feasibility.md).
+> macOS engine builds remain out of scope, so the macOS archives ship the
+> gateway only. The recommended path on macOS is the published multi-arch
 > Docker image — see
 > [Docker → Install via Docker](./DOCKER.md#install-via-docker).

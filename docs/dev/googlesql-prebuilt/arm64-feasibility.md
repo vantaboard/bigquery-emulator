@@ -4,22 +4,20 @@ This document records the toolchain spike for shipping a native
 `emulator_main` on `linux/arm64`. It captures the spike's findings
 whether or not the engine build is green yet.
 
-## Summary (2026-07)
+## Summary (2026-10)
 
 | Layer | Status | Notes |
 |---|---|---|
 | DuckDB `libduckdb.so` | **Ready** | Upstream v1.5.3 arm64 zip registered in `MODULE.bazel`; `//third_party/duckdb:duckdb` selects on `@platforms//cpu`. |
 | Go gateway | **Ready** | Already cross-compiles to `linux/arm64` via goreleaser. |
-| GoogleSQL prebuilt producer | **In flight** | `googlesql-prebuilt.yml` matrix leg on `ubuntu-24.04-arm` publishes `googlesql_prebuilt_linux_arm64/` tarballs. Repo vars: `GOOGLESQL_PREBUILT_URL_ARM64` / `GOOGLESQL_PREBUILT_SHA256_ARM64`. |
+| GoogleSQL prebuilt producer | **Ready** | `googlesql-prebuilt.yml` matrix leg on `ubuntu-24.04-arm` builds, verifies (link + Bazel smoke) and publishes `googlesql_prebuilt_linux_arm64/` tarballs. Repo vars: `GOOGLESQL_PREBUILT_URL_ARM64` / `GOOGLESQL_PREBUILT_SHA256_ARM64`. |
 | GoogleSQL hermetic LLVM (amd64) | **Blocker for cross-build** | The toolchain GoogleSQL registers ships amd64 host tools only. Cross-compiling from an amd64 host to `linux/arm64` fails before first-party code compiles. |
-| Native arm64 engine build | **Unknown — CI spike** | Non-blocking `build-engine-arm64` job on `ubuntu-24.04-arm` attempts a **native** build with system `clang` (same posture as local amd64 builds) once an arm64 prebuilt exists, or source fallback until repo vars are populated. |
-| Release archives + Docker | **Deferred** | goreleaser / `release.yml` still ship a linux/amd64 engine only. Multi-arch GHCR manifest waits for a green arm64 engine lane + conformance on arm64. |
+| Native arm64 engine build | **Ready** | Non-blocking `build-engine-arm64` job on `ubuntu-24.04-arm` builds natively with system `clang` against the arm64 prebuilt. aarch64 links need compiler-rt (see below). |
+| Release archives + Docker | **Ready** | `release.yml` builds the engine on native amd64 + arm64 runners, ships a `linux_arm64` archive with its own engine, and publishes a multi-arch GHCR manifest (`linux/amd64,linux/arm64`). |
 
-**Conclusion:** arm64 is viable as a **native build on arm64 runners** once the
-GoogleSQL dependency resolves (arm64 prebuilt artifact or patched source build
-with system clang). Cross-compiling the engine from amd64 is **not** the plan of
-record and remains blocked by the hermetic toolchain. Release packaging is
-intentionally deferred until CI proves the native path.
+**Conclusion:** arm64 ships as a **native build on arm64 runners** against an
+arm64 GoogleSQL prebuilt. Cross-compiling the engine from amd64 is **not** the
+plan of record and remains blocked by the hermetic toolchain.
 
 ## Toolchain spike findings
 
@@ -64,11 +62,19 @@ Tradeoff: slightly less hermetic than amd64, but the prebuilt manifest records
 `platform.arch`, `toolchain.compiler`, and `toolchain.compiler_version` so
 consumers can gate mismatches via `validate_artifact.py`.
 
+### compiler-rt on aarch64
+
+GoogleSQL compiles on arm64 with system clang-18 without source changes. The
+link is the only arch-specific failure: `int128` multiplication in GoogleSQL
+(for example `RescaleInterval<absl::int128>` in `date_time_util.cc`) emits
+calls to `__muloti4`, which aarch64 libgcc does not provide. Every aarch64
+link against the prebuilt therefore passes `-rtlib=compiler-rt
+-unwindlib=libgcc` (`binaries/emulator_main/BUILD.bazel`,
+`tools/googlesql-prebuilt/smoke/BUILD.bazel`) and needs `libclang-rt-18-dev`
+installed.
+
 ### Risks still open
 
-- **First green arm64 GoogleSQL compile** may surface arch-specific failures
-  (`-march`, Abseil/protobuf flags, GoogleSQL internals). Catalog failures in
-  CI logs from `build-engine-arm64` and the prebuilt matrix leg.
 - **Float / decimal conformance** across ISAs — run the full conformance lane
   on arm64 before shipping release archives, not just `cc_test`.
 - **Runner cost** — cold arm64 engine builds share the ~2 h profile of amd64;
@@ -81,13 +87,16 @@ consumers can gate mismatches via `validate_artifact.py`.
 - Arch-aware `task googlesql:*` + `setup-googlesql` composite action.
 - `googlesql-prebuilt.yml` amd64 + arm64 matrix producer.
 - `build-engine.yml` non-blocking `build-engine-arm64` job.
+- Dockerfile `TARGETARCH` wiring, so `docker buildx --platform linux/arm64`
+  builds the engine natively.
+- `release.yml` engine matrix + multi-arch GHCR manifest; per-arch engines in
+  the goreleaser linux archives.
 
-## Follow-ups (deferred)
+## Follow-ups
 
-1. First successful arm64 prebuilt publish → set `GOOGLESQL_PREBUILT_*_ARM64` repo vars.
+1. First upstream arm64 prebuilt publish → set `GOOGLESQL_PREBUILT_*_ARM64`
+   repo vars and the `RELEASE_GOOGLESQL_PREBUILT_*_ARM64` pins in `release.yml`.
 2. Green `build-engine-arm64` for several weeks → make job blocking; add conformance matrix leg.
-3. Extend `.goreleaser.yml` + `release.yml` with a `linux_arm64` engine archive and GHCR `buildx` multi-arch manifest (`linux/amd64,linux/arm64`).
-4. Update `docs/RELEASES.md` / README install story once (3) ships.
 
 ## References
 

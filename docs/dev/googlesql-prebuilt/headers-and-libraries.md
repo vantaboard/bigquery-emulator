@@ -11,7 +11,7 @@ agree on.
 |-------------------------------------------------------|-------------------------------------------------|
 | Static or shared libraries?                           | **Static** (`.a` archives).                     |
 | One combined archive or per-label archives?           | **One** combined archive (`libgooglesql.a`) + one matching `proto_combined.a` for generated protobuf objects. |
-| Include root layout?                                  | `include/googlesql/...` mirroring upstream source paths. |
+| Include root layout?                                  | `include/googlesql/...` mirroring upstream source paths, plus ICU 76's public headers under `include/unicode/`. |
 | Generated `.pb.h` headers?                            | Ship with the package, under the same `include/googlesql/...` prefix. |
 | Third-party deps (Abseil, Protobuf, gRPC, RE2, BoringSSL, GoogleTest)? | **Not bundled**. Resolved by the consumer through Bzlmod (`MODULE.bazel`) as today. |
 | ICU + farmhash + differential-privacy?                | **Bundled** into `lib/libgooglesql.a` (manifest's `bundled_thirdparty_deps` lists them). Necessary because BCR's `icu` module ships a different ABI version (`icu_78::` vs. the producer-pinned `icu_76::`), and farmhash + differential-privacy are not published in BCR. |

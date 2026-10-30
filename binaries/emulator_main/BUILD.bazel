@@ -69,7 +69,13 @@ cc_binary(
         "-static-libstdc++",
         "-Wno-unused-command-line-argument",
         "-Wl,-rpath,$$ORIGIN",
-    ],
+    ] + select({
+        "@platforms//cpu:aarch64": [
+            "-rtlib=compiler-rt",
+            "-unwindlib=libgcc",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":version",
         "//backend/engine",

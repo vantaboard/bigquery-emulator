@@ -17,4 +17,11 @@ cc_binary(
         "@googlesql_prebuilt_linux_amd64//googlesql/public:error_helpers",
         "@googlesql_prebuilt_linux_amd64//googlesql/scripting:script_executor",
     ],
+    linkopts = select({
+        "@platforms//cpu:aarch64": [
+            "-rtlib=compiler-rt",
+            "-unwindlib=libgcc",
+        ],
+        "//conditions:default": [],
+    }),
 )

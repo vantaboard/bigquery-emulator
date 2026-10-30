@@ -61,7 +61,10 @@ exports_files(glob(
 # (which then deps on `:_all_hdrs` privately).
 cc_library(
     name = "_all_hdrs",
-    hdrs = glob(["include/googlesql/**/*.h"]),
+    hdrs = glob([
+        "include/googlesql/**/*.h",
+        "include/unicode/**/*.h",
+    ]),
     strip_include_prefix = "/include",
     # `:_all_hdrs` is the consumer-facing transitive-header-coverage
     # library. It exposes the full include tree under strict-deps +
@@ -103,7 +106,9 @@ cc_library(
     # the upstream `@icu` / `@com_google_farmhash` /
     # `@com_google_differential_privacy` repos. See
     # `MODULE.bazel.tmpl` for the rationale (none of the three has a
-    # BCR module compatible with the producer's ABI).
+    # BCR module compatible with the producer's ABI). ICU's public
+    # headers ship under `include/unicode/`, because googlesql headers
+    # such as `public/functions/string.h` include them.
     deps = [
         "@com_google_googletest//:gtest",
     ],
@@ -207,6 +212,15 @@ cc_import(
 #     (`absl/status`, `absl/strings`, `absl/time`, …) do NOT cover
 #     the flag registration machinery.
 #
+#   * `@com_google_absl//absl/container:node_hash_map` +
+#     `@com_google_absl//absl/functional:bind_front`
+#     Header-only for consumers: `googlesql/public/types/type_factory.h`,
+#     `googlesql/parser/macros/macro_catalog.h` and
+#     `googlesql/public/builtin_function_options.h` include them, and no
+#     wrapper's deps provide them. CI hosts have the system abseil
+#     headers in `/usr/include` (from `libgrpc++-dev`), which hides the
+#     gap; the Docker build has none and fails in 93 targets.
+#
 #   * `@com_googlesource_code_re2//:re2`
 #     `googlesql/public/error_helpers.cc` (in the bundled archive)
 #     uses `re2::RE2` for the error-message stability regex rewriter
@@ -236,7 +250,9 @@ cc_library(
         "@com_google_protobuf//:duration_cc_proto",
         "@com_google_protobuf//:wrappers_cc_proto",
         "@com_google_protobuf//:differencer",
+        "@com_google_absl//absl/container:node_hash_map",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_googlesource_code_re2//:re2",
         "@boringssl//:crypto",
         "@boringssl//:ssl",

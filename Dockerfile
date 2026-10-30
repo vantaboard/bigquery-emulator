@@ -93,66 +93,57 @@ ARG GOOGLESQL_PREBUILT_SHA256=""
 # Selected when ENGINE_SOURCE=bazel (the default). Self-contained: no
 # pre-staged host binaries required.
 ###############################################################################
-FROM debian:${DEBIAN_VERSION}-slim AS engine-builder-bazel
+FROM ubuntu:24.04 AS engine-builder-bazel
 
-# Stage-wide SHELL switch to bash with `pipefail`. The very next RUN
-# pipes `curl ... | gpg --dearmor` to register the LLVM apt key; without
-# `pipefail`, dash would only report `gpg`'s exit status and a curl
-# failure (404, network blip, MITM rejection by `--fail`) would silently
-# install an empty/garbage keyring. The later RUN at the GoogleSQL
-# fetch step also needs bash for `<(...)` process substitution, so this
-# directive doubles as that stage's shell baseline.
+# Stage-wide SHELL switch to bash with `pipefail`. The GoogleSQL fetch
+# step needs bash for `<(...)` process substitution, and `pipefail`
+# keeps a failing command on the left of a pipe from being hidden.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Build deps: clang-18 (from apt.llvm.org) + libstdc++ headers + JDK
-# (Bazel needs Java) + git/curl/unzip for fetching bazelisk and the
-# googlesql sibling. Python 3 + zip are required by some of the Bazel
-# rule sets the GoogleSQL build pulls in; pkg-config keeps the
-# configure step quiet.
+# Build deps: clang-18 + libstdc++ headers + JDK (Bazel needs Java) +
+# git/curl/unzip for fetching bazelisk and the googlesql sibling.
+# Python 3 + zip are required by some of the Bazel rule sets the
+# GoogleSQL build pulls in; pkg-config keeps the configure step quiet.
+#
+# Why ubuntu:24.04: the GoogleSQL prebuilt is built on Ubuntu 24.04
+# (glibc 2.39, clang 18.1.3), and its objects reference glibc 2.38+
+# symbols such as `__isoc23_strtol`. A bookworm builder (glibc 2.36)
+# cannot link them. The runtime stage is ubuntu:24.04 for the same
+# reason, and Ubuntu's own `clang-18` matches the producer's compiler.
 #
 # Why clang-18 specifically: GoogleSQL's
 # `googlesql/common/match_recognize/nfa_builder.h` instantiates
 # `std::function<void(...)>` in a way that trips a
-# clang-14 + libstdc++-12 bug on `_Decay_t<void&>` substitution
-# (reproducible on debian:bookworm-slim's default `clang` package).
+# clang-14 + libstdc++-12 bug on `_Decay_t<void&>` substitution.
 # The project's bazel-process-hygiene rule pins `/usr/bin/clang` ->
-# `clang-18`, so we mirror that pin inside the build stage. The
-# runtime stage stays on bookworm-slim with libstdc++6 (gcc-12), which
-# matches the libstdc++ headers used at build time.
+# `clang-18`, so we mirror that pin inside the build stage.
 #
 # DL3008 (pin versions in apt-get install) is intentionally ignored:
-# debian:bookworm-slim is a rolling base whose package versions rotate
-# with security updates, and old versions are quickly purged from the
-# Debian mirrors. Pinning exact versions would make this layer break
-# nondeterministically on rebuild. The base image tag itself is the
-# version pin.
+# ubuntu:24.04 package versions rotate with security updates, and
+# pinning exact versions would make this layer break on rebuild. The
+# base image tag itself is the version pin.
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
+        clang-18 \
         curl \
         g++ \
         git \
-        gnupg \
-        libstdc++-12-dev \
+        libclang-rt-18-dev \
         libssl-dev \
         openjdk-17-jdk-headless \
         pkg-config \
         python3 \
         unzip \
         zip \
-    && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
-        | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-18 main" \
-        > /etc/apt/sources.list.d/llvm.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends clang-18 \
     && ln -sf /usr/bin/clang-18 /usr/bin/clang \
     && ln -sf /usr/bin/clang++-18 /usr/bin/clang++ \
     && rm -rf /var/lib/apt/lists/*
 
 ARG BAZELISK_VERSION
+ARG TARGETARCH
 RUN curl -fsSL -o /usr/local/bin/bazel \
-        "https://github.com/bazelbuild/bazelisk/releases/download/${BAZELISK_VERSION}/bazelisk-linux-amd64" \
+        "https://github.com/bazelbuild/bazelisk/releases/download/${BAZELISK_VERSION}/bazelisk-linux-${TARGETARCH}" \
     && chmod +x /usr/local/bin/bazel
 
 WORKDIR /src
@@ -181,7 +172,7 @@ COPY scripts/patch_googlesql_source_checkout.sh ./scripts/patch_googlesql_source
 #
 #   * If `GOOGLESQL_PREBUILT_URL` + `GOOGLESQL_PREBUILT_SHA256` are
 #     set, fetch + verify (SHA gate) + unpack into
-#     `/src/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_amd64/`,
+#     `/src/.cache/googlesql-prebuilt/googlesql_prebuilt_linux_<arch>/`,
 #     where `--override_module=googlesql=.cache/googlesql-prebuilt/...`
 #     from `.bazelrc` resolves under `--config=googlesql-prebuilt`
 #     (the path is workspace-root-relative; Bazel resolves it against
@@ -231,30 +222,30 @@ RUN set -eux; \
         unpack="$tmp/unpack"; \
         mkdir -p "$unpack"; \
         tar -xzf "$tarball" -C "$unpack"; \
-        if [ ! -d "$unpack/googlesql_prebuilt_linux_amd64" ]; then \
-            echo "tarball missing top-level googlesql_prebuilt_linux_amd64/" >&2; \
+        if [ ! -d "$unpack/googlesql_prebuilt_linux_${TARGETARCH}" ]; then \
+            echo "tarball missing top-level googlesql_prebuilt_linux_${TARGETARCH}/" >&2; \
             ls -la "$unpack" >&2; \
             exit 1; \
         fi; \
-        mod_name="$(grep -E '^[[:space:]]*name = ' "$unpack/googlesql_prebuilt_linux_amd64/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"; \
+        mod_name="$(grep -E '^[[:space:]]*name = ' "$unpack/googlesql_prebuilt_linux_${TARGETARCH}/MODULE.bazel" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"; \
         if [ "$mod_name" != "googlesql" ]; then \
             echo "prebuilt MODULE.bazel declares module(name = \"$mod_name\"); expected \"googlesql\"" >&2; \
             exit 1; \
         fi; \
-        rm -rf "$cache_root/googlesql_prebuilt_linux_amd64"; \
-        mv "$unpack/googlesql_prebuilt_linux_amd64" "$cache_root/googlesql_prebuilt_linux_amd64"; \
-        echo "${GOOGLESQL_PREBUILT_SHA256}  artifact.tar.gz" > "$cache_root/googlesql_prebuilt_linux_amd64.tarball.sha256"; \
+        rm -rf "$cache_root/googlesql_prebuilt_linux_${TARGETARCH}"; \
+        mv "$unpack/googlesql_prebuilt_linux_${TARGETARCH}" "$cache_root/googlesql_prebuilt_linux_${TARGETARCH}"; \
+        echo "${GOOGLESQL_PREBUILT_SHA256}  artifact.tar.gz" > "$cache_root/googlesql_prebuilt_linux_${TARGETARCH}.tarball.sha256"; \
         rm -rf "$tmp"; \
         # Centralized safety-gate validator — schema, identity,
         # platform, payload SHA, wrapper-presence gates. Anything
         # failing here is a hard error: the Dockerfile refuses to
         # proceed to the bazel build with a partially-valid cache.
         python3 tools/googlesql-prebuilt/validate_artifact.py \
-            --repo-root "$cache_root/googlesql_prebuilt_linux_amd64" \
+            --repo-root "$cache_root/googlesql_prebuilt_linux_${TARGETARCH}" \
             --summary-line \
             --summary-json /tmp/googlesql-validate.json; \
-        artifact_version="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("artifact_version","?"))' 2>/dev/null || echo '?')"; \
-        gs_commit="$(python3 -c 'import json; print(json.load(open("'"$cache_root"'/googlesql_prebuilt_linux_amd64/manifest.json")).get("googlesql",{}).get("commit","?")[:12])' 2>/dev/null || echo '?')"; \
+        artifact_version="$(python3 -c 'import json; print(json.load(open("'"$cache_root/googlesql_prebuilt_linux_${TARGETARCH}"'/manifest.json")).get("artifact_version","?"))' 2>/dev/null || echo '?')"; \
+        gs_commit="$(python3 -c 'import json; print(json.load(open("'"$cache_root/googlesql_prebuilt_linux_${TARGETARCH}"'/manifest.json")).get("googlesql",{}).get("commit","?")[:12])' 2>/dev/null || echo '?')"; \
         echo "GoogleSQL prebuilt artifact_version=$artifact_version googlesql=$gs_commit"; \
         echo prebuilt > /tmp/googlesql-mode; \
     else \
@@ -276,7 +267,7 @@ ARG BAZEL_MEM_MB=
 # `docker build` invocations skip re-downloading and re-compiling
 # GoogleSQL. Prebuilt and source modes use separate `--output_user_root`
 # trees so a stale source-mode analysis cache cannot poison prebuilt builds.
-RUN --mount=type=cache,target=/root/.cache,id=bigquery-emulator-bazel-clang18 \
+RUN --mount=type=cache,target=/root/.cache,id=bigquery-emulator-bazel-ubuntu2404-clang18 \
     set -eux; \
     jobs="${BAZEL_JOBS}"; \
     if [ -z "$jobs" ]; then \
@@ -290,7 +281,7 @@ RUN --mount=type=cache,target=/root/.cache,id=bigquery-emulator-bazel-clang18 \
     : "${mem:=8192}"; \
     mode="$(cat /tmp/googlesql-mode)"; \
     case "$mode" in \
-      prebuilt) gsq_cfg=googlesql-prebuilt ;; \
+      prebuilt) if [ "${TARGETARCH}" = arm64 ]; then gsq_cfg=googlesql-prebuilt-arm64; else gsq_cfg=googlesql-prebuilt; fi ;; \
       source)   gsq_cfg=googlesql-source ;; \
       *)        echo "unknown googlesql mode '$mode'" >&2; exit 1 ;; \
     esac; \

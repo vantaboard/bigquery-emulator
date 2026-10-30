@@ -156,7 +156,7 @@ done < <(tar -tzf "$TARBALL")
 
 tar -xzf "$TARBALL" -C "$TMPDIR"
 
-REPO_NAME="$(tar -tzf "$TARBALL" | awk -F/ '$1 ~ /^googlesql_prebuilt_linux_/ && NF >= 1 {print $1; exit}')"
+REPO_NAME="$(tar -tzf "$TARBALL" | awk -F/ '$1 ~ /^googlesql_prebuilt_linux_/ && NF >= 1 && !found++ {print $1}')"
 [ -n "$REPO_NAME" ] \
     || die "tarball has no googlesql_prebuilt_linux_* top-level directory"
 REPO_ROOT="$TMPDIR/$REPO_NAME"

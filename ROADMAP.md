@@ -284,8 +284,7 @@ behind each, and the multi-strategy coordinator is the only
 
 - ✅ Vendor `libduckdb` v1.5.3 via Bazel `http_archive`
   ([`third_party/duckdb/`](./third_party/duckdb/)); the engine links
-  the prebuilt `libduckdb.so` (linux/amd64 and linux/arm64 zips; engine still
-  ships amd64-only until the arm64 lane is green) and surfaces its
+  the prebuilt `libduckdb.so` (linux/amd64 and linux/arm64 zips) and surfaces its
   Arrow APIs to the build
 - ✅ [`backend/storage/duckdb/`](./backend/storage/duckdb/):
   `DuckDBStorage` impl backed by a single `catalog.duckdb` file

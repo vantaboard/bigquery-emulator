@@ -2,15 +2,13 @@
 #
 # Cuts release archives + checksums for the Go REST gateway across the
 # four supported gateway platforms (linux/{amd64,arm64} +
-# darwin/{amd64,arm64}) and bundles the canonical Bazel-built C++
-# engine binary on every archive. Engine binary is linux/amd64 ONLY:
-# upstream GoogleSQL's hermetic LLVM toolchain does not yet
-# cross-compile cleanly to non-linux/arm64 (see CI matrix posture in
-# `.github/workflows/ci.yml` + the engine-policy notes in
-# `docs/ENGINE_POLICY.md`). macOS + linux/arm64 archive consumers must
-# either run the published Docker image (`ghcr.io/vantaboard/bigquery-emulator`)
-# or BYO-engine. The release notes header below + README §Releases
-# document the caveat.
+# darwin/{amd64,arm64}). Each linux archive bundles the canonical
+# Bazel-built C++ engine for its arch, built natively by the
+# `release.yml` engine matrix and staged under `bin/linux_<arch>/`.
+# There is no darwin engine, so darwin archives ship the gateway only:
+# macOS consumers run the published Docker image
+# (`ghcr.io/vantaboard/bigquery-emulator`) or BYO-engine. The release
+# notes header below + README §Releases document the caveat.
 #
 # Release flow today (manual seed; semantic-release config is parked at
 # `.releaserc.yml` for the eventual flip):
@@ -19,15 +17,16 @@
 #   git push origin v0.0.1
 #
 # The tag push triggers `.github/workflows/release.yml`, which:
-#   1. builds the engine binary via `task emulator:build-engine:bazel`,
-#   2. publishes the Docker runtime image to GHCR (linux/amd64 only),
+#   1. builds the engine binary on linux/amd64 and linux/arm64 via
+#      `task emulator:build-engine:bazel`,
+#   2. publishes the multi-arch Docker runtime image to GHCR,
 #   3. runs `goreleaser release --clean`, which uploads the gateway
 #      archives + checksums to the GitHub release the tag created.
 #
-# Local snapshot verification:
+# Local snapshot verification (host arch only):
 #
 #   task emulator:build-engine:bazel   # stages bin/emulator_main + bin/libduckdb.so
-#   task release:snapshot              # goreleaser release --snapshot --clean
+#   task release:snapshot              # goreleaser release --snapshot --clean --single-target
 #
 # Why goreleaser v2 schema: v1 reached EOL in mid-2024. Some knobs
 # (`archives[*].format`, `archives[*].builds`) were renamed in v2; the
@@ -41,15 +40,12 @@ project_name: bigquery-emulator
 before:
   hooks:
     - go mod download
-    # Workflow contract: the release workflow stages the engine binary
-    # + libduckdb.so under ./bin BEFORE goreleaser runs. Verify here so
-    # a local `goreleaser release --snapshot` fails fast (with a
-    # human-readable hint) when the operator forgot to pre-build.
-    - sh -c 'test -x bin/emulator_main || (echo "bin/emulator_main missing - run task emulator:build-engine:bazel first" && exit 1)'
-    - sh -c 'test -f bin/libduckdb.so || (echo "bin/libduckdb.so missing - run task emulator:build-engine:bazel first" && exit 1)'
+    # Workflow contract: the release workflow stages each arch's engine
+    # binary + libduckdb.so under ./bin/linux_<arch>/ BEFORE goreleaser
+    # runs; the linux archives below fail on a missing file.
 
 builds:
-  - id: gateway
+  - id: gateway-linux
     main: ./binaries/gateway_main
     binary: bigquery-emulator-gateway
     env:
@@ -65,6 +61,23 @@ builds:
       - -trimpath
     goos:
       - linux
+    goarch:
+      - amd64
+      - arm64
+
+  - id: gateway-darwin
+    main: ./binaries/gateway_main
+    binary: bigquery-emulator-gateway
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    flags:
+      - -trimpath
+    goos:
       - darwin
     goarch:
       - amd64
@@ -73,7 +86,7 @@ builds:
 archives:
   - id: with-engine
     ids:
-      - gateway
+      - gateway-linux
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats:
@@ -83,14 +96,25 @@ archives:
       - README.md
       - docs/REST_API.md
       - docs/ENGINE_POLICY.md
-      # Engine binary is linux/amd64 only. Bundling it on every archive
-      # keeps the layout uniform; the README + release notes header
-      # call out that non-linux/amd64 callers need Docker (or BYO
-      # engine) to actually run the gateway.
-      - src: bin/emulator_main
+      - src: 'bin/linux_{{ .Arch }}/emulator_main'
         dst: bin/emulator_main
-      - src: bin/libduckdb.so
+      - src: 'bin/linux_{{ .Arch }}/libduckdb.so'
         dst: bin/libduckdb.so
+      - src: docker-compose.yml
+        dst: docker-compose.yml
+
+  - id: gateway-only
+    ids:
+      - gateway-darwin
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - docs/REST_API.md
+      - docs/ENGINE_POLICY.md
       - src: docker-compose.yml
         dst: docker-compose.yml
 
@@ -120,9 +144,6 @@ changelog:
       - '^test'
 
 release:
-  github:
-    owner: vantaboard
-    name: bigquery-emulator
   draft: false
   # `prerelease: auto` flips a release to pre-release status when the
   # tag carries an SemVer pre-release identifier (e.g. v0.0.1-rc1).
@@ -141,8 +162,8 @@ release:
     > [`ROADMAP.md`](https://github.com/vantaboard/bigquery-emulator/blob/main/ROADMAP.md)
     > for the active capability-area narrative.
     >
-    > **Engine binary is linux/amd64 only.** macOS + linux/arm64
-    > archives include the gateway binary but no engine. On those
-    > platforms run the published Docker image
+    > **No macOS engine binary.** linux/amd64 + linux/arm64 archives
+    > bundle the engine; macOS archives include the gateway binary
+    > only. On macOS run the published multi-arch Docker image
     > (`docker pull ghcr.io/vantaboard/bigquery-emulator:{{ .Tag }}`) or
     > supply your own engine binary via `--engine_binary=<path>`.

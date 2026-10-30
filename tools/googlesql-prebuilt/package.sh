@@ -942,6 +942,11 @@ PY
     [ -d "$icu_lib_dir" ] \
         || die "ICU lib dir not found under bazel-bin/external (looked for */~icu/icu/lib)"
     log "  ICU archives sourced from $icu_lib_dir"
+    local icu_include_dir="${icu_lib_dir%/lib}/include/unicode"
+    [ -d "$icu_include_dir" ] \
+        || die "ICU headers not found at $icu_include_dir"
+    mkdir -p "$REPO_STAGE/include/unicode"
+    cp "$icu_include_dir"/*.h "$REPO_STAGE/include/unicode/"
     local icu_lib
     for icu_lib in libicuuc.a libicui18n.a libicudata.a; do
         [ -f "$icu_lib_dir/$icu_lib" ] \
