@@ -194,6 +194,12 @@ message AppendRowsResponse {
   // it explicitly so the in-process gRPC test can assert per-batch
   // commit counts without re-querying the table.
   int64 row_count = 4;
+
+  // The table's live schema, set when the rows had fewer cells than
+  // the table has columns. The gateway copies it to the public
+  // `AppendRowsResponse.updated_schema`, and the client rebuilds its
+  // writer from it.
+  TableSchema updated_schema = 5;
 }
 
 message GetWriteStreamRequest {

@@ -160,11 +160,12 @@ class StorageWriteService final : public v1::StorageWrite::Service {
   // separate time util.
   std::string Rfc3339Now() const;
 
-  // EnsureDefaultStream is called from AppendRows when the caller
-  // pins the `_default` stream id. If no SessionState exists yet
-  // for that name, the handler mints one against the table's live
-  // schema. Returns INVALID_ARGUMENT when the underlying table is
-  // missing or the stream name is malformed.
+  // EnsureDefaultStream is called from AppendRows and GetWriteStream
+  // when the caller pins the `_default` stream id. If no SessionState
+  // exists yet for that name, the handler mints one. Either way the
+  // stream takes the table's live schema, so columns added after the
+  // first append show up. Returns INVALID_ARGUMENT when the underlying
+  // table is missing or the stream name is malformed.
   ::grpc::Status EnsureDefaultStream(const std::string& stream_name,
                                      const backend::storage::TableId& table)
       ABSL_LOCKS_EXCLUDED(mu_);
@@ -177,7 +178,6 @@ class StorageWriteService final : public v1::StorageWrite::Service {
 
   struct StreamSessionSnapshot {
     backend::storage::TableId table;
-    backend::schema::TableSchema schema;
     std::optional<v1::WriteStream::Type> type;
   };
 

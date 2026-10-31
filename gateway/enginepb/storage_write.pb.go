@@ -343,7 +343,12 @@ type AppendRowsResponse struct {
 	// public surface does not advertise this on success; we surface
 	// it explicitly so the in-process gRPC test can assert per-batch
 	// commit counts without re-querying the table.
-	RowCount      int64 `protobuf:"varint,4,opt,name=row_count,json=rowCount,proto3" json:"row_count,omitempty"`
+	RowCount int64 `protobuf:"varint,4,opt,name=row_count,json=rowCount,proto3" json:"row_count,omitempty"`
+	// The table's live schema, set when the rows had fewer cells than
+	// the table has columns. The gateway copies it to the public
+	// `AppendRowsResponse.updated_schema`, and the client rebuilds its
+	// writer from it.
+	UpdatedSchema *TableSchema `protobuf:"bytes,5,opt,name=updated_schema,json=updatedSchema,proto3" json:"updated_schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -415,6 +420,13 @@ func (x *AppendRowsResponse) GetRowCount() int64 {
 		return x.RowCount
 	}
 	return 0
+}
+
+func (x *AppendRowsResponse) GetUpdatedSchema() *TableSchema {
+	if x != nil {
+		return x.UpdatedSchema
+	}
+	return nil
 }
 
 type isAppendRowsResponse_Response interface {
@@ -900,12 +912,13 @@ const file_storage_write_proto_rawDesc = "" +
 	"\btrace_id\x18\x06 \x01(\tR\atraceId\x1a\x86\x01\n" +
 	"\tProtoData\x12F\n" +
 	"\rwriter_schema\x18\x01 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\fwriterSchema\x121\n" +
-	"\x04rows\x18\x02 \x03(\v2\x1d.bigquery_emulator.v1.DataRowR\x04rows\"\x85\x02\n" +
+	"\x04rows\x18\x02 \x03(\v2\x1d.bigquery_emulator.v1.DataRowR\x04rows\"\xcf\x02\n" +
 	"\x12AppendRowsResponse\x12\\\n" +
 	"\rappend_result\x18\x01 \x01(\v25.bigquery_emulator.v1.AppendRowsResponse.AppendResultH\x00R\fappendResult\x12%\n" +
 	"\rerror_message\x18\x02 \x01(\tH\x00R\ferrorMessage\x12\x19\n" +
 	"\btrace_id\x18\x03 \x01(\tR\atraceId\x12\x1b\n" +
-	"\trow_count\x18\x04 \x01(\x03R\browCount\x1a&\n" +
+	"\trow_count\x18\x04 \x01(\x03R\browCount\x12H\n" +
+	"\x0eupdated_schema\x18\x05 \x01(\v2!.bigquery_emulator.v1.TableSchemaR\rupdatedSchema\x1a&\n" +
 	"\fAppendResult\x12\x16\n" +
 	"\x06offset\x18\x01 \x01(\x03R\x06offsetB\n" +
 	"\n" +
@@ -974,25 +987,26 @@ var file_storage_write_proto_depIdxs = []int32{
 	1,  // 2: bigquery_emulator.v1.CreateWriteStreamRequest.write_stream:type_name -> bigquery_emulator.v1.WriteStream
 	12, // 3: bigquery_emulator.v1.AppendRowsRequest.proto_rows:type_name -> bigquery_emulator.v1.AppendRowsRequest.ProtoData
 	13, // 4: bigquery_emulator.v1.AppendRowsResponse.append_result:type_name -> bigquery_emulator.v1.AppendRowsResponse.AppendResult
-	14, // 5: bigquery_emulator.v1.AppendRowsRequest.ProtoData.writer_schema:type_name -> bigquery_emulator.v1.TableSchema
-	15, // 6: bigquery_emulator.v1.AppendRowsRequest.ProtoData.rows:type_name -> bigquery_emulator.v1.DataRow
-	2,  // 7: bigquery_emulator.v1.StorageWrite.CreateWriteStream:input_type -> bigquery_emulator.v1.CreateWriteStreamRequest
-	3,  // 8: bigquery_emulator.v1.StorageWrite.AppendRows:input_type -> bigquery_emulator.v1.AppendRowsRequest
-	5,  // 9: bigquery_emulator.v1.StorageWrite.GetWriteStream:input_type -> bigquery_emulator.v1.GetWriteStreamRequest
-	6,  // 10: bigquery_emulator.v1.StorageWrite.FinalizeWriteStream:input_type -> bigquery_emulator.v1.FinalizeWriteStreamRequest
-	8,  // 11: bigquery_emulator.v1.StorageWrite.BatchCommitWriteStreams:input_type -> bigquery_emulator.v1.BatchCommitWriteStreamsRequest
-	10, // 12: bigquery_emulator.v1.StorageWrite.FlushRows:input_type -> bigquery_emulator.v1.FlushRowsRequest
-	1,  // 13: bigquery_emulator.v1.StorageWrite.CreateWriteStream:output_type -> bigquery_emulator.v1.WriteStream
-	4,  // 14: bigquery_emulator.v1.StorageWrite.AppendRows:output_type -> bigquery_emulator.v1.AppendRowsResponse
-	1,  // 15: bigquery_emulator.v1.StorageWrite.GetWriteStream:output_type -> bigquery_emulator.v1.WriteStream
-	7,  // 16: bigquery_emulator.v1.StorageWrite.FinalizeWriteStream:output_type -> bigquery_emulator.v1.FinalizeWriteStreamResponse
-	9,  // 17: bigquery_emulator.v1.StorageWrite.BatchCommitWriteStreams:output_type -> bigquery_emulator.v1.BatchCommitWriteStreamsResponse
-	11, // 18: bigquery_emulator.v1.StorageWrite.FlushRows:output_type -> bigquery_emulator.v1.FlushRowsResponse
-	13, // [13:19] is the sub-list for method output_type
-	7,  // [7:13] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	14, // 5: bigquery_emulator.v1.AppendRowsResponse.updated_schema:type_name -> bigquery_emulator.v1.TableSchema
+	14, // 6: bigquery_emulator.v1.AppendRowsRequest.ProtoData.writer_schema:type_name -> bigquery_emulator.v1.TableSchema
+	15, // 7: bigquery_emulator.v1.AppendRowsRequest.ProtoData.rows:type_name -> bigquery_emulator.v1.DataRow
+	2,  // 8: bigquery_emulator.v1.StorageWrite.CreateWriteStream:input_type -> bigquery_emulator.v1.CreateWriteStreamRequest
+	3,  // 9: bigquery_emulator.v1.StorageWrite.AppendRows:input_type -> bigquery_emulator.v1.AppendRowsRequest
+	5,  // 10: bigquery_emulator.v1.StorageWrite.GetWriteStream:input_type -> bigquery_emulator.v1.GetWriteStreamRequest
+	6,  // 11: bigquery_emulator.v1.StorageWrite.FinalizeWriteStream:input_type -> bigquery_emulator.v1.FinalizeWriteStreamRequest
+	8,  // 12: bigquery_emulator.v1.StorageWrite.BatchCommitWriteStreams:input_type -> bigquery_emulator.v1.BatchCommitWriteStreamsRequest
+	10, // 13: bigquery_emulator.v1.StorageWrite.FlushRows:input_type -> bigquery_emulator.v1.FlushRowsRequest
+	1,  // 14: bigquery_emulator.v1.StorageWrite.CreateWriteStream:output_type -> bigquery_emulator.v1.WriteStream
+	4,  // 15: bigquery_emulator.v1.StorageWrite.AppendRows:output_type -> bigquery_emulator.v1.AppendRowsResponse
+	1,  // 16: bigquery_emulator.v1.StorageWrite.GetWriteStream:output_type -> bigquery_emulator.v1.WriteStream
+	7,  // 17: bigquery_emulator.v1.StorageWrite.FinalizeWriteStream:output_type -> bigquery_emulator.v1.FinalizeWriteStreamResponse
+	9,  // 18: bigquery_emulator.v1.StorageWrite.BatchCommitWriteStreams:output_type -> bigquery_emulator.v1.BatchCommitWriteStreamsResponse
+	11, // 19: bigquery_emulator.v1.StorageWrite.FlushRows:output_type -> bigquery_emulator.v1.FlushRowsResponse
+	14, // [14:20] is the sub-list for method output_type
+	8,  // [8:14] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_storage_write_proto_init() }

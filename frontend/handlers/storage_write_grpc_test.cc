@@ -201,7 +201,8 @@ TEST_F(StorageWriteGrpcTest, AppendRowsShapeMismatchSurfaceOnEnvelope) {
 
   v1::AppendRowsRequest bad;
   bad.set_write_stream(stream.name());
-  bad.mutable_proto_rows()->add_rows()->add_cells()->set_string_value("0");
+  auto* bad_row = bad.mutable_proto_rows()->add_rows();
+  for (int i = 0; i < 3; ++i) bad_row->add_cells()->set_string_value("0");
   ASSERT_TRUE(stream_rw->Write(bad));
   v1::AppendRowsResponse resp_bad;
   ASSERT_TRUE(stream_rw->Read(&resp_bad));
@@ -316,6 +317,109 @@ TEST_F(StorageWriteGrpcTest, BufferedStreamFlushCommitsRows) {
     ++count;
   }
   EXPECT_EQ(count, 5u);
+}
+
+void AddNicknameColumn(backend::storage::Storage* storage) {
+  const backend::storage::TableId table{"proj-test", "ds", "t"};
+  auto schema = storage->GetSchema(table);
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  backend::schema::ColumnSchema nickname;
+  nickname.name = "nickname";
+  nickname.type = backend::schema::ColumnType::kString;
+  nickname.mode = backend::schema::ColumnMode::kNullable;
+  schema->columns.push_back(nickname);
+  ASSERT_TRUE(storage->DropTable(table).ok());
+  ASSERT_TRUE(storage->CreateTable(table, *schema).ok());
+}
+
+TEST_F(StorageWriteGrpcTest, GetWriteStreamReturnsTheDefaultStreamsLiveSchema) {
+  CreatePeopleTable();
+  v1::GetWriteStreamRequest get_req;
+  get_req.set_name("projects/proj-test/datasets/ds/tables/t/streams/_default");
+
+  ::grpc::ClientContext before_ctx;
+  v1::WriteStream before;
+  ASSERT_TRUE(stub_->GetWriteStream(&before_ctx, get_req, &before).ok());
+  EXPECT_EQ(before.schema().fields_size(), 2);
+
+  AddNicknameColumn(storage_.get());
+
+  ::grpc::ClientContext after_ctx;
+  v1::WriteStream after;
+  ASSERT_TRUE(stub_->GetWriteStream(&after_ctx, get_req, &after).ok());
+  ASSERT_EQ(after.schema().fields_size(), 3);
+  EXPECT_EQ(after.schema().fields(2).name(), "nickname");
+}
+
+TEST_F(StorageWriteGrpcTest, AppendRowsFillsColumnsAddedAfterTheWriterSchema) {
+  CreatePeopleTable();
+  const std::string default_stream =
+      "projects/proj-test/datasets/ds/tables/t/streams/_default";
+  ::grpc::ClientContext append_ctx;
+  auto stream_rw = stub_->AppendRows(&append_ctx);
+  ASSERT_NE(stream_rw, nullptr);
+
+  ASSERT_TRUE(stream_rw->Write(BuildAppendRequest(default_stream, 0, 1)));
+  v1::AppendRowsResponse before;
+  ASSERT_TRUE(stream_rw->Read(&before));
+  ASSERT_EQ(before.response_case(), v1::AppendRowsResponse::kAppendResult);
+  EXPECT_FALSE(before.has_updated_schema());
+
+  AddNicknameColumn(storage_.get());
+
+  ASSERT_TRUE(stream_rw->Write(BuildAppendRequest("", 1, 1)));
+  v1::AppendRowsResponse older;
+  ASSERT_TRUE(stream_rw->Read(&older));
+  ASSERT_EQ(older.response_case(), v1::AppendRowsResponse::kAppendResult);
+  ASSERT_EQ(older.updated_schema().fields_size(), 3);
+  EXPECT_EQ(older.updated_schema().fields(2).name(), "nickname");
+
+  v1::AppendRowsRequest current = BuildAppendRequest("", 2, 1);
+  current.mutable_proto_rows()->mutable_rows(0)->add_cells()->set_string_value(
+      "two");
+  ASSERT_TRUE(stream_rw->Write(current));
+  v1::AppendRowsResponse latest;
+  ASSERT_TRUE(stream_rw->Read(&latest));
+  ASSERT_EQ(latest.response_case(), v1::AppendRowsResponse::kAppendResult);
+  EXPECT_FALSE(latest.has_updated_schema());
+
+  ASSERT_TRUE(stream_rw->WritesDone());
+  ASSERT_TRUE(stream_rw->Finish().ok());
+
+  auto iter_or = storage_->ScanRows({"proj-test", "ds", "t"});
+  ASSERT_TRUE(iter_or.ok()) << iter_or.status();
+  std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
+  std::vector<backend::storage::Row> rows;
+  backend::storage::Row row;
+  while (true) {
+    auto has = iter->Next(&row);
+    ASSERT_TRUE(has.ok());
+    if (!*has) break;
+    rows.push_back(row);
+  }
+  ASSERT_EQ(rows.size(), 2u);
+  EXPECT_TRUE(rows[0].cells[2].is_null());
+  EXPECT_EQ(rows[1].cells[2].string_value(), "two");
+}
+
+TEST_F(StorageWriteGrpcTest, AppendRowsRejectsRowsWithoutARequiredColumn) {
+  CreatePeopleTable();
+  ::grpc::ClientContext append_ctx;
+  auto stream_rw = stub_->AppendRows(&append_ctx);
+  ASSERT_NE(stream_rw, nullptr);
+
+  v1::AppendRowsRequest req;
+  req.set_write_stream(
+      "projects/proj-test/datasets/ds/tables/t/streams/_default");
+  req.mutable_proto_rows()->add_rows();
+  ASSERT_TRUE(stream_rw->Write(req));
+  v1::AppendRowsResponse resp;
+  ASSERT_TRUE(stream_rw->Read(&resp));
+  ASSERT_EQ(resp.response_case(), v1::AppendRowsResponse::kErrorMessage);
+  EXPECT_NE(resp.error_message().find("REQUIRED column id"), std::string::npos);
+
+  ASSERT_TRUE(stream_rw->WritesDone());
+  ASSERT_TRUE(stream_rw->Finish().ok());
 }
 
 }  // namespace

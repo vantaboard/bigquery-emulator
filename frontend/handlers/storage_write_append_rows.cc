@@ -1,12 +1,15 @@
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
+#include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "frontend/handlers/storage_write.h"
 #include "frontend/handlers/storage_write_internal.h"
@@ -23,6 +26,7 @@ namespace {
 struct DecodedAppendBatch {
   bool shape_error = false;
   std::string shape_error_detail;
+  bool older_schema = false;
   std::vector<backend::storage::Row> rows{};
 };
 
@@ -34,7 +38,7 @@ DecodedAppendBatch DecodeAppendRowBatch(
   out.rows.reserve(rows_in.size());
   for (int r = 0; r < rows_in.size(); ++r) {
     const auto& src = rows_in[r];
-    if (src.cells_size() != static_cast<int>(schema.columns.size())) {
+    if (src.cells_size() > static_cast<int>(schema.columns.size())) {
       out.shape_error = true;
       out.shape_error_detail =
           absl::StrCat("AppendRows: row ",
@@ -46,10 +50,29 @@ DecodedAppendBatch DecodeAppendRowBatch(
                        " top-level column(s)");
       break;
     }
+    const auto missing_required = std::find_if(
+        schema.columns.begin() + src.cells_size(),
+        schema.columns.end(),
+        [](const backend::schema::ColumnSchema& column) {
+          return column.mode == backend::schema::ColumnMode::kRequired;
+        });
+    if (missing_required != schema.columns.end()) {
+      out.shape_error = true;
+      out.shape_error_detail =
+          absl::StrCat("AppendRows: row ",
+                       r,
+                       " has no cell for the REQUIRED column ",
+                       missing_required->name);
+      break;
+    }
     backend::storage::Row row;
-    row.cells.reserve(src.cells_size());
+    row.cells.reserve(schema.columns.size());
     for (const auto& cell : src.cells()) {
       row.cells.push_back(CellToValue(cell));
+    }
+    if (row.cells.size() < schema.columns.size()) {
+      out.older_schema = true;
+      row.cells.resize(schema.columns.size(), backend::storage::Value::Null());
     }
     out.rows.push_back(std::move(row));
   }
@@ -127,7 +150,6 @@ DecodedAppendBatch DecodeAppendRowBatch(
                      bound_stream_name));
   }
   session->table = it->second.table;
-  session->schema = it->second.schema;
   session->type = it->second.type;
   return ::grpc::Status::OK;
 }
@@ -194,7 +216,12 @@ DecodedAppendBatch DecodeAppendRowBatch(
     return session_status;
   }
 
-  DecodedAppendBatch batch = DecodeAppendRowBatch(req, session.schema);
+  absl::StatusOr<backend::schema::TableSchema> schema =
+      storage_->GetSchema(session.table);
+  if (!schema.ok()) {
+    return AbslToGrpcStatus(schema.status());
+  }
+  DecodedAppendBatch batch = DecodeAppendRowBatch(req, *schema);
   if (batch.shape_error) {
     resp.set_error_message(batch.shape_error_detail);
     return WriteAppendResponse(stream, std::move(resp));
@@ -226,6 +253,9 @@ DecodedAppendBatch DecodeAppendRowBatch(
 
   resp.mutable_append_result()->set_offset(prior_offset);
   resp.set_row_count(row_count);
+  if (batch.older_schema) {
+    backend::schema::TableSchemaToProto(*schema, resp.mutable_updated_schema());
+  }
   return WriteAppendResponse(stream, std::move(resp));
 }
 

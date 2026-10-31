@@ -194,14 +194,13 @@ std::string StorageWriteService::Rfc3339Now() const {
     return AbslToGrpcStatus(schema_or.status());
   }
   absl::MutexLock lock(&mu_);
-  if (streams_.find(stream_name) == streams_.end()) {
-    StreamState state;
-    state.table = table;
-    state.schema = *schema_or;
-    state.type = v1::WriteStream::COMMITTED;
-    state.create_time = Rfc3339Now();
-    streams_.emplace(stream_name, std::move(state));
+  auto [it, inserted] = streams_.try_emplace(stream_name);
+  if (inserted) {
+    it->second.table = table;
+    it->second.type = v1::WriteStream::COMMITTED;
+    it->second.create_time = Rfc3339Now();
   }
+  it->second.schema = *std::move(schema_or);
   return ::grpc::Status::OK;
 }
 
@@ -213,6 +212,15 @@ std::string StorageWriteService::Rfc3339Now() const {
     return ::grpc::Status(
         ::grpc::StatusCode::INTERNAL,
         "StorageWrite.GetWriteStream: request and response must be non-null");
+  }
+  backend::storage::TableId table;
+  std::string stream_id;
+  if (storage_ != nullptr &&
+      ParseStreamName(request->name(), &table, &stream_id).ok() &&
+      stream_id == "_default") {
+    if (auto s = EnsureDefaultStream(request->name(), table); !s.ok()) {
+      return s;
+    }
   }
   StreamState state;
   {
