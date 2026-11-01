@@ -19,15 +19,33 @@ func arrowSchemaFromEngine(schema *enginepb.TableSchema) *arrow.Schema {
 	if schema == nil || len(schema.GetFields()) == 0 {
 		return arrow.NewSchema(nil, nil)
 	}
-	fields := make([]arrow.Field, 0, len(schema.GetFields()))
-	for _, f := range schema.GetFields() {
-		fields = append(fields, arrow.Field{
-			Name:     f.GetName(),
-			Type:     arrowTypeForBQ(f.GetType()),
-			Nullable: strings.ToUpper(f.GetMode()) != bqModeRequired,
-		})
+	return arrow.NewSchema(arrowFields(schema.GetFields()), nil)
+}
+
+func arrowFields(fields []*enginepb.FieldSchema) []arrow.Field {
+	out := make([]arrow.Field, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, arrowField(f))
 	}
-	return arrow.NewSchema(fields, nil)
+	return out
+}
+
+func arrowField(f *enginepb.FieldSchema) arrow.Field {
+	if element, ok := arrayElement(f); ok {
+		return arrow.Field{Name: f.GetName(), Type: arrow.ListOf(arrowValueType(element))}
+	}
+	return arrow.Field{
+		Name:     f.GetName(),
+		Type:     arrowValueType(f),
+		Nullable: strings.ToUpper(f.GetMode()) != bqModeRequired,
+	}
+}
+
+func arrowValueType(f *enginepb.FieldSchema) arrow.DataType {
+	if isStruct(f) {
+		return arrow.StructOf(arrowFields(f.GetFields())...)
+	}
+	return arrowTypeForBQ(f.GetType())
 }
 
 func arrowTypeForBQ(t string) arrow.DataType {
@@ -42,9 +60,6 @@ func arrowTypeForBQ(t string) arrow.DataType {
 		return &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "UTC"}
 	case bqTypeDATETIME:
 		return &arrow.TimestampType{Unit: arrow.Microsecond}
-	case bqTypeSTRING, bqTypeJSON, bqTypeGEOGRAPHY, bqTypeDATE, bqTypeTIME,
-		bqTypeBYTES, bqTypeNUMERIC, bqTypeBIGNUMERIC, bqTypeSTRUCT, bqTypeRECORD:
-		return arrow.BinaryTypes.String
 	default:
 		return arrow.BinaryTypes.String
 	}
@@ -69,8 +84,14 @@ func rowsToArrowBatch(
 	defer b.Release()
 
 	for colIdx, field := range schema.GetFields() {
-		if appendErr := appendColumnValues(b.Field(colIdx), field.GetType(), rows, colIdx); appendErr != nil {
-			return nil, appendErr
+		for _, row := range rows {
+			var cell *enginepb.Cell
+			if colIdx < len(row.GetCells()) {
+				cell = row.GetCells()[colIdx]
+			}
+			if err := appendArrowCell(b.Field(colIdx), field, cell); err != nil {
+				return nil, fmt.Errorf("column %q: %w", field.GetName(), err)
+			}
 		}
 	}
 
@@ -87,116 +108,74 @@ func rowsToArrowBatch(
 	}, nil
 }
 
-func appendColumnValues(
-	builder array.Builder,
-	bqType string,
-	rows []*enginepb.DataRow,
-	colIdx int,
-) error {
-	switch strings.ToUpper(strings.TrimSpace(bqType)) {
-	case bqTypeINT64, bqTypeINTEGER:
-		return appendInt64Column(builder, rows, colIdx)
-	case bqTypeFLOAT64, bqTypeFLOAT:
-		return appendFloat64Column(builder, rows, colIdx)
-	case bqTypeBOOL:
-		return appendBoolColumn(builder, rows, colIdx)
-	case bqTypeTIMESTAMP:
-		return appendTimestampColumn(builder, rows, colIdx)
-	case bqTypeDATETIME:
-		return appendDatetimeColumn(builder, rows, colIdx)
+func appendArrowCell(builder array.Builder, field *enginepb.FieldSchema, cell *enginepb.Cell) error {
+	if element, ok := arrayElement(field); ok {
+		lb := builder.(*array.ListBuilder)
+		lb.Append(true)
+		for i, e := range cell.GetArray().GetElements() {
+			if e == nil || e.GetNullValue() {
+				return fmt.Errorf("array element %d is null", i)
+			}
+			if err := appendArrowValue(lb.ValueBuilder(), element, e); err != nil {
+				return fmt.Errorf("array element %d: %w", i, err)
+			}
+		}
+		return nil
+	}
+	if cell == nil || cell.GetNullValue() {
+		builder.AppendNull()
+		return nil
+	}
+	return appendArrowValue(builder, field, cell)
+}
+
+func appendArrowValue(builder array.Builder, field *enginepb.FieldSchema, cell *enginepb.Cell) error {
+	raw := cell.GetStringValue()
+	switch b := builder.(type) {
+	case *array.StructBuilder:
+		b.Append(true)
+		cells := cell.GetStructValue().GetFields()
+		for i, child := range field.GetFields() {
+			var c *enginepb.Cell
+			if i < len(cells) {
+				c = cells[i]
+			}
+			if err := appendArrowCell(b.FieldBuilder(i), child, c); err != nil {
+				return fmt.Errorf("field %q: %w", child.GetName(), err)
+			}
+		}
+	case *array.Int64Builder:
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return fmt.Errorf("INT64 parse: %w", err)
+		}
+		b.Append(v)
+	case *array.Float64Builder:
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return fmt.Errorf("FLOAT64 parse: %w", err)
+		}
+		b.Append(v)
+	case *array.BooleanBuilder:
+		v, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("BOOL parse: %w", err)
+		}
+		b.Append(v)
+	case *array.TimestampBuilder:
+		parse := timestampCellToMicros
+		if strings.ToUpper(strings.TrimSpace(field.GetType())) == bqTypeDATETIME {
+			parse = datetimeCellToMicros
+		}
+		micros, err := parse(raw)
+		if err != nil {
+			return fmt.Errorf("%s parse: %w", field.GetType(), err)
+		}
+		b.Append(arrow.Timestamp(micros))
+	case *array.StringBuilder:
+		b.Append(raw)
 	default:
-		return appendStringColumn(builder, rows, colIdx)
-	}
-}
-
-func appendInt64Column(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	ib := builder.(*array.Int64Builder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			ib.AppendNull()
-			continue
-		}
-		v, err := strconv.ParseInt(row.GetCells()[colIdx].GetStringValue(), 10, 64)
-		if err != nil {
-			return fmt.Errorf("column %d INT64 parse: %w", colIdx, err)
-		}
-		ib.Append(v)
-	}
-	return nil
-}
-
-func appendFloat64Column(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	fb := builder.(*array.Float64Builder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			fb.AppendNull()
-			continue
-		}
-		v, err := strconv.ParseFloat(row.GetCells()[colIdx].GetStringValue(), 64)
-		if err != nil {
-			return fmt.Errorf("column %d FLOAT64 parse: %w", colIdx, err)
-		}
-		fb.Append(v)
-	}
-	return nil
-}
-
-func appendBoolColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	bb := builder.(*array.BooleanBuilder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			bb.AppendNull()
-			continue
-		}
-		v, err := strconv.ParseBool(row.GetCells()[colIdx].GetStringValue())
-		if err != nil {
-			return fmt.Errorf("column %d BOOL parse: %w", colIdx, err)
-		}
-		bb.Append(v)
-	}
-	return nil
-}
-
-func appendTimestampColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	tb := builder.(*array.TimestampBuilder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			tb.AppendNull()
-			continue
-		}
-		micros, err := timestampCellToMicros(row.GetCells()[colIdx].GetStringValue())
-		if err != nil {
-			return fmt.Errorf("column %d TIMESTAMP parse: %w", colIdx, err)
-		}
-		tb.Append(arrow.Timestamp(micros))
-	}
-	return nil
-}
-
-func appendDatetimeColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	tb := builder.(*array.TimestampBuilder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			tb.AppendNull()
-			continue
-		}
-		micros, err := datetimeCellToMicros(row.GetCells()[colIdx].GetStringValue())
-		if err != nil {
-			return fmt.Errorf("column %d DATETIME parse: %w", colIdx, err)
-		}
-		tb.Append(arrow.Timestamp(micros))
-	}
-	return nil
-}
-
-func appendStringColumn(builder array.Builder, rows []*enginepb.DataRow, colIdx int) error {
-	sb := builder.(*array.StringBuilder)
-	for _, row := range rows {
-		if colIdx >= len(row.GetCells()) || row.GetCells()[colIdx].GetNullValue() {
-			sb.AppendNull()
-			continue
-		}
-		sb.Append(row.GetCells()[colIdx].GetStringValue())
+		return fmt.Errorf("unsupported Arrow builder %T", builder)
 	}
 	return nil
 }

@@ -59,7 +59,7 @@ func engineFieldToAvroField(f *enginepb.FieldSchema, parent string) (map[string]
 	}
 	path := nestedRecordName(parent, f)
 	var typ any
-	if element, ok := avroArrayElement(f); ok {
+	if element, ok := arrayElement(f); ok {
 		items, err := avroValueType(element, path)
 		if err != nil {
 			return nil, err
@@ -81,11 +81,11 @@ func engineFieldToAvroField(f *enginepb.FieldSchema, parent string) (map[string]
 	}, nil
 }
 
-// avroArrayElement returns the schema of an array field's elements. The
+// arrayElement returns the schema of an array field's elements. The
 // engine has two shapes for arrays: a REPEATED field, whose elements have
 // the field's own type, and an ARRAY field, whose element schema is its
 // only nested field.
-func avroArrayElement(f *enginepb.FieldSchema) (*enginepb.FieldSchema, bool) {
+func arrayElement(f *enginepb.FieldSchema) (*enginepb.FieldSchema, bool) {
 	switch {
 	case strings.ToUpper(f.GetMode()) == bqModeRepeated:
 		return f, true
@@ -222,7 +222,7 @@ func cellsToAvroRecord(
 }
 
 func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell, path string) (any, error) {
-	if element, ok := avroArrayElement(field); ok {
+	if element, ok := arrayElement(field); ok {
 		elements := cell.GetArray().GetElements()
 		out := make([]any, 0, len(elements))
 		for i, e := range elements {

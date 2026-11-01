@@ -80,8 +80,8 @@ const (
 )
 
 func TestRowsToAvroBatchNestedRoundTrip(t *testing.T) {
-	schema := nestedAvroSchema()
-	batch, err := rowsToAvroBatch(schema, nestedAvroRows())
+	schema := nestedTestSchema()
+	batch, err := rowsToAvroBatch(schema, nestedTestRows())
 	if err != nil {
 		t.Fatalf("rowsToAvroBatch: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestRowsToAvroBatchNestedRoundTrip(t *testing.T) {
 	}
 }
 
-func nestedAvroSchema() *enginepb.TableSchema {
+func nestedTestSchema() *enginepb.TableSchema {
 	return &enginepb.TableSchema{
 		Fields: []*enginepb.FieldSchema{
 			{Name: "id", Type: bqTypeINT64, Mode: bqModeRequired},
@@ -132,7 +132,7 @@ func nestedAvroSchema() *enginepb.TableSchema {
 	}
 }
 
-func nestedAvroRows() []*enginepb.DataRow {
+func nestedTestRows() []*enginepb.DataRow {
 	null := &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
 	return []*enginepb.DataRow{
 		{Cells: []*enginepb.Cell{
