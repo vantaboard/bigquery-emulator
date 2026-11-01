@@ -1,6 +1,7 @@
 package bqstorage
 
 import (
+	"reflect"
 	"testing"
 
 	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
@@ -69,6 +70,110 @@ func TestRowsToAvroBatchRoundTrip(t *testing.T) {
 	if decoded != 2 {
 		t.Fatalf("decoded %d rows, want 2", decoded)
 	}
+}
+
+const (
+	nestedColTags   = "tags"
+	nestedColUser   = "user"
+	nestedColEvents = "events"
+	nestedColIDs    = "ids"
+)
+
+func TestRowsToAvroBatchNestedRoundTrip(t *testing.T) {
+	schema := nestedAvroSchema()
+	batch, err := rowsToAvroBatch(schema, nestedAvroRows())
+	if err != nil {
+		t.Fatalf("rowsToAvroBatch: %v", err)
+	}
+	schemaJSON, err := avroSchemaJSONFromEngine(schema)
+	if err != nil {
+		t.Fatalf("avroSchemaJSONFromEngine: %v", err)
+	}
+	codec, err := goavro.NewCodec(schemaJSON)
+	if err != nil {
+		t.Fatalf("NewCodec: %v", err)
+	}
+
+	want := nestedAvroWant()
+	remaining := batch.GetSerializedBinaryRows()
+	for i, w := range want {
+		native, buf, decErr := codec.NativeFromBinary(remaining)
+		if decErr != nil {
+			t.Fatalf("NativeFromBinary at row %d: %v", i, decErr)
+		}
+		if !reflect.DeepEqual(native, w) {
+			t.Errorf("row %d = %#v, want %#v", i, native, w)
+		}
+		remaining = buf
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("%d bytes left after %d rows", len(remaining), len(want))
+	}
+}
+
+func nestedAvroSchema() *enginepb.TableSchema {
+	return &enginepb.TableSchema{
+		Fields: []*enginepb.FieldSchema{
+			{Name: "id", Type: bqTypeINT64, Mode: bqModeRequired},
+			{Name: nestedColTags, Type: bqTypeSTRING, Mode: bqModeRepeated},
+			{Name: nestedColUser, Type: bqTypeSTRUCT, Mode: bqModeNullable, Fields: []*enginepb.FieldSchema{
+				{Name: "login", Type: bqTypeSTRING, Mode: bqModeNullable},
+				{Name: "address", Type: bqTypeRECORD, Mode: bqModeNullable, Fields: []*enginepb.FieldSchema{
+					{Name: "city", Type: bqTypeSTRING, Mode: bqModeNullable},
+				}},
+			}},
+			{Name: nestedColEvents, Type: bqTypeRECORD, Mode: bqModeRepeated, Fields: []*enginepb.FieldSchema{
+				{Name: "kind", Type: bqTypeSTRING, Mode: bqModeNullable},
+			}},
+			{Name: nestedColIDs, Type: bqTypeARRAY, Mode: bqModeNullable, Fields: []*enginepb.FieldSchema{
+				{Type: bqTypeINT64},
+			}},
+		},
+	}
+}
+
+func nestedAvroRows() []*enginepb.DataRow {
+	null := &enginepb.Cell{Value: &enginepb.Cell_NullValue{NullValue: true}}
+	return []*enginepb.DataRow{
+		{Cells: []*enginepb.Cell{
+			stringCell("1"),
+			arrayCell(stringCell("a"), stringCell("b")),
+			structCell(stringCell("ada"), structCell(stringCell("Paris"))),
+			arrayCell(structCell(stringCell("view"))),
+			arrayCell(stringCell("3"), stringCell("5")),
+		}},
+		{Cells: []*enginepb.Cell{stringCell("2"), null, null, null, null}},
+	}
+}
+
+func nestedAvroWant() []map[string]any {
+	return []map[string]any{
+		{
+			"id":          int64(1),
+			nestedColTags: []any{"a", "b"},
+			nestedColUser: map[string]any{"root__user": map[string]any{
+				"login": map[string]any{avroTypeString: "ada"},
+				"address": map[string]any{"root__user__address": map[string]any{
+					"city": map[string]any{avroTypeString: "Paris"},
+				}},
+			}},
+			nestedColEvents: []any{map[string]any{"kind": map[string]any{avroTypeString: "view"}}},
+			nestedColIDs:    []any{int64(3), int64(5)},
+		},
+		{"id": int64(2), nestedColTags: []any{}, nestedColUser: nil, nestedColEvents: []any{}, nestedColIDs: []any{}},
+	}
+}
+
+func stringCell(s string) *enginepb.Cell {
+	return &enginepb.Cell{Value: &enginepb.Cell_StringValue{StringValue: s}}
+}
+
+func arrayCell(cells ...*enginepb.Cell) *enginepb.Cell {
+	return &enginepb.Cell{Value: &enginepb.Cell_Array{Array: &enginepb.Array{Elements: cells}}}
+}
+
+func structCell(cells ...*enginepb.Cell) *enginepb.Cell {
+	return &enginepb.Cell{Value: &enginepb.Cell_StructValue{StructValue: &enginepb.Struct{Fields: cells}}}
 }
 
 func TestPublicReadSessionFromEngineAvro(t *testing.T) {

@@ -24,6 +24,7 @@ const (
 	bqTypeGEOGRAPHY  = "GEOGRAPHY"
 	bqTypeSTRUCT     = "STRUCT"
 	bqTypeRECORD     = "RECORD"
+	bqTypeARRAY      = "ARRAY"
 )
 
 // Avro schema map keys and primitive type names.
@@ -35,4 +36,5 @@ const (
 	avroTypeBytes      = "bytes"
 	avroTypeString     = "string"
 	avroTypeRecord     = "record"
+	avroTypeArray      = "array"
 )
