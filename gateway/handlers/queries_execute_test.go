@@ -445,3 +445,39 @@ func TestQueryRunExecuteUnimplementedFromEngine(t *testing.T) {
 			rec.Code, http.StatusNotImplemented, rec.Body.String())
 	}
 }
+
+func TestQueryRunMaxResultsReturnsTheFirstPage(t *testing.T) {
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return twoRowExecuteStream(), nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	body := `{"query":"SELECT 1","useLegacySql":false,"maxResults":1}`
+
+	rec := runQueryWithDeps(t, testProjectID, deps, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var first bqtypes.QueryResponse
+	if err := json.NewDecoder(rec.Body).Decode(&first); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if len(first.Rows) != 1 || first.Rows[0].F[0].V != "1" {
+		t.Fatalf("first page rows = %+v, want only id 1", first.Rows)
+	}
+	if first.PageToken == "" {
+		t.Fatal("first page has no pageToken")
+	}
+	if first.TotalRows != "2" {
+		t.Errorf("totalRows = %q, want %q", first.TotalRows, "2")
+	}
+
+	next := runQueryAndGetResults(t, deps, body, "?pageToken="+first.PageToken)
+	if len(next.Rows) != 1 || next.Rows[0].F[0].V != "2" {
+		t.Fatalf("second page rows = %+v, want only id 2", next.Rows)
+	}
+	if next.PageToken != "" {
+		t.Errorf("second page pageToken = %q, want none", next.PageToken)
+	}
+}

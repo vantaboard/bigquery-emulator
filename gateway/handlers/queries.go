@@ -306,6 +306,7 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType,
 		visibleRoute, visiblePhases, ddlTarget, sessionInfo)
+	out.Rows, out.PageToken = firstQueryPage(out.Rows, req.MaxResults)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -550,13 +551,11 @@ const getQueryResultsKind = "bigquery#getQueryResultsResponse"
 // Documented query parameters and current behavior:
 //
 //   - `startIndex` (uint): respected; rows < startIndex are skipped.
-//   - `maxResults` (uint): respected; rows beyond the slice are
-//     truncated. The result is still flagged as complete (no
-//     pageToken is emitted) -- the BigQuery contract permits
-//     returning fewer rows than requested.
-//   - `pageToken` (string): the emulator never mints one, so a
-//     non-empty value cannot be honored. We respond with an empty
-//     page and `jobComplete=true` to keep client polling loops happy.
+//   - `maxResults` (uint): respected; when rows remain after the
+//     page, the response carries a `pageToken` for the next one.
+//   - `pageToken` (string): the row offset minted by `jobs.query` or
+//     an earlier `getQueryResults` page. A token that is not an
+//     offset gets an empty page and `jobComplete=true`.
 //   - `location` (string): when both the stored job's location and
 //     the query parameter are non-empty and disagree, returns 404
 //     notFound -- the same shape BigQuery uses when callers route a
