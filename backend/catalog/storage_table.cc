@@ -231,21 +231,19 @@ absl::StatusOr<::googlesql::Value> ConvertCell(
     }
     const ::googlesql::ArrayType* at = type->AsArray();
     const ::googlesql::Type* element_type = at->element_type();
-    // For an ARRAY column the schema's `fields` list carries either
-    // (a) one entry describing the element schema (legacy ARRAY-as-
-    // container case) OR (b) is empty when the cardinality was
-    // signalled via `mode = REPEATED` on the column itself. The
-    // analyzer Type already knows the element type either way; we
-    // build a synthetic element ColumnSchema with the column's
-    // top-level metadata so error messages still point at the
-    // offending field.
+    // An ARRAY column is either (a) `mode = REPEATED`, whose elements
+    // have the column's own type and `fields` (the STRUCT fields of a
+    // REPEATED RECORD), or (b) the legacy ARRAY-as-container type,
+    // whose `fields` list carries one entry describing the element
+    // schema. The analyzer Type already knows the element type either
+    // way; the element ColumnSchema keeps the column's top-level
+    // metadata so error messages still point at the offending field.
     schema::ColumnSchema element_schema;
-    if (!column.fields.empty()) {
-      element_schema = column.fields.front();
-    } else {
+    if (column.mode == schema::ColumnMode::kRepeated || column.fields.empty()) {
       element_schema = column;
       element_schema.mode = schema::ColumnMode::kNullable;
-      element_schema.fields.clear();
+    } else {
+      element_schema = column.fields.front();
     }
     const std::vector<storage::Value>& elements = value.array_value();
     std::vector<::googlesql::Value> converted;
