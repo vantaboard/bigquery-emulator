@@ -433,6 +433,70 @@ AS
   EXPECT_EQ(row.cells[0].int64_value(), 123456);
 }
 
+TEST_F(LocalCoordinatorEngineTest,
+       ExecuteQueryReadsRepeatedFieldsInsideStructs) {
+  auto column = [](std::string name,
+                   schema::ColumnType type,
+                   schema::ColumnMode mode,
+                   std::vector<schema::ColumnSchema> fields) {
+    schema::ColumnSchema out;
+    out.name = std::move(name);
+    out.type = type;
+    out.mode = mode;
+    out.fields = std::move(fields);
+    return out;
+  };
+  constexpr auto kNullable = schema::ColumnMode::kNullable;
+  constexpr auto kRepeated = schema::ColumnMode::kRepeated;
+  schema::TableSchema bq_schema;
+  bq_schema.columns = {
+      column("id", schema::ColumnType::kInt64, kNullable, {}),
+      column("person",
+             schema::ColumnType::kStruct,
+             kNullable,
+             {column("name", schema::ColumnType::kString, kNullable, {}),
+              column("labels", schema::ColumnType::kString, kRepeated, {})}),
+      column("events",
+             schema::ColumnType::kStruct,
+             kRepeated,
+             {column("kind", schema::ColumnType::kString, kNullable, {})}),
+  };
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "nested"}, bq_schema).ok());
+  storage::Row r;
+  r.cells = {
+      storage::Value::Int64(1),
+      storage::Value::Struct(
+          {storage::Value::String("ada"),
+           storage::Value::Array(
+               {storage::Value::String("x"), storage::Value::String("y")})}),
+      storage::Value::Array(
+          {storage::Value::Struct({storage::Value::String("view")})}),
+  };
+  ASSERT_TRUE(
+      storage_
+          ->AppendRows({"proj-test", "ds", "nested"}, absl::MakeConstSpan({r}))
+          .ok());
+
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT APPROX_COUNT_DISTINCT(id) AS n, "
+                  "ANY_VALUE(person.labels[OFFSET(1)]) AS label, "
+                  "ANY_VALUE(events[OFFSET(0)].kind) AS kind "
+                  "FROM ds.nested"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 3u);
+  EXPECT_EQ(row.cells[0].int64_value(), 1);
+  EXPECT_EQ(row.cells[1].string_value(), "y");
+  EXPECT_EQ(row.cells[2].string_value(), "view");
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

@@ -141,6 +141,8 @@ absl::Status SnapshotTempTableToParquet(absl::string_view tag,
                                         const std::string& tmp_path,
                                         const std::string& parquet_path);
 
+schema::ColumnSchema ListElementSchema(const schema::ColumnSchema& column);
+
 // Parses DuckDB's VARCHAR rendering of a LIST (`[a, b]`) into
 // `Value::Array` using `element` as the per-element schema.
 absl::StatusOr<Value> ParseDuckDBListVarchar(
