@@ -24,18 +24,9 @@ func serializeAvroSchema(schema *enginepb.TableSchema) (*storagepb.AvroSchema, e
 }
 
 func avroSchemaJSONFromEngine(schema *enginepb.TableSchema) (string, error) {
-	fields := make([]map[string]any, 0, len(schema.GetFields()))
-	for _, f := range schema.GetFields() {
-		avroField, err := engineFieldToAvroField(f)
-		if err != nil {
-			return "", err
-		}
-		fields = append(fields, avroField)
-	}
-	root := map[string]any{
-		avroKeyType: avroTypeRecord,
-		avroKeyName: avroRecordName,
-		"fields":    fields,
+	root, err := avroRecord(avroRecordName, schema.GetFields())
+	if err != nil {
+		return "", err
 	}
 	b, err := json.Marshal(root)
 	if err != nil {
@@ -44,18 +35,89 @@ func avroSchemaJSONFromEngine(schema *enginepb.TableSchema) (string, error) {
 	return string(b), nil
 }
 
-func engineFieldToAvroField(f *enginepb.FieldSchema) (map[string]any, error) {
+// avroRecord returns an Avro record with one field per schema field. Avro
+// needs unique record names, so a nested record is named after its path.
+func avroRecord(name string, fields []*enginepb.FieldSchema) (map[string]any, error) {
+	avroFields := make([]map[string]any, 0, len(fields))
+	for _, f := range fields {
+		avroField, err := engineFieldToAvroField(f, name)
+		if err != nil {
+			return nil, err
+		}
+		avroFields = append(avroFields, avroField)
+	}
+	return map[string]any{
+		avroKeyType: avroTypeRecord,
+		avroKeyName: name,
+		"fields":    avroFields,
+	}, nil
+}
+
+func engineFieldToAvroField(f *enginepb.FieldSchema, parent string) (map[string]any, error) {
 	if f == nil {
 		return nil, errors.New("nil field schema")
 	}
-	typ := bqTypeToAvroType(f.GetType())
-	if strings.ToUpper(f.GetMode()) != bqModeRequired {
-		typ = []any{"null", typ}
+	path := nestedRecordName(parent, f)
+	var typ any
+	if element, ok := arrayElement(f); ok {
+		items, err := avroValueType(element, path)
+		if err != nil {
+			return nil, err
+		}
+		typ = map[string]any{avroKeyType: avroTypeArray, "items": items}
+	} else {
+		valueType, err := avroValueType(f, path)
+		if err != nil {
+			return nil, err
+		}
+		typ = valueType
+		if strings.ToUpper(f.GetMode()) != bqModeRequired {
+			typ = []any{"null", typ}
+		}
 	}
 	return map[string]any{
 		avroKeyName: f.GetName(),
 		avroKeyType: typ,
 	}, nil
+}
+
+// arrayElement returns the schema of an array field's elements. The
+// engine has two shapes for arrays: a REPEATED field, whose elements have
+// the field's own type, and an ARRAY field, whose element schema is its
+// only nested field.
+func arrayElement(f *enginepb.FieldSchema) (*enginepb.FieldSchema, bool) {
+	switch {
+	case strings.ToUpper(f.GetMode()) == bqModeRepeated:
+		return f, true
+	case strings.ToUpper(strings.TrimSpace(f.GetType())) == bqTypeARRAY:
+		if len(f.GetFields()) == 0 {
+			return &enginepb.FieldSchema{Name: f.GetName(), Type: bqTypeSTRING}, true
+		}
+		return f.GetFields()[0], true
+	default:
+		return nil, false
+	}
+}
+
+// avroValueType returns the Avro type of one non-null value of the field.
+func avroValueType(f *enginepb.FieldSchema, path string) (any, error) {
+	if isStruct(f) {
+		return avroRecord(path, f.GetFields())
+	}
+	return bqTypeToAvroType(f.GetType()), nil
+}
+
+func nestedRecordName(parent string, f *enginepb.FieldSchema) string {
+	return parent + "__" + f.GetName()
+}
+
+func isStruct(f *enginepb.FieldSchema) bool {
+	switch strings.ToUpper(strings.TrimSpace(f.GetType())) {
+	case bqTypeSTRUCT, bqTypeRECORD:
+		return true
+	default:
+		return false
+	}
 }
 
 func bqTypeToAvroType(t string) any {
@@ -96,9 +158,6 @@ func bqTypeToAvroType(t string) any {
 		return map[string]any{avroKeyType: avroTypeString, "sqlType": bqTypeGEOGRAPHY}
 	case bqTypeJSON:
 		return map[string]any{avroKeyType: avroTypeString, "sqlType": bqTypeJSON}
-	case bqTypeSTRUCT, bqTypeRECORD:
-		// Nested structs are lowered to string cells in the engine shim today.
-		return avroTypeString
 	default:
 		return avroTypeString
 	}
@@ -139,13 +198,21 @@ func engineRowToAvroNative(
 	schema *enginepb.TableSchema,
 	row *enginepb.DataRow,
 ) (map[string]any, error) {
-	out := make(map[string]any, len(schema.GetFields()))
-	for colIdx, field := range schema.GetFields() {
+	return cellsToAvroRecord(schema.GetFields(), row.GetCells(), avroRecordName)
+}
+
+func cellsToAvroRecord(
+	fields []*enginepb.FieldSchema,
+	cells []*enginepb.Cell,
+	path string,
+) (map[string]any, error) {
+	out := make(map[string]any, len(fields))
+	for colIdx, field := range fields {
 		var cell *enginepb.Cell
-		if colIdx < len(row.GetCells()) {
-			cell = row.GetCells()[colIdx]
+		if colIdx < len(cells) {
+			cell = cells[colIdx]
 		}
-		val, err := cellToAvroNative(field, cell)
+		val, err := cellToAvroNative(field, cell, nestedRecordName(path, field))
 		if err != nil {
 			return nil, fmt.Errorf("column %q: %w", field.GetName(), err)
 		}
@@ -154,7 +221,23 @@ func engineRowToAvroNative(
 	return out, nil
 }
 
-func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell) (any, error) {
+func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell, path string) (any, error) {
+	if element, ok := arrayElement(field); ok {
+		elements := cell.GetArray().GetElements()
+		out := make([]any, 0, len(elements))
+		for i, e := range elements {
+			if e == nil || e.GetNullValue() {
+				return nil, fmt.Errorf("array element %d is null", i)
+			}
+			val, err := cellToAvroValue(element, e, path)
+			if err != nil {
+				return nil, fmt.Errorf("array element %d: %w", i, err)
+			}
+			out = append(out, val)
+		}
+		return out, nil
+	}
+
 	nullable := strings.ToUpper(field.GetMode()) != bqModeRequired
 	nullCell := cell == nil || cell.GetNullValue()
 	if nullCell {
@@ -162,6 +245,24 @@ func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell) (any, er
 			return nil, nil
 		}
 		return nil, errors.New("required column is null")
+	}
+
+	val, err := cellToAvroValue(field, cell, path)
+	if err != nil {
+		return nil, err
+	}
+	if !nullable {
+		return val, nil
+	}
+	if isStruct(field) {
+		return map[string]any{path: val}, nil
+	}
+	return unionNative(field.GetType(), val), nil
+}
+
+func cellToAvroValue(field *enginepb.FieldSchema, cell *enginepb.Cell, path string) (any, error) {
+	if isStruct(field) {
+		return cellsToAvroRecord(field.GetFields(), cell.GetStructValue().GetFields(), path)
 	}
 
 	raw := strings.TrimSpace(cell.GetStringValue())
@@ -191,9 +292,6 @@ func cellToAvroNative(field *enginepb.FieldSchema, cell *enginepb.Cell) (any, er
 	}
 	if err != nil {
 		return nil, err
-	}
-	if nullable {
-		return unionNative(typ, val), nil
 	}
 	return val, nil
 }
