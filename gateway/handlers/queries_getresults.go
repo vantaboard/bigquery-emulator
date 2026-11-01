@@ -109,6 +109,13 @@ func paginateResults(allRows []bqtypes.Row, q url.Values) ([]bqtypes.Row, string
 	return allRows[start:end], nextToken
 }
 
+func firstQueryPage(rows []bqtypes.Row, maxResults uint32) ([]bqtypes.Row, string) {
+	if maxResults == 0 || len(rows) <= int(maxResults) {
+		return rows, ""
+	}
+	return rows[:maxResults], strconv.FormatUint(uint64(maxResults), 10)
+}
+
 // parseUintQuery returns the named query parameter as a uint64,
 // falling back to defaultVal when the value is missing or unparsable.
 // Pulled out so the pagination helper stops nesting if-inside-if.
