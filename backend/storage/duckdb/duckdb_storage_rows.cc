@@ -38,9 +38,8 @@ absl::StatusOr<Value> ReadRepeatedCell(::duckdb_result* result,
   auto* str = ::duckdb_value_varchar(result, col, row);
   const std::string text = str == nullptr ? std::string("") : str;
   if (str != nullptr) ::duckdb_free(str);
-  schema::ColumnSchema element = column;
-  element.mode = schema::ColumnMode::kNullable;
-  auto parsed = internal::ParseDuckDBListVarchar(text, element);
+  auto parsed =
+      internal::ParseDuckDBListVarchar(text, ListElementSchema(column));
   if (!parsed.ok()) {
     return absl::InternalError(
         absl::StrCat("ReadCell: failed to decode REPEATED column `",
@@ -127,15 +126,13 @@ absl::StatusOr<Value> ReadCell(::duckdb_result* result,
                                idx_t col,
                                idx_t row,
                                const schema::ColumnSchema& column) {
-  if (column.mode == schema::ColumnMode::kRepeated) {
+  if (column.mode == schema::ColumnMode::kRepeated ||
+      column.type == schema::ColumnType::kArray) {
     return ReadRepeatedCell(result, col, row, column);
   }
   if (::duckdb_value_is_null(result, col, row)) return Value::Null();
   if (column.type == schema::ColumnType::kStruct) {
     return ReadStructCell(result, col, row, column);
-  }
-  if (column.type == schema::ColumnType::kArray) {
-    return ReadVarcharCell(result, col, row);
   }
   return ReadScalarCell(result, col, row, column);
 }
