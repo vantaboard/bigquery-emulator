@@ -61,7 +61,7 @@ absl::Status AppendRowsForTableKind(InfoSchemaViewKind kind,
       return absl::OkStatus();
     case InfoSchemaViewKind::kColumns: {
       absl::StatusOr<schema::TableSchema> table_schema =
-          storage->GetSchema(table);
+          schema::VisibleSchema(storage->GetSchema(table));
       if (!table_schema.ok()) return table_schema.status();
       for (size_t i = 0; i < table_schema->columns.size(); ++i) {
         const ColumnSchema& column = table_schema->columns[i];
@@ -221,7 +221,7 @@ absl::Status InfoSchemaTable::AppendTableRows(
   for (const storage::TableId& table : *tables) {
     if (kind_ == InfoSchemaViewKind::kColumnFieldPaths) {
       absl::StatusOr<schema::TableSchema> table_schema =
-          storage_->GetSchema(table);
+          schema::VisibleSchema(storage_->GetSchema(table));
       if (!table_schema.ok()) return table_schema.status();
       for (const ColumnSchema& column : table_schema->columns) {
         AppendFieldPathRows(table, column, column.name, column.name, rows);

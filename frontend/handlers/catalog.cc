@@ -340,7 +340,7 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return v;
   }
   const auto id = TableIdFromProto(request->table());
-  auto schema_or = storage_->GetSchema(id);
+  auto schema_or = backend::schema::VisibleSchema(storage_->GetSchema(id));
   if (schema_or.ok()) {
     backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
     if (absl::StatusOr<backend::storage::TableResourceInfo> info_or =
@@ -415,7 +415,7 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
   }
   const auto id = TableIdFromProto(request->table());
   absl::StatusOr<backend::schema::TableSchema> schema_or =
-      storage_->GetSchema(id);
+      backend::schema::VisibleSchema(storage_->GetSchema(id));
   if (!schema_or.ok()) {
     return AbslToGrpcStatus(schema_or.status());
   }
@@ -448,6 +448,12 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
     return AbslToGrpcStatus(iter_or.status());
   }
   std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
+  absl::StatusOr<backend::schema::TableSchema> schema_or =
+      storage_->GetSchema(id);
+  const int hidden =
+      schema_or.ok() ? backend::schema::PartitionTimeIndex(
+                           backend::catalog::StripMeasureColumns(*schema_or))
+                     : -1;
 
   const int64_t start_index =
       request->start_index() > 0 ? request->start_index() : 0;
@@ -465,8 +471,9 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
     if (!*next_or) break;
     if (row_index >= start_index && (unlimited || emitted < max_results)) {
       auto* proto_row = response->add_rows();
-      for (const auto& cell : row.cells) {
-        ValueToCell(cell, proto_row->add_cells());
+      for (size_t c = 0; c < row.cells.size(); ++c) {
+        if (static_cast<int>(c) == hidden) continue;
+        ValueToCell(row.cells[c], proto_row->add_cells());
       }
       ++emitted;
     }

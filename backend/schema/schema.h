@@ -80,6 +80,19 @@ struct TableSchema {
   std::string ingestion_partition_type{};
 };
 
+// Stored column that holds the ingestion time of each row of an
+// ingestion-time partitioned table. BigQuery reserves the name, so a
+// column with it is always this one. Storage adds it to the table
+// schema; user-facing surfaces remove it with `VisibleSchema`.
+inline constexpr absl::string_view kPartitionTimeColumn = "_PARTITIONTIME";
+
+// Index of `kPartitionTimeColumn` in `schema`, or -1 when absent.
+int PartitionTimeIndex(const TableSchema& schema);
+
+// `schema` without `kPartitionTimeColumn`.
+TableSchema VisibleSchema(TableSchema schema);
+absl::StatusOr<TableSchema> VisibleSchema(absl::StatusOr<TableSchema> schema);
+
 // ---------------------------------------------------------------------------
 // Type-name conversions
 //

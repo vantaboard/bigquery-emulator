@@ -123,7 +123,7 @@ namespace {
   }
 
   absl::StatusOr<backend::schema::TableSchema> live_schema_or =
-      storage_->GetSchema(table);
+      backend::schema::VisibleSchema(storage_->GetSchema(table));
   if (!live_schema_or.ok()) {
     return AbslToGrpcStatus(live_schema_or.status());
   }

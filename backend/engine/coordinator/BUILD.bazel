@@ -316,6 +316,7 @@ cc_test(
     srcs = [
         "local_coordinator_engine_core_test.cc",
         "local_coordinator_engine_measure_keys_test.cc",
+        "local_coordinator_engine_partition_test.cc",
         "local_coordinator_engine_semantic_test.cc",
         "local_coordinator_engine_test_fixture.h",
     ],

@@ -242,7 +242,7 @@ absl::StatusOr<std::int64_t> StorageReadService::CountTableRows(
   }
 
   absl::StatusOr<backend::schema::TableSchema> schema_or =
-      storage_->GetSchema(table_id);
+      backend::schema::VisibleSchema(storage_->GetSchema(table_id));
   if (!schema_or.ok()) {
     return AbslToGrpcStatus(schema_or.status());
   }

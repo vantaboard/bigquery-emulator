@@ -334,6 +334,19 @@ class StorageEvaluatorTableIterator
   absl::Status status_{};
 };
 
+std::vector<const ::googlesql::Column*> MakeColumns(
+    absl::string_view table_name,
+    absl::Span<const ::googlesql::SimpleTable::NameAndType> columns) {
+  std::vector<const ::googlesql::Column*> out;
+  out.reserve(columns.size());
+  for (const auto& [column_name, type] : columns) {
+    const bool pseudo = column_name == schema::kPartitionTimeColumn;
+    out.push_back(new ::googlesql::SimpleColumn(
+        table_name, column_name, type, pseudo, /*is_writable_column=*/!pseudo));
+  }
+  return out;
+}
+
 }  // namespace
 
 absl::StatusOr<::googlesql::Value> StorageValueToGoogleSqlValue(
@@ -356,7 +369,8 @@ StorageTable::StorageTable(absl::string_view name,
                            schema::TableSchema bq_schema,
                            storage::TableId table_id,
                            const storage::Storage* storage)
-    : ::googlesql::SimpleTable(name, columns),
+    : ::googlesql::SimpleTable(
+          name, MakeColumns(name, columns), /*take_ownership=*/true),
       bq_schema_(std::move(bq_schema)),
       table_id_(std::move(table_id)),
       storage_(storage) {

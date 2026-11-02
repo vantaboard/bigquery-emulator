@@ -147,7 +147,8 @@ absl::Status PopulateDatasetTables(
                            table.table_id,
                            default_dataset_id);
 
-    absl::StatusOr<schema::TableSchema> schema_or = storage->GetSchema(table);
+    absl::StatusOr<schema::TableSchema> schema_or =
+        schema::VisibleSchema(storage->GetSchema(table));
     if (!schema_or.ok()) {
       continue;
     }

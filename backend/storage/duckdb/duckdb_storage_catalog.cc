@@ -185,7 +185,15 @@ absl::StatusOr<std::vector<DatasetId>> DuckDBStorage::ListDatasets(
 // ---------------------------------------------------------------------------
 
 absl::Status DuckDBStorage::CreateTable(const TableId& id,
-                                        const schema::TableSchema& schema) {
+                                        const schema::TableSchema& requested) {
+  schema::TableSchema schema = requested;
+  if (!schema.ingestion_partition_type.empty() &&
+      schema::PartitionTimeIndex(schema) < 0) {
+    schema::ColumnSchema partition_time;
+    partition_time.name = std::string(schema::kPartitionTimeColumn);
+    partition_time.type = schema::ColumnType::kTimestamp;
+    schema.columns.push_back(std::move(partition_time));
+  }
   if (id.table_id.empty()) {
     return absl::InvalidArgumentError(
         "CreateTable: table_id must be non-empty");

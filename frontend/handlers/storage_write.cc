@@ -160,7 +160,7 @@ std::string StorageWriteService::Rfc3339Now() const {
   // Validate the table exists by fetching its schema. NOT_FOUND
   // surfaces as gRPC NOT_FOUND -> BigQuery REST 404 envelope.
   absl::StatusOr<backend::schema::TableSchema> schema_or =
-      storage_->GetSchema(table_id);
+      backend::schema::VisibleSchema(storage_->GetSchema(table_id));
   if (!schema_or.ok()) {
     return AbslToGrpcStatus(schema_or.status());
   }
@@ -189,7 +189,7 @@ std::string StorageWriteService::Rfc3339Now() const {
 ::grpc::Status StorageWriteService::EnsureDefaultStream(
     const std::string& stream_name, const backend::storage::TableId& table) {
   absl::StatusOr<backend::schema::TableSchema> schema_or =
-      storage_->GetSchema(table);
+      backend::schema::VisibleSchema(storage_->GetSchema(table));
   if (!schema_or.ok()) {
     return AbslToGrpcStatus(schema_or.status());
   }

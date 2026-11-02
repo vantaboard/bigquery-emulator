@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -12,6 +13,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/civil_time.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
@@ -28,6 +30,38 @@ namespace storage {
 namespace duckdb {
 
 namespace fs = std::filesystem;
+
+namespace {
+
+absl::Time TruncateToPartition(absl::Time t, absl::string_view type) {
+  const absl::TimeZone utc = absl::UTCTimeZone();
+  const absl::CivilSecond second = absl::ToCivilSecond(t, utc);
+  if (type == "HOUR") return absl::FromCivil(absl::CivilHour(second), utc);
+  if (type == "MONTH") return absl::FromCivil(absl::CivilMonth(second), utc);
+  if (type == "YEAR") return absl::FromCivil(absl::CivilYear(second), utc);
+  return absl::FromCivil(absl::CivilDay(second), utc);
+}
+
+std::vector<Row> StampPartitionTime(absl::Span<const Row> rows,
+                                    size_t index,
+                                    size_t ncols,
+                                    absl::string_view type) {
+  const Value stamp =
+      Value::String(absl::FormatTime("%Y-%m-%d %H:%M:%S+00",
+                                     TruncateToPartition(absl::Now(), type),
+                                     absl::UTCTimeZone()));
+  std::vector<Row> out(rows.begin(), rows.end());
+  for (Row& row : out) {
+    if (row.cells.size() + 1 == ncols) {
+      row.cells.insert(row.cells.begin() + index, stamp);
+    } else if (index < row.cells.size() && row.cells[index].is_null()) {
+      row.cells[index] = stamp;
+    }
+  }
+  return out;
+}
+
+}  // namespace
 
 namespace internal {
 
@@ -157,6 +191,14 @@ absl::Status DuckDBStorage::AppendRows(const TableId& id,
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
   const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
+  std::vector<Row> stamped;
+  if (const int hidden = schema::PartitionTimeIndex(physical); hidden >= 0) {
+    stamped = StampPartitionTime(rows,
+                                 static_cast<size_t>(hidden),
+                                 physical.columns.size(),
+                                 schema.ingestion_partition_type);
+    rows = stamped;
+  }
   auto valid = internal::ValidateRowsShape(
       "AppendRows", id, rows, physical.columns.size());
   if (!valid.ok()) return valid;
@@ -237,6 +279,14 @@ absl::Status DuckDBStorage::OverwriteRows(const TableId& id,
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
   const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
+  std::vector<Row> stamped;
+  if (const int hidden = schema::PartitionTimeIndex(physical); hidden >= 0) {
+    stamped = StampPartitionTime(rows,
+                                 static_cast<size_t>(hidden),
+                                 physical.columns.size(),
+                                 schema.ingestion_partition_type);
+    rows = stamped;
+  }
   auto valid = internal::ValidateRowsShape(
       "OverwriteRows", id, rows, physical.columns.size());
   if (!valid.ok()) return valid;

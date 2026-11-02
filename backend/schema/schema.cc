@@ -185,6 +185,26 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out) {
   out->set_ingestion_partition_type(schema.ingestion_partition_type);
 }
 
+int PartitionTimeIndex(const TableSchema& schema) {
+  for (size_t i = 0; i < schema.columns.size(); ++i) {
+    if (schema.columns[i].name == kPartitionTimeColumn) {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+TableSchema VisibleSchema(TableSchema schema) {
+  const int hidden = PartitionTimeIndex(schema);
+  if (hidden >= 0) schema.columns.erase(schema.columns.begin() + hidden);
+  return schema;
+}
+
+absl::StatusOr<TableSchema> VisibleSchema(absl::StatusOr<TableSchema> schema) {
+  if (!schema.ok()) return schema;
+  return VisibleSchema(*std::move(schema));
+}
+
 absl::string_view ToDuckDBType(ColumnType type) {
   switch (type) {
     case ColumnType::kInt64:
