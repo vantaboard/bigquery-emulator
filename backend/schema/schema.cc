@@ -158,6 +158,7 @@ absl::StatusOr<TableSchema> TableSchemaFromProto(const v1::TableSchema& proto) {
     if (!column.ok()) return column.status();
     schema.columns.push_back(std::move(*column));
   }
+  schema.ingestion_partition_type = proto.ingestion_partition_type();
   return schema;
 }
 
@@ -181,6 +182,7 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out) {
   for (const auto& column : schema.columns) {
     ColumnSchemaToProto(column, out->add_fields());
   }
+  out->set_ingestion_partition_type(schema.ingestion_partition_type);
 }
 
 absl::string_view ToDuckDBType(ColumnType type) {

@@ -1,6 +1,7 @@
 package load
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -211,7 +212,12 @@ func applyWriteDisposition(ctx context.Context, catalog enginepb.CatalogClient,
 		TableId:   tableID,
 	}
 
-	exists := tableExists(ctx, catalog, tableRef)
+	desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+	exists := err == nil
+	if schema != nil && schema.GetIngestionPartitionType() == "" {
+		schema.IngestionPartitionType = cmp.Or(
+			cfg.TimePartitioning.IngestionType(), desc.GetSchema().GetIngestionPartitionType())
+	}
 
 	switch wd {
 	case "WRITE_TRUNCATE":

@@ -234,10 +234,14 @@ func (x *FieldSchema) GetFields() []*FieldSchema {
 }
 
 type TableSchema struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Fields        []*FieldSchema         `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Fields []*FieldSchema         `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty"`
+	// BigQuery `timePartitioning.type` (DAY, HOUR, MONTH or YEAR) when the
+	// table is partitioned by ingestion time, that is without a
+	// `timePartitioning.field`. Empty for every other table.
+	IngestionPartitionType string `protobuf:"bytes,2,opt,name=ingestion_partition_type,json=ingestionPartitionType,proto3" json:"ingestion_partition_type,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *TableSchema) Reset() {
@@ -275,6 +279,13 @@ func (x *TableSchema) GetFields() []*FieldSchema {
 		return x.Fields
 	}
 	return nil
+}
+
+func (x *TableSchema) GetIngestionPartitionType() string {
+	if x != nil {
+		return x.IngestionPartitionType
+	}
+	return ""
 }
 
 type RegisterDatasetRequest struct {
@@ -3889,9 +3900,10 @@ const file_emulator_proto_rawDesc = "" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
 	"\x04mode\x18\x03 \x01(\tR\x04mode\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x129\n" +
-	"\x06fields\x18\x05 \x03(\v2!.bigquery_emulator.v1.FieldSchemaR\x06fields\"H\n" +
+	"\x06fields\x18\x05 \x03(\v2!.bigquery_emulator.v1.FieldSchemaR\x06fields\"\x82\x01\n" +
 	"\vTableSchema\x129\n" +
-	"\x06fields\x18\x01 \x03(\v2!.bigquery_emulator.v1.FieldSchemaR\x06fields\"p\n" +
+	"\x06fields\x18\x01 \x03(\v2!.bigquery_emulator.v1.FieldSchemaR\x06fields\x128\n" +
+	"\x18ingestion_partition_type\x18\x02 \x01(\tR\x16ingestionPartitionType\"p\n" +
 	"\x16RegisterDatasetRequest\x12:\n" +
 	"\adataset\x18\x01 \x01(\v2 .bigquery_emulator.v1.DatasetRefR\adataset\x12\x1a\n" +
 	"\blocation\x18\x02 \x01(\tR\blocation\"\x19\n" +

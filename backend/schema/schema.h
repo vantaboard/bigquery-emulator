@@ -75,6 +75,9 @@ struct ColumnSchema {
 // Whole-table schema: the ordered list of top-level columns.
 struct TableSchema {
   std::vector<ColumnSchema> columns{};
+  // DAY, HOUR, MONTH or YEAR for an ingestion-time partitioned table;
+  // empty otherwise.
+  std::string ingestion_partition_type{};
 };
 
 // ---------------------------------------------------------------------------

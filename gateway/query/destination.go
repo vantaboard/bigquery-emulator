@@ -81,6 +81,9 @@ func AppendResults(ctx context.Context, catalog enginepb.CatalogClient,
 		TableId:   destTable,
 	}
 	protoResult := load.SchemaToProto(resultSchema)
+	if protoResult != nil {
+		protoResult.IngestionPartitionType = cfg.TimePartitioning.IngestionType()
+	}
 	if err := load.EnsureDataset(ctx, catalog, destProject, destDataset); err != nil {
 		return err
 	}

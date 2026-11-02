@@ -38,7 +38,7 @@ func registerInsertedTable(
 				DatasetId: datasetID,
 				TableId:   tableID,
 			},
-			Schema: schemaToProto(t.Schema),
+			Schema: tableSchemaToProto(t),
 		})
 		return !grpcToHTTPError(w, err)
 	}

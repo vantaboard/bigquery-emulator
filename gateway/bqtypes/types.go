@@ -504,6 +504,20 @@ type TimePartitioning struct {
 	ExpirationMs string `json:"expirationMs,omitempty"`
 }
 
+// IngestionType returns the partition type (DAY when unset) of a table
+// partitioned by ingestion time, and "" when p is nil or partitions by
+// a column.
+func (p *TimePartitioning) IngestionType() string {
+	switch {
+	case p == nil || p.Field != "":
+		return ""
+	case p.Type == "":
+		return "DAY"
+	default:
+		return p.Type
+	}
+}
+
 // Clustering is the per-table clustering spec.
 type Clustering struct {
 	Fields []string `json:"fields,omitempty"`
