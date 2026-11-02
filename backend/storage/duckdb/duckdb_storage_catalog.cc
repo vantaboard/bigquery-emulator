@@ -187,12 +187,21 @@ absl::StatusOr<std::vector<DatasetId>> DuckDBStorage::ListDatasets(
 absl::Status DuckDBStorage::CreateTable(const TableId& id,
                                         const schema::TableSchema& requested) {
   schema::TableSchema schema = requested;
-  if (!schema.ingestion_partition_type.empty() &&
-      schema::PartitionTimeIndex(schema) < 0) {
-    schema::ColumnSchema partition_time;
-    partition_time.name = std::string(schema::kPartitionTimeColumn);
-    partition_time.type = schema::ColumnType::kTimestamp;
-    schema.columns.push_back(std::move(partition_time));
+  const auto add_partition_column = [&schema](absl::string_view name,
+                                              schema::ColumnType type) {
+    if (schema::ColumnIndex(schema, name) >= 0) return;
+    schema::ColumnSchema column;
+    column.name = std::string(name);
+    column.type = type;
+    schema.columns.push_back(std::move(column));
+  };
+  if (!schema.ingestion_partition_type.empty()) {
+    add_partition_column(schema::kPartitionTimeColumn,
+                         schema::ColumnType::kTimestamp);
+  }
+  if (schema.ingestion_partition_type == "DAY") {
+    add_partition_column(schema::kPartitionDateColumn,
+                         schema::ColumnType::kDate);
   }
   if (id.table_id.empty()) {
     return absl::InvalidArgumentError(

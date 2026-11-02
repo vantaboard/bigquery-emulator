@@ -37,7 +37,8 @@ class PartitionTimeTest : public LocalCoordinatorEngineTest {
     stamped.cells = {storage::Value::Int64(1)};
     storage::Row given;
     given.cells = {storage::Value::Int64(2),
-                   storage::Value::String("2024-03-04 00:00:00+00")};
+                   storage::Value::String("2024-03-04 00:00:00+00"),
+                   storage::Value::Null()};
     const std::vector<storage::Row> rows = {stamped, given};
     ASSERT_TRUE(storage_
                     ->AppendRows({"proj-test", "ds", "events"},
@@ -88,6 +89,15 @@ TEST_F(PartitionTimeTest, FiltersOnThePartitionTime) {
             std::vector<int64_t>{1});
 }
 
+TEST_F(PartitionTimeTest, FiltersOnThePartitionDate) {
+  CreateEventsTable();
+  EXPECT_EQ(Ids("SELECT id FROM ds.events WHERE _PARTITIONDATE = '2024-03-04'"),
+            std::vector<int64_t>{2});
+  EXPECT_EQ(
+      Ids("SELECT id FROM ds.events WHERE _PARTITIONDATE = CURRENT_DATE()"),
+      std::vector<int64_t>{1});
+}
+
 TEST_F(PartitionTimeTest, DmlStampsInsertsAndKeepsExistingPartitions) {
   CreateEventsTable();
   Dml("INSERT INTO ds.events (id) VALUES (3)");
@@ -100,6 +110,9 @@ TEST_F(PartitionTimeTest, DmlStampsInsertsAndKeepsExistingPartitions) {
   EXPECT_EQ(Ids(absl::StrCat("SELECT id FROM ds.events WHERE _PARTITIONTIME = ",
                              kToday,
                              " ORDER BY id")),
+            (std::vector<int64_t>{1, 3, 4}));
+  EXPECT_EQ(Ids("SELECT id FROM ds.events "
+                "WHERE _PARTITIONDATE = CURRENT_DATE() ORDER BY id"),
             (std::vector<int64_t>{1, 3, 4}));
 }
 

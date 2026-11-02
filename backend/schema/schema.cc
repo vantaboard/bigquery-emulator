@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
@@ -185,18 +186,21 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out) {
   out->set_ingestion_partition_type(schema.ingestion_partition_type);
 }
 
-int PartitionTimeIndex(const TableSchema& schema) {
+bool IsPartitionColumn(absl::string_view name) {
+  return name == kPartitionTimeColumn || name == kPartitionDateColumn;
+}
+
+int ColumnIndex(const TableSchema& schema, absl::string_view name) {
   for (size_t i = 0; i < schema.columns.size(); ++i) {
-    if (schema.columns[i].name == kPartitionTimeColumn) {
-      return static_cast<int>(i);
-    }
+    if (schema.columns[i].name == name) return static_cast<int>(i);
   }
   return -1;
 }
 
 TableSchema VisibleSchema(TableSchema schema) {
-  const int hidden = PartitionTimeIndex(schema);
-  if (hidden >= 0) schema.columns.erase(schema.columns.begin() + hidden);
+  std::erase_if(schema.columns, [](const ColumnSchema& column) {
+    return IsPartitionColumn(column.name);
+  });
   return schema;
 }
 

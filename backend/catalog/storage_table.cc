@@ -340,7 +340,7 @@ std::vector<const ::googlesql::Column*> MakeColumns(
   std::vector<const ::googlesql::Column*> out;
   out.reserve(columns.size());
   for (const auto& [column_name, type] : columns) {
-    const bool pseudo = column_name == schema::kPartitionTimeColumn;
+    const bool pseudo = schema::IsPartitionColumn(column_name);
     out.push_back(new ::googlesql::SimpleColumn(
         table_name, column_name, type, pseudo, /*is_writable_column=*/!pseudo));
   }
