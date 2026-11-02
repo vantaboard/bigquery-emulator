@@ -105,7 +105,7 @@ func Execute(ctx context.Context, catalog enginepb.CatalogClient, query enginepb
 	if hasSnapshotSource(sources) {
 		return executeCatalogCopy(ctx, catalog, snapStore, sources, destProject, destDataset, destTable, wd)
 	}
-	if query != nil {
+	if query != nil && !hasPartitionedSource(ctx, catalog, sources) {
 		if result, err := executeSQLCopy(
 			ctx,
 			catalog,
@@ -188,6 +188,23 @@ func sourceRefs(cfg *jobs.JobConfigurationCopy, defaultProject string) []bqtypes
 		return []bqtypes.TableReference{ref}
 	}
 	return nil
+}
+
+func hasPartitionedSource(ctx context.Context, catalog enginepb.CatalogClient,
+	refs []bqtypes.TableReference,
+) bool {
+	for _, ref := range refs {
+		base, _, _ := snapshots.ParseDecorator(ref.TableID)
+		desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: &enginepb.TableRef{
+			ProjectId: ref.ProjectID,
+			DatasetId: ref.DatasetID,
+			TableId:   base,
+		}})
+		if err == nil && desc.GetSchema().GetIngestionPartitionType() != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func hasSnapshotSource(refs []bqtypes.TableReference) bool {
@@ -370,6 +387,9 @@ func protoRowsToMaps(schema *enginepb.TableSchema, rows []*enginepb.DataRow) []m
 			if i < len(cells) {
 				m[f.GetName()] = cellToAny(cells[i])
 			}
+		}
+		if pt := row.GetPartitionTime(); pt != "" {
+			m[seed.PartitionTimeColumn] = pt
 		}
 		out = append(out, m)
 	}

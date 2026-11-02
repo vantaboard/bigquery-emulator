@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
+	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
 
 const hourPartition = "HOUR"
@@ -147,5 +149,39 @@ func TestJobInsertLoadWritesIntoTheDecoratedPartition(t *testing.T) {
 	if job.Status.ErrorResult == nil || cat.lastDropTable != nil {
 		t.Errorf("WRITE_TRUNCATE into a partition: errorResult = %v, dropped = %v; want an error and no drop",
 			job.Status.ErrorResult, cat.lastDropTable != nil)
+	}
+}
+
+func TestSchemaUpdateKeepsIngestionPartitions(t *testing.T) {
+	const partition = "2024-03-04 00:00:00+00"
+	cat := &fakeCatalogClient{
+		describeTableFn: describeAs("DAY"),
+		listRowsFn: func(context.Context, *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
+			return &enginepb.ListRowsResponse{TotalRows: 1, Rows: []*enginepb.DataRow{{
+				Cells:         []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "a"}}},
+				PartitionTime: partition,
+			}}}, nil
+		},
+	}
+	added := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
+		{Name: "name", Type: sqlTypeSTRING},
+		{Name: "extra", Type: sqlTypeSTRING},
+	}}
+	ref := &enginepb.TableRef{ProjectId: testProjectID, DatasetId: testDatasetID, TableId: testTableID}
+
+	if _, err := load.ApplySchemaUpdate(
+		context.Background(),
+		cat,
+		ref,
+		added,
+		load.TablePatchSchemaOptions,
+	); err != nil {
+		t.Fatalf("ApplySchemaUpdate: %v", err)
+	}
+	if got := cat.lastRegisterTable.GetSchema().GetIngestionPartitionType(); got != "DAY" {
+		t.Errorf("re-registered partition type = %q, want DAY", got)
+	}
+	if got := cat.lastInsertRows.GetRows()[0].GetPartitionTime(); got != partition {
+		t.Errorf("re-inserted partition time = %q, want %q", got, partition)
 	}
 }

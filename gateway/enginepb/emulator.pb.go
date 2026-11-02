@@ -1037,9 +1037,9 @@ func (x *DescribeTableResponse) GetViewUseLegacySql() bool {
 type DataRow struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Cells []*Cell                `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
-	// Start of the partition the row goes into, as `YYYY-MM-DD HH:MM:SS+00`,
-	// for an ingestion-time partitioned table. Empty uses the insert time.
-	// Only InsertRows reads it.
+	// Start of the row's partition, as `YYYY-MM-DD HH:MM:SS+00`, for an
+	// ingestion-time partitioned table. ListRows sets it. InsertRows puts the
+	// row in that partition, and uses the insert time when it is empty.
 	PartitionTime string `protobuf:"bytes,2,opt,name=partition_time,json=partitionTime,proto3" json:"partition_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

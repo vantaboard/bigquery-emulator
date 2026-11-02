@@ -507,11 +507,17 @@ backend::storage::Row WithPartitionTime(
     if (row_index >= start_index && (unlimited || emitted < max_results)) {
       auto* proto_row = response->add_rows();
       for (size_t c = 0; c < row.cells.size(); ++c) {
+        const backend::storage::Value& cell = row.cells[c];
         if (c < physical.columns.size() &&
             backend::schema::IsPartitionColumn(physical.columns[c].name)) {
+          if (physical.columns[c].name ==
+                  backend::schema::kPartitionTimeColumn &&
+              cell.kind() == backend::storage::Value::Kind::kString) {
+            proto_row->set_partition_time(cell.string_value());
+          }
           continue;
         }
-        ValueToCell(row.cells[c], proto_row->add_cells());
+        ValueToCell(cell, proto_row->add_cells());
       }
       ++emitted;
     }

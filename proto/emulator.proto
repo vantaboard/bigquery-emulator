@@ -184,9 +184,9 @@ message DescribeTableResponse {
 // types stay consistent across the two read paths.
 message DataRow {
   repeated Cell cells = 1;
-  // Start of the partition the row goes into, as `YYYY-MM-DD HH:MM:SS+00`,
-  // for an ingestion-time partitioned table. Empty uses the insert time.
-  // Only InsertRows reads it.
+  // Start of the row's partition, as `YYYY-MM-DD HH:MM:SS+00`, for an
+  // ingestion-time partitioned table. ListRows sets it. InsertRows puts the
+  // row in that partition, and uses the insert time when it is empty.
   string partition_time = 2;
 }
 
