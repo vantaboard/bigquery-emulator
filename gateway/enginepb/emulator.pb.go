@@ -1035,8 +1035,12 @@ func (x *DescribeTableResponse) GetViewUseLegacySql() bool {
 // `Cell` shape is shared with `Query`'s result rows so the wire
 // types stay consistent across the two read paths.
 type DataRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cells         []*Cell                `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Cells []*Cell                `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
+	// Start of the partition the row goes into, as `YYYY-MM-DD HH:MM:SS+00`,
+	// for an ingestion-time partitioned table. Empty uses the insert time.
+	// Only InsertRows reads it.
+	PartitionTime string `protobuf:"bytes,2,opt,name=partition_time,json=partitionTime,proto3" json:"partition_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1076,6 +1080,13 @@ func (x *DataRow) GetCells() []*Cell {
 		return x.Cells
 	}
 	return nil
+}
+
+func (x *DataRow) GetPartitionTime() string {
+	if x != nil {
+		return x.PartitionTime
+	}
+	return ""
 }
 
 type InsertRowsRequest struct {
@@ -3941,9 +3952,10 @@ const file_emulator_proto_rawDesc = "" +
 	"table_type\x18\x02 \x01(\tR\ttableType\x12\x1d\n" +
 	"\n" +
 	"view_query\x18\x03 \x01(\tR\tviewQuery\x12-\n" +
-	"\x13view_use_legacy_sql\x18\x04 \x01(\bR\x10viewUseLegacySql\";\n" +
+	"\x13view_use_legacy_sql\x18\x04 \x01(\bR\x10viewUseLegacySql\"b\n" +
 	"\aDataRow\x120\n" +
-	"\x05cells\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\"|\n" +
+	"\x05cells\x18\x01 \x03(\v2\x1a.bigquery_emulator.v1.CellR\x05cells\x12%\n" +
+	"\x0epartition_time\x18\x02 \x01(\tR\rpartitionTime\"|\n" +
 	"\x11InsertRowsRequest\x124\n" +
 	"\x05table\x18\x01 \x01(\v2\x1e.bigquery_emulator.v1.TableRefR\x05table\x121\n" +
 	"\x04rows\x18\x02 \x03(\v2\x1d.bigquery_emulator.v1.DataRowR\x04rows\"\x14\n" +

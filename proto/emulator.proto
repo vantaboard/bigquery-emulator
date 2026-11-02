@@ -184,6 +184,10 @@ message DescribeTableResponse {
 // types stay consistent across the two read paths.
 message DataRow {
   repeated Cell cells = 1;
+  // Start of the partition the row goes into, as `YYYY-MM-DD HH:MM:SS+00`,
+  // for an ingestion-time partitioned table. Empty uses the insert time.
+  // Only InsertRows reads it.
+  string partition_time = 2;
 }
 
 message InsertRowsRequest {

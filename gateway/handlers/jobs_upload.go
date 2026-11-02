@@ -156,8 +156,12 @@ func persistLoadTableMetadata(deps Dependencies, cfg *jobs.JobConfigurationLoad,
 	if destProject == "" {
 		destProject = projectID
 	}
+	tableID, _, err := bqtypes.SplitPartitionDecorator(cfg.DestinationTable.TableID)
+	if err != nil {
+		return
+	}
 	deps.Metadata.MergeTable(destProject, cfg.DestinationTable.DatasetID,
-		cfg.DestinationTable.TableID, bqtypes.Table{
+		tableID, bqtypes.Table{
 			EncryptionConfiguration: cfg.DestinationEncryptionConfiguration,
 			Clustering:              cfg.Clustering,
 			TimePartitioning:        cfg.TimePartitioning,

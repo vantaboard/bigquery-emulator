@@ -6,3 +6,7 @@ const (
 	bqTypeJSON     = "JSON"
 	bqModeRepeated = "REPEATED"
 )
+
+// PartitionTimeColumn is the row key that InsertRows reads a row's
+// partition time from.
+const PartitionTimeColumn = "_PARTITIONTIME"

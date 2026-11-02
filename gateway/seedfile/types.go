@@ -34,6 +34,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"gopkg.in/yaml.v3"
 )
 
@@ -89,6 +90,12 @@ type Table struct {
 	// positionally. Empty schema is allowed for "register the
 	// table, no rows" workflows.
 	Schema []FieldSchema `yaml:"schema"`
+
+	// TimePartitioning partitions the table like the REST
+	// `timePartitioning` field. Without `field` the table is
+	// partitioned by ingestion time, and a row's `_PARTITIONTIME`
+	// value picks its partition. Optional.
+	TimePartitioning *bqtypes.TimePartitioning `yaml:"time_partitioning"`
 
 	// Rows is the per-table row list. Each row is a map keyed by
 	// column name; missing columns become NULL cells. Extra keys
