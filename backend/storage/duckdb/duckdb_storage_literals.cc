@@ -268,7 +268,12 @@ absl::StatusOr<std::string> RenderScalarLiteral(
 
 absl::StatusOr<std::string> RenderCellLiteral(
     const Value& cell, const schema::ColumnSchema& column) {
-  if (cell.is_null()) return std::string("NULL");
+  if (cell.is_null()) {
+    if (column.mode != schema::ColumnMode::kRepeated)
+      return std::string("NULL");
+    return absl::StrCat(
+        "CAST([] AS ", schema::ColumnSchemaToDuckDBStorageType(column), ")");
+  }
   // REPEATED cells carry an array on the wire even when the column
   // type itself is a scalar like INT64 — DuckDB's LIST literal form
   // is `[v1, v2, ...]`. Use a synthetic non-repeated column for the
