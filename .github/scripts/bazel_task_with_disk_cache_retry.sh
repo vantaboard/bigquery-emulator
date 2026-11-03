@@ -36,17 +36,14 @@ run_cmd() {
   return "$rc"
 }
 
-if run_cmd "$@"; then
-  exit 0
-fi
-rc=$?
+rc=0
+run_cmd "$@" || rc=$?
 
-if grep -qE 'CacheNotFoundException|Missing digest:' "$log"; then
+if [ "$rc" -ne 0 ] && grep -qE 'CacheNotFoundException|Missing digest:' "$log"; then
   echo "::warning::Bazel disk cache poisoned (CacheNotFoundException); clearing disk cache and retrying once"
   clear_bazel_disk_caches
-  if run_cmd "$@"; then
-    exit 0
-  fi
+  rc=0
+  run_cmd "$@" || rc=$?
 fi
 
 exit "$rc"
