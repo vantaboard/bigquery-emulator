@@ -86,13 +86,18 @@ func (s *TableServer) InsertTable(
 	if s.deps.Catalog == nil {
 		return nil, unimplemented("table insert requires an engine")
 	}
+	schema := schemaToEngine(req.GetTable().GetSchema())
+	if schema == nil {
+		schema = &enginepb.TableSchema{}
+	}
+	schema.IngestionPartitionType = t.TimePartitioning.IngestionType()
 	_, err := s.deps.Catalog.RegisterTable(ctx, &enginepb.RegisterTableRequest{
 		Table: &enginepb.TableRef{
 			ProjectId: projectID,
 			DatasetId: datasetID,
 			TableId:   tableID,
 		},
-		Schema: schemaToEngine(req.GetTable().GetSchema()),
+		Schema: schema,
 	})
 	if err != nil {
 		return nil, grpcStatusFromEngine(err)

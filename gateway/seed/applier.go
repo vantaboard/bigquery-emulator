@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
 	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
 )
 
@@ -45,6 +46,9 @@ type Applier interface {
 	// InsertRows appends rows to (ref) in a single RPC. Schema is
 	// the table's column order so callers can pass a generic
 	// map-shaped row and the applier lays cells out positionally.
+	// When the schema has an ingestion partition type, a row's
+	// `_PARTITIONTIME` value puts the row in the partition that holds
+	// that timestamp.
 	// Returns the number of rows inserted on success.
 	InsertRows(ctx context.Context, ref TableRef, schema *enginepb.TableSchema, rows []map[string]any) (int, error)
 }
@@ -138,7 +142,11 @@ func (a *catalogApplier) InsertRows(
 	}
 	dataRows := make([]*enginepb.DataRow, 0, len(rows))
 	for _, row := range rows {
-		dataRows = append(dataRows, rowToProto(schema, row))
+		dataRow, err := rowToProto(schema, row)
+		if err != nil {
+			return 0, fmt.Errorf("InsertRows %s.%s.%s: %w", ref.ProjectID, ref.DatasetID, ref.TableID, err)
+		}
+		dataRows = append(dataRows, dataRow)
 	}
 	_, err := a.client.InsertRows(ctx, &enginepb.InsertRowsRequest{
 		Table: &enginepb.TableRef{
@@ -159,8 +167,15 @@ func (a *catalogApplier) InsertRows(
 // schema, mirroring jsonRowToProto in gateway/handlers/tabledata.go.
 // Pulled into its own helper so both seeding paths (production
 // orchestrator and YAML loader) emit the same wire shape.
-func rowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.DataRow {
+func rowToProto(schema *enginepb.TableSchema, row map[string]any) (*enginepb.DataRow, error) {
 	out := &enginepb.DataRow{Cells: make([]*enginepb.Cell, 0, len(schema.GetFields()))}
+	if v, ok := row[PartitionTimeColumn]; ok && schema.GetIngestionPartitionType() != "" {
+		start, err := bqtypes.PartitionStart(v, schema.GetIngestionPartitionType())
+		if err != nil {
+			return nil, err
+		}
+		out.PartitionTime = start
+	}
 	for _, f := range schema.GetFields() {
 		v, ok := row[f.GetName()]
 		if !ok {
@@ -169,7 +184,7 @@ func rowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.Data
 		}
 		out.Cells = append(out.Cells, cellFromJSONForField(f, v))
 	}
-	return out
+	return out, nil
 }
 
 func cellFromJSONForField(f *enginepb.FieldSchema, v any) *enginepb.Cell {

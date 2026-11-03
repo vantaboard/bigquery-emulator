@@ -75,7 +75,27 @@ struct ColumnSchema {
 // Whole-table schema: the ordered list of top-level columns.
 struct TableSchema {
   std::vector<ColumnSchema> columns{};
+  // DAY, HOUR, MONTH or YEAR for an ingestion-time partitioned table;
+  // empty otherwise.
+  std::string ingestion_partition_type{};
 };
+
+// Stored columns that hold the ingestion time of each row of an
+// ingestion-time partitioned table, and its DATE (DAY tables only).
+// BigQuery reserves the names, so a column with one of them is always
+// one of these. Storage adds them to the table schema; user-facing
+// surfaces remove them with `VisibleSchema`.
+inline constexpr absl::string_view kPartitionTimeColumn = "_PARTITIONTIME";
+inline constexpr absl::string_view kPartitionDateColumn = "_PARTITIONDATE";
+
+bool IsPartitionColumn(absl::string_view name);
+
+// Index of the column called `name` in `schema`, or -1 when absent.
+int ColumnIndex(const TableSchema& schema, absl::string_view name);
+
+// `schema` without the partition columns.
+TableSchema VisibleSchema(TableSchema schema);
+absl::StatusOr<TableSchema> VisibleSchema(absl::StatusOr<TableSchema> schema);
 
 // ---------------------------------------------------------------------------
 // Type-name conversions

@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
@@ -158,6 +159,7 @@ absl::StatusOr<TableSchema> TableSchemaFromProto(const v1::TableSchema& proto) {
     if (!column.ok()) return column.status();
     schema.columns.push_back(std::move(*column));
   }
+  schema.ingestion_partition_type = proto.ingestion_partition_type();
   return schema;
 }
 
@@ -181,6 +183,30 @@ void TableSchemaToProto(const TableSchema& schema, v1::TableSchema* out) {
   for (const auto& column : schema.columns) {
     ColumnSchemaToProto(column, out->add_fields());
   }
+  out->set_ingestion_partition_type(schema.ingestion_partition_type);
+}
+
+bool IsPartitionColumn(absl::string_view name) {
+  return name == kPartitionTimeColumn || name == kPartitionDateColumn;
+}
+
+int ColumnIndex(const TableSchema& schema, absl::string_view name) {
+  for (size_t i = 0; i < schema.columns.size(); ++i) {
+    if (schema.columns[i].name == name) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+TableSchema VisibleSchema(TableSchema schema) {
+  std::erase_if(schema.columns, [](const ColumnSchema& column) {
+    return IsPartitionColumn(column.name);
+  });
+  return schema;
+}
+
+absl::StatusOr<TableSchema> VisibleSchema(absl::StatusOr<TableSchema> schema) {
+  if (!schema.ok()) return schema;
+  return VisibleSchema(*std::move(schema));
 }
 
 absl::string_view ToDuckDBType(ColumnType type) {

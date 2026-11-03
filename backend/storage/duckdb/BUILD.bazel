@@ -62,6 +62,7 @@ cc_test(
     srcs = [
         "duckdb_storage_crud_test.cc",
         "duckdb_storage_measure_schema_test.cc",
+        "duckdb_storage_partition_test.cc",
         "duckdb_storage_read_test.cc",
         "duckdb_storage_test_fixture.cc",
         "duckdb_storage_test_fixture.h",
@@ -73,6 +74,7 @@ cc_test(
         "//backend/storage",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
     ],

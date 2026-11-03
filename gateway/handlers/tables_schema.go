@@ -22,6 +22,17 @@ func schemaToProto(s *bqtypes.TableSchema) *enginepb.TableSchema {
 	return out
 }
 
+// tableSchemaToProto is schemaToProto plus the table's ingestion-time
+// partitioning, which the engine needs to store `_PARTITIONTIME`.
+func tableSchemaToProto(t *bqtypes.Table) *enginepb.TableSchema {
+	out := schemaToProto(t.Schema)
+	if out == nil {
+		out = &enginepb.TableSchema{}
+	}
+	out.IngestionPartitionType = t.TimePartitioning.IngestionType()
+	return out
+}
+
 // fieldToProto recursively converts a REST TableFieldSchema into the
 // gRPC FieldSchema. Nested STRUCT/RECORD fields are walked verbatim.
 func fieldToProto(f bqtypes.TableFieldSchema) *enginepb.FieldSchema {

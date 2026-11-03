@@ -340,7 +340,7 @@ CatalogService::CatalogService(backend::storage::Storage* storage)
     return v;
   }
   const auto id = TableIdFromProto(request->table());
-  auto schema_or = storage_->GetSchema(id);
+  auto schema_or = backend::schema::VisibleSchema(storage_->GetSchema(id));
   if (schema_or.ok()) {
     backend::schema::TableSchemaToProto(*schema_or, response->mutable_schema());
     if (absl::StatusOr<backend::storage::TableResourceInfo> info_or =
@@ -402,6 +402,25 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
   return physical;
 }
 
+backend::storage::Row WithPartitionTime(
+    const backend::schema::TableSchema& physical,
+    backend::storage::Row row,
+    const std::string& partition_time) {
+  backend::storage::Row out;
+  out.cells.reserve(physical.columns.size());
+  auto next = row.cells.begin();
+  for (const auto& column : physical.columns) {
+    if (column.name == backend::schema::kPartitionTimeColumn) {
+      out.cells.push_back(backend::storage::Value::String(partition_time));
+    } else if (backend::schema::IsPartitionColumn(column.name)) {
+      out.cells.push_back(backend::storage::Value::Null());
+    } else if (next != row.cells.end()) {
+      out.cells.push_back(std::move(*next++));
+    }
+  }
+  return out;
+}
+
 ::grpc::Status CatalogService::InsertRows(
     ::grpc::ServerContext* /*context*/,
     const v1::InsertRowsRequest* request,
@@ -419,6 +438,13 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
   if (!schema_or.ok()) {
     return AbslToGrpcStatus(schema_or.status());
   }
+  const backend::schema::TableSchema visible =
+      backend::schema::VisibleSchema(*schema_or);
+  const backend::schema::TableSchema physical =
+      backend::catalog::StripMeasureColumns(*schema_or);
+  const bool partitioned =
+      backend::schema::ColumnIndex(physical,
+                                   backend::schema::kPartitionTimeColumn) >= 0;
   std::vector<backend::storage::Row> rows;
   rows.reserve(request->rows_size());
   for (const auto& proto_row : request->rows()) {
@@ -427,7 +453,17 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
     for (const auto& cell : proto_row.cells()) {
       row.cells.push_back(CellToValue(cell));
     }
-    rows.push_back(PhysicalRowFromLogicalSchema(*schema_or, std::move(row)));
+    row = PhysicalRowFromLogicalSchema(visible, std::move(row));
+    if (!proto_row.partition_time().empty()) {
+      if (!partitioned) {
+        return ::grpc::Status(::grpc::StatusCode::INVALID_ARGUMENT,
+                              "InsertRows: partition_time needs a table "
+                              "partitioned by ingestion time");
+      }
+      row = WithPartitionTime(
+          physical, std::move(row), proto_row.partition_time());
+    }
+    rows.push_back(std::move(row));
   }
   return AbslToGrpcStatus(storage_->AppendRows(id, absl::MakeSpan(rows)));
 }
@@ -448,6 +484,11 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
     return AbslToGrpcStatus(iter_or.status());
   }
   std::unique_ptr<backend::storage::RowIterator> iter = std::move(*iter_or);
+  absl::StatusOr<backend::schema::TableSchema> schema_or =
+      storage_->GetSchema(id);
+  const backend::schema::TableSchema physical =
+      schema_or.ok() ? backend::catalog::StripMeasureColumns(*schema_or)
+                     : backend::schema::TableSchema{};
 
   const int64_t start_index =
       request->start_index() > 0 ? request->start_index() : 0;
@@ -465,7 +506,17 @@ backend::storage::Row PhysicalRowFromLogicalSchema(
     if (!*next_or) break;
     if (row_index >= start_index && (unlimited || emitted < max_results)) {
       auto* proto_row = response->add_rows();
-      for (const auto& cell : row.cells) {
+      for (size_t c = 0; c < row.cells.size(); ++c) {
+        const backend::storage::Value& cell = row.cells[c];
+        if (c < physical.columns.size() &&
+            backend::schema::IsPartitionColumn(physical.columns[c].name)) {
+          if (physical.columns[c].name ==
+                  backend::schema::kPartitionTimeColumn &&
+              cell.kind() == backend::storage::Value::Kind::kString) {
+            proto_row->set_partition_time(cell.string_value());
+          }
+          continue;
+        }
         ValueToCell(cell, proto_row->add_cells());
       }
       ++emitted;

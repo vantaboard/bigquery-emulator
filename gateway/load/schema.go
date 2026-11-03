@@ -90,6 +90,7 @@ func resolveDestinationSchema(ctx context.Context, catalog enginepb.CatalogClien
 		return nil, err
 	}
 	protoMerged := SchemaToProto(merged)
+	protoMerged.IngestionPartitionType = desc.GetSchema().GetIngestionPartitionType()
 	if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
 		return nil, fmt.Errorf("schema update drop table: %w", err)
 	}
@@ -164,6 +165,7 @@ func ApplySchemaUpdate(ctx context.Context, catalog enginepb.CatalogClient,
 		return nil, err
 	}
 	protoMerged := SchemaToProto(merged)
+	protoMerged.IngestionPartitionType = desc.GetSchema().GetIngestionPartitionType()
 	if _, err := catalog.DropTable(ctx, &enginepb.DropTableRequest{Table: tableRef}); err != nil {
 		return nil, fmt.Errorf("schema update drop table: %w", err)
 	}
@@ -414,6 +416,9 @@ func protoRowToMap(schema *enginepb.TableSchema, row *enginepb.DataRow) map[stri
 			continue
 		}
 		out[f.GetName()] = protoCellToAny(cells[i])
+	}
+	if pt := row.GetPartitionTime(); pt != "" {
+		out[seed.PartitionTimeColumn] = pt
 	}
 	return out
 }

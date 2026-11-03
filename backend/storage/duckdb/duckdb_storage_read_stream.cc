@@ -119,7 +119,8 @@ absl::StatusOr<std::unique_ptr<RowIterator>> DuckDBStorage::CreateReadStream(
   auto schema_or = internal::ParseTableMetaJson(*contents_or);
   if (!schema_or.ok()) return schema_or.status();
   const schema::TableSchema& schema = *schema_or;
-  const schema::TableSchema physical = internal::ParquetStorageSchema(schema);
+  const schema::TableSchema physical =
+      internal::ParquetStorageSchema(schema::VisibleSchema(schema));
 
   const std::string parquet_path = TableParquetPath(id);
   std::vector<Row> rows;

@@ -175,6 +175,9 @@ func tableToREST(t *bigquerypb.Table) bqtypes.Table {
 			TableID:   ref.GetTableId(),
 		}
 	}
+	if tp := t.GetTimePartitioning(); tp != nil {
+		out.TimePartitioning = &bqtypes.TimePartitioning{Type: tp.GetType(), Field: tp.GetField().GetValue()}
+	}
 	return out
 }
 

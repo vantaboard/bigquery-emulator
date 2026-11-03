@@ -98,7 +98,8 @@ absl::StatusOr<TableSchema> UnifyWildcardTableSchemas(
 
   absl::flat_hash_map<std::string, ColumnSchema> by_name;
   for (const storage::TableId& id : matched) {
-    absl::StatusOr<TableSchema> schema_or = storage->GetSchema(id);
+    absl::StatusOr<TableSchema> schema_or =
+        schema::VisibleSchema(storage->GetSchema(id));
     if (!schema_or.ok()) return schema_or.status();
     for (const ColumnSchema& col : schema_or->columns) {
       auto it = by_name.find(col.name);
@@ -118,7 +119,8 @@ absl::StatusOr<TableSchema> UnifyWildcardTableSchemas(
     }
   }
 
-  absl::StatusOr<TableSchema> newest_or = storage->GetSchema(matched.back());
+  absl::StatusOr<TableSchema> newest_or =
+      schema::VisibleSchema(storage->GetSchema(matched.back()));
   if (!newest_or.ok()) return newest_or.status();
 
   TableSchema unified;

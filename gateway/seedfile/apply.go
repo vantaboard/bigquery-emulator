@@ -78,6 +78,7 @@ func Apply(ctx context.Context, f *File, applier seed.Applier, defaults seed.Def
 		}
 		for j, tbl := range ds.Tables {
 			schema := fieldsToProto(tbl.Schema)
+			schema.IngestionPartitionType = tbl.TimePartitioning.IngestionType()
 			ref := seed.TableRef{
 				ProjectID: project,
 				DatasetID: ds.ID,

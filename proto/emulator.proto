@@ -103,6 +103,10 @@ message FieldSchema {
 
 message TableSchema {
   repeated FieldSchema fields = 1;
+  // BigQuery `timePartitioning.type` (DAY, HOUR, MONTH or YEAR) when the
+  // table is partitioned by ingestion time, that is without a
+  // `timePartitioning.field`. Empty for every other table.
+  string ingestion_partition_type = 2;
 }
 
 message RegisterDatasetRequest {
@@ -180,6 +184,10 @@ message DescribeTableResponse {
 // types stay consistent across the two read paths.
 message DataRow {
   repeated Cell cells = 1;
+  // Start of the row's partition, as `YYYY-MM-DD HH:MM:SS+00`, for an
+  // ingestion-time partitioned table. ListRows sets it. InsertRows puts the
+  // row in that partition, and uses the insert time when it is empty.
+  string partition_time = 2;
 }
 
 message InsertRowsRequest {

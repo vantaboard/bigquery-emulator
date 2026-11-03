@@ -1,6 +1,7 @@
 package load
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -50,12 +51,12 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 		return Result{}, errors.New("sourceUris or upload media is required")
 	}
 
-	projectID := cfg.DestinationTable.ProjectID
-	if projectID == "" {
-		projectID = defaultProject
-	}
+	projectID := cmp.Or(cfg.DestinationTable.ProjectID, defaultProject)
 	datasetID := cfg.DestinationTable.DatasetID
-	tableID := cfg.DestinationTable.TableID
+	tableID, partition, err := splitDestinationPartition(cfg)
+	if err != nil {
+		return Result{}, err
+	}
 
 	parseSchema := cfg.Schema
 	if parseSchema == nil || len(parseSchema.Fields) == 0 {
@@ -81,6 +82,9 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 	if err = applyWriteDisposition(ctx, catalog, cfg, projectID, datasetID, tableID, protoSchema); err != nil {
 		return Result{}, err
 	}
+	if err = placeInPartition(partition, tableID, protoSchema, parsed.Rows); err != nil {
+		return Result{}, err
+	}
 
 	ref := seed.TableRef{ProjectID: projectID, DatasetID: datasetID, TableID: tableID}
 	applier := seed.NewCatalogApplier(catalog)
@@ -95,6 +99,36 @@ func execute(ctx context.Context, catalog enginepb.CatalogClient, cfg *jobs.JobC
 		OutputRows:     int64(inserted),
 		OutputBytes:    totalBytes,
 	}, nil
+}
+
+// splitDestinationPartition splits a `table$partition` destination. Only
+// WRITE_APPEND loads take a partition decorator.
+func splitDestinationPartition(cfg *jobs.JobConfigurationLoad) (string, *bqtypes.PartitionDecorator, error) {
+	tableID, partition, err := bqtypes.SplitPartitionDecorator(cfg.DestinationTable.TableID)
+	if err != nil {
+		return "", nil, err
+	}
+	if partition != nil && cfg.WriteDisposition != "" && cfg.WriteDisposition != writeAppend {
+		return "", nil, fmt.Errorf("a load into partition %s supports only WRITE_APPEND",
+			cfg.DestinationTable.TableID)
+	}
+	return tableID, partition, nil
+}
+
+// placeInPartition puts every row into the partition when the load names one.
+func placeInPartition(partition *bqtypes.PartitionDecorator, tableID string, schema *enginepb.TableSchema,
+	rows []map[string]any,
+) error {
+	if partition == nil {
+		return nil
+	}
+	if err := partition.CheckTable(tableID, schema.GetIngestionPartitionType()); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		row[seed.PartitionTimeColumn] = partition.Time
+	}
+	return nil
 }
 
 func parseLoadSources(ctx context.Context, cfg *jobs.JobConfigurationLoad, inline [][]byte,
@@ -211,7 +245,12 @@ func applyWriteDisposition(ctx context.Context, catalog enginepb.CatalogClient,
 		TableId:   tableID,
 	}
 
-	exists := tableExists(ctx, catalog, tableRef)
+	desc, err := catalog.DescribeTable(ctx, &enginepb.DescribeTableRequest{Table: tableRef})
+	exists := err == nil
+	if schema != nil && schema.GetIngestionPartitionType() == "" {
+		schema.IngestionPartitionType = cmp.Or(
+			cfg.TimePartitioning.IngestionType(), desc.GetSchema().GetIngestionPartitionType())
+	}
 
 	switch wd {
 	case "WRITE_TRUNCATE":

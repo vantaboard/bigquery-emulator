@@ -236,10 +236,15 @@ func jsonRowToProto(schema *enginepb.TableSchema, row map[string]any) *enginepb.
 // the full request/response shapes the emulator targets.
 func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		projectID, datasetID, tableID := tableIDFromPath(r)
-		if tableID == "" {
+		projectID, datasetID, decoratedID := tableIDFromPath(r)
+		if decoratedID == "" {
 			writeError(w, http.StatusBadRequest, "invalid",
 				"tableId is required")
+			return
+		}
+		tableID, partition, err := bqtypes.SplitPartitionDecorator(decoratedID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid", err.Error())
 			return
 		}
 		if deps.Catalog == nil {
@@ -262,10 +267,10 @@ func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 		if grpcToHTTPError(w, err) {
 			return
 		}
-
-		protoRows := make([]*enginepb.DataRow, 0, len(body.Rows))
-		for _, row := range body.Rows {
-			protoRows = append(protoRows, jsonRowToProto(desc.GetSchema(), row.JSON))
+		protoRows, err := insertAllRows(tableID, desc.GetSchema(), body.Rows, partition)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid", err.Error())
+			return
 		}
 
 		if len(protoRows) > 0 {
@@ -286,6 +291,30 @@ func TableDataInsertAll(deps Dependencies) http.HandlerFunc {
 			Kind: tableDataInsertAllKind,
 		})
 	}
+}
+
+// insertAllRows converts insertAll rows to engine rows. With a partition
+// decorator, every row goes into that partition.
+func insertAllRows(
+	tableID string,
+	schema *enginepb.TableSchema,
+	rows []bqtypes.TableDataInsertAllRequestRow,
+	partition *bqtypes.PartitionDecorator,
+) ([]*enginepb.DataRow, error) {
+	if partition != nil {
+		if err := partition.CheckTable(tableID, schema.GetIngestionPartitionType()); err != nil {
+			return nil, err
+		}
+	}
+	out := make([]*enginepb.DataRow, 0, len(rows))
+	for _, row := range rows {
+		protoRow := jsonRowToProto(schema, row.JSON)
+		if partition != nil {
+			protoRow.PartitionTime = partition.Time
+		}
+		out = append(out, protoRow)
+	}
+	return out, nil
 }
 
 // tableDataListParams holds parsed tabledata.list query parameters.

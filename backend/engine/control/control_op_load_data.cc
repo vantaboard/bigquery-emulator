@@ -56,7 +56,7 @@ absl::StatusOr<schema::TableSchema> ResolveLoadSchema(
   if (stmt->column_definition_list_size() > 0) {
     return ColumnDefinitionListToTableSchema(stmt->column_definition_list());
   }
-  auto existing = storage.GetSchema(target);
+  auto existing = schema::VisibleSchema(storage.GetSchema(target));
   if (existing.ok()) return *existing;
   return absl::InvalidArgumentError(
       "control op executor: LOAD DATA requires an explicit column list or an "
