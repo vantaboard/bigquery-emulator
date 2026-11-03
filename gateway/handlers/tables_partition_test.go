@@ -15,7 +15,10 @@ import (
 	"github.com/vantaboard/bigquery-emulator/gateway/load"
 )
 
-const hourPartition = "HOUR"
+const (
+	hourPartition = "HOUR"
+	dayPartition  = "DAY"
+)
 
 func TestTableInsertForwardsIngestionPartitionType(t *testing.T) {
 	cases := []struct {
@@ -77,7 +80,7 @@ func describeAs(partitionType string) func(context.Context, *enginepb.DescribeTa
 }
 
 func TestTableDataInsertAllWritesIntoTheDecoratedPartition(t *testing.T) {
-	fake := &fakeCatalogClient{describeTableFn: describeAs("DAY")}
+	fake := &fakeCatalogClient{describeTableFn: describeAs(dayPartition)}
 	req := newTabledataReq(http.MethodPost, testTableID+"$20240304", "insertAll", `{"rows":[{"json":{"name":"a"}}]}`)
 	rec := httptest.NewRecorder()
 	TableDataInsertAll(Dependencies{Catalog: fake})(rec, req)
@@ -121,7 +124,7 @@ func TestJobInsertLoadWritesIntoTheDecoratedPartition(t *testing.T) {
 		t.Fatal(err)
 	}
 	load := func(writeDisposition string) (*fakeCatalogClient, jobs.Job) {
-		cat := &fakeCatalogClient{describeTableFn: describeAs("DAY")}
+		cat := &fakeCatalogClient{describeTableFn: describeAs(dayPartition)}
 		body := `{"configuration":{"load":{"sourceUris":["file://` + csvPath + `"],` +
 			`"destinationTable":{"projectId":"dev","datasetId":"ds","tableId":"t$20240304"},` +
 			`"sourceFormat":"CSV","writeDisposition":"` + writeDisposition + `",` +
@@ -155,7 +158,7 @@ func TestJobInsertLoadWritesIntoTheDecoratedPartition(t *testing.T) {
 func TestSchemaUpdateKeepsIngestionPartitions(t *testing.T) {
 	const partition = "2024-03-04 00:00:00+00"
 	cat := &fakeCatalogClient{
-		describeTableFn: describeAs("DAY"),
+		describeTableFn: describeAs(dayPartition),
 		listRowsFn: func(context.Context, *enginepb.ListRowsRequest) (*enginepb.ListRowsResponse, error) {
 			return &enginepb.ListRowsResponse{TotalRows: 1, Rows: []*enginepb.DataRow{{
 				Cells:         []*enginepb.Cell{{Value: &enginepb.Cell_StringValue{StringValue: "a"}}},
@@ -178,10 +181,28 @@ func TestSchemaUpdateKeepsIngestionPartitions(t *testing.T) {
 	); err != nil {
 		t.Fatalf("ApplySchemaUpdate: %v", err)
 	}
-	if got := cat.lastRegisterTable.GetSchema().GetIngestionPartitionType(); got != "DAY" {
+	if got := cat.lastRegisterTable.GetSchema().GetIngestionPartitionType(); got != dayPartition {
 		t.Errorf("re-registered partition type = %q, want DAY", got)
 	}
 	if got := cat.lastInsertRows.GetRows()[0].GetPartitionTime(); got != partition {
 		t.Errorf("re-inserted partition time = %q, want %q", got, partition)
+	}
+}
+
+func TestTableGetReportsTheEnginePartitioning(t *testing.T) {
+	fake := &fakeCatalogClient{describeTableFn: describeAs(dayPartition)}
+	rec := httptest.NewRecorder()
+	handler := TableGet(Dependencies{Catalog: fake, Metadata: NewMetadataStore()})
+	handler(rec, newTableReq(http.MethodGet, testTableID, ""))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var got bqtypes.Table
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.TimePartitioning == nil || got.TimePartitioning.Type != dayPartition {
+		t.Errorf("timePartitioning = %+v, want type DAY", got.TimePartitioning)
 	}
 }

@@ -327,6 +327,9 @@ func tableFromDescribeResponse(resp *enginepb.DescribeTableResponse) bqtypes.Tab
 			UseLegacySQL: resp.GetViewUseLegacySql(),
 		}
 	}
+	if partitionType := resp.GetSchema().GetIngestionPartitionType(); partitionType != "" {
+		t.TimePartitioning = &bqtypes.TimePartitioning{Type: partitionType}
+	}
 	return t
 }
 
