@@ -1,0 +1,42 @@
+--- a/kll/include/kll_sketch_impl.hpp
++++ b/kll/include/kll_sketch_impl.hpp
+@@ -481,15 +481,16 @@
+     read(is, levels.data(), sizeof(levels[0]) * num_levels);
+   }
+   levels[num_levels] = capacity;
+-  optional<T> tmp; // space to deserialize min and max
++  alignas(T) unsigned char tmp_space[sizeof(T)]; // space to deserialize min and max
++  T* tmp = reinterpret_cast<T*>(tmp_space);
+   optional<T> min_item;
+   optional<T> max_item;
+   if (!is_single_item) {
+-    sd.deserialize(is, &*tmp, 1);
++    sd.deserialize(is, tmp, 1);
+     // serde call did not throw, repackage and cleanup
+     min_item.emplace(*tmp);
+     (*tmp).~T();
+-    sd.deserialize(is, &*tmp, 1);
++    sd.deserialize(is, tmp, 1);
+     // serde call did not throw, repackage and cleanup
+     max_item.emplace(*tmp);
+     (*tmp).~T();
+@@ -565,15 +566,16 @@
+     ptr += copy_from_mem(ptr, levels.data(), sizeof(levels[0]) * num_levels);
+   }
+   levels[num_levels] = capacity;
+-  optional<T> tmp; // space to deserialize min and max
++  alignas(T) unsigned char tmp_space[sizeof(T)]; // space to deserialize min and max
++  T* tmp = reinterpret_cast<T*>(tmp_space);
+   optional<T> min_item;
+   optional<T> max_item;
+   if (!is_single_item) {
+-    ptr += sd.deserialize(ptr, end_ptr - ptr, &*tmp, 1);
++    ptr += sd.deserialize(ptr, end_ptr - ptr, tmp, 1);
+     // serde call did not throw, repackage and cleanup
+     min_item.emplace(*tmp);
+     (*tmp).~T();
+-    ptr += sd.deserialize(ptr, end_ptr - ptr, &*tmp, 1);
++    ptr += sd.deserialize(ptr, end_ptr - ptr, tmp, 1);
+     // serde call did not throw, repackage and cleanup
+     max_item.emplace(*tmp);
+     (*tmp).~T();
