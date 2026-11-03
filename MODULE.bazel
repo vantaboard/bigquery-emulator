@@ -200,6 +200,8 @@ http_archive(
 http_archive(
     name = "datasketches_cpp",
     build_file = "//third_party/datasketches:datasketches.BUILD.bazel",
+    patch_args = ["-p1"],
+    patches = ["//third_party/datasketches:kll_deserialize_without_empty_optional.patch"],
     sha256 = "63e6bda660ee9730cc39746de87fd983118c28149e32ff9389fac98b27010a53",
     strip_prefix = "datasketches-cpp-5.2.0",
     urls = [
