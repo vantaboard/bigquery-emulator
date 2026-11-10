@@ -16,6 +16,7 @@ cc_library(
     name = "control_op_executor",
     srcs = [
         "control_op_alter_table.cc",
+        "control_op_ctas.cc",
         "control_op_ddl.cc",
         "control_op_executor.cc",
         "control_op_export_data.cc",
