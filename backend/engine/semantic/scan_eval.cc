@@ -139,7 +139,7 @@ absl::StatusOr<Value> EvalArraySubquery(const std::vector<ColumnBindings>& rows,
     if (!v.ok()) return v.status();
     elements.push_back(*std::move(v));
   }
-  return Value::Array(type->AsArray(), std::move(elements));
+  return Value::MakeArray(type->AsArray(), std::move(elements));
 }
 
 absl::StatusOr<Value> EvalInSubquery(

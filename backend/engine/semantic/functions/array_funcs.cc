@@ -155,7 +155,7 @@ absl::StatusOr<Value> ArrayConcat(const std::vector<Value>& args,
       merged.push_back(arr.element(i));
     }
   }
-  return Value::Array(out_type, std::move(merged));
+  return Value::MakeArray(out_type, std::move(merged));
 }
 
 absl::StatusOr<Value> ArrayLength(const std::vector<Value>& args) {

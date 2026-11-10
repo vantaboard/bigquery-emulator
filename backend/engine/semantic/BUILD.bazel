@@ -520,6 +520,7 @@ cc_test(
     name = "executor_test",
     srcs = [
         "executor_analytic_test.cc",
+        "executor_aggregate_test.cc",
         "executor_join_test.cc",
         "executor_test.cc",
         "executor_test_fixture.h",
