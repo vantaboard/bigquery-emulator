@@ -30,6 +30,21 @@ std::string GcsCachePath(absl::string_view data_dir,
 absl::StatusOr<std::string> MaterializeGCSObjectToCache(
     absl::string_view gs_uri, absl::string_view data_dir);
 
+// ExportShardUri resolves an EXPORT DATA destination to the object the
+// export writes. BigQuery replaces the single `*` wildcard with a 12-digit
+// zero-padded shard number, so `gs://b/p/part-*.parquet` writes
+// `gs://b/p/part-000000000000.parquet`; the emulator always writes one
+// shard. URIs without a wildcard come back unchanged, and more than one
+// wildcard is rejected as BigQuery does.
+absl::StatusOr<std::string> ExportShardUri(absl::string_view uri);
+
+// PrepareGCSExportCachePath returns the cache path an export to gs_uri is
+// staged at and creates its parent directories. Unlike
+// MaterializeGCSObjectToCache it never fetches: the destination object
+// usually does not exist yet.
+absl::StatusOr<std::string> PrepareGCSExportCachePath(
+    absl::string_view gs_uri, absl::string_view data_dir);
+
 // UploadGCSObjectFromFile uploads a local file to gs:// via the storage
 // emulator JSON API when STORAGE_EMULATOR_HOST is set.
 absl::Status UploadGCSObjectFromFile(absl::string_view gs_uri,
