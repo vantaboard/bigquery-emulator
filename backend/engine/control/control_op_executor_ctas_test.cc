@@ -310,6 +310,23 @@ TEST_F(ControlOpExecutorCtasTest, CreateTableAsSelectExceptRowNumberDedup) {
   EXPECT_EQ(rows, 2);
 }
 
+TEST_F(ControlOpExecutorCtasTest, CreateTableIfNotExistsAsSelectKeepsExisting) {
+  // Regression: an existing target swallowed ALREADY_EXISTS and then had
+  // the query's rows appended, so a retried CTAS doubled the table.
+  CreatePeopleTable();
+  const absl::string_view sql =
+      "CREATE TABLE IF NOT EXISTS ds.people_once AS "
+      "SELECT id, name FROM ds.people";
+  absl::Status first = RunDdl(sql);
+  ASSERT_TRUE(first.ok()) << first;
+  absl::Status second = RunDdl(sql);
+  ASSERT_TRUE(second.ok()) << second;
+
+  auto count = storage_->CountRows({"proj-test", "ds", "people_once"});
+  ASSERT_TRUE(count.ok()) << count.status();
+  EXPECT_EQ(*count, 3);
+}
+
 }  // namespace
 }  // namespace control
 }  // namespace engine

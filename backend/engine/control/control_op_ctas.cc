@@ -170,6 +170,13 @@ absl::Status RunCreateTableAsSelect(
       !ds.ok()) {
     return ds;
   }
+  // BigQuery leaves an existing table untouched for CREATE TABLE IF NOT
+  // EXISTS ... AS SELECT: the query does not run and no rows are added.
+  if (stmt->create_mode() ==
+          ::googlesql::ResolvedCreateStatement::CREATE_IF_NOT_EXISTS &&
+      storage.GetSchema(*target).ok()) {
+    return absl::OkStatus();
+  }
   absl::StatusOr<schema::TableSchema> bq_schema =
       ColumnDefinitionListToTableSchema(stmt->column_definition_list());
   if (!bq_schema.ok()) return bq_schema.status();
