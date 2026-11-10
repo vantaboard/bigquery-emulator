@@ -51,6 +51,7 @@ cc_library(
         "//backend/engine/duckdb:duckdb_executor_time_travel",
         "//backend/engine/duckdb/transpiler:transpiler",
         "//backend/engine/duckdb/udf:registrar",
+        "//backend/engine/semantic:executor",
         "//backend/engine/semantic:value",
         "//backend/schema",
         "//backend/schema:googlesql_to_bq",

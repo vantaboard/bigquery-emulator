@@ -327,6 +327,57 @@ TEST_F(ControlOpExecutorCtasTest, CreateTableIfNotExistsAsSelectKeepsExisting) {
   EXPECT_EQ(*count, 3);
 }
 
+TEST_F(ControlOpExecutorCtasTest,
+       CreateTableAsSelectFallsBackToSemanticForUntranspiledShapes) {
+  // The DuckDB transpiler cannot lower `ARRAY(SELECT AS STRUCT ...)` inside
+  // `UNNEST(ARRAY_CONCAT(...))` or `ARRAY_AGG(... LIMIT 1)[SAFE_OFFSET(0)]`.
+  // CTAS used to fail with UNIMPLEMENTED; it now materializes through the
+  // semantic executor.
+  absl::Status s = RunDdl(
+      "CREATE TABLE ds.collapsed AS "
+      "WITH src AS ("
+      "  SELECT * FROM UNNEST(["
+      "    STRUCT('a' AS u, ['s1', 's2'] AS ent, CAST([] AS ARRAY<STRING>) AS "
+      "ex, 1 AS ts),"
+      "    ('a', CAST([] AS ARRAY<STRING>), ['s1'], 2),"
+      "    ('b', ['s3'], ['s3'], 3)])"
+      "), events AS ("
+      "  SELECT u, e.segment, e.event_type, ts FROM src,"
+      "  UNNEST(ARRAY_CONCAT("
+      "    ARRAY(SELECT AS STRUCT seg AS segment, 'entered' AS event_type "
+      "          FROM UNNEST(ent) AS seg),"
+      "    ARRAY(SELECT AS STRUCT seg AS segment, 'exited' AS event_type "
+      "          FROM UNNEST(ex) AS seg))) AS e"
+      ") "
+      "SELECT u, segment, "
+      "  ARRAY_AGG(event_type ORDER BY ts DESC, event_type DESC LIMIT 1)"
+      "[SAFE_OFFSET(0)] AS event_type "
+      "FROM events GROUP BY u, segment");
+  ASSERT_TRUE(s.ok()) << s;
+
+  auto schema = storage_->GetSchema({"proj-test", "ds", "collapsed"});
+  ASSERT_TRUE(schema.ok()) << schema.status();
+  ASSERT_EQ(schema->columns.size(), 3u);
+
+  auto scan = storage_->ScanRows({"proj-test", "ds", "collapsed"});
+  ASSERT_TRUE(scan.ok()) << scan.status();
+  std::vector<std::vector<std::string>> seen;
+  storage::Row row;
+  while (true) {
+    auto has = (*scan)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 3u);
+    seen.push_back({row.cells[0].string_value(),
+                    row.cells[1].string_value(),
+                    row.cells[2].string_value()});
+  }
+  std::sort(seen.begin(), seen.end());
+  std::vector<std::vector<std::string>> want = {
+      {"a", "s1", "exited"}, {"a", "s2", "entered"}, {"b", "s3", "exited"}};
+  EXPECT_EQ(seen, want);
+}
+
 }  // namespace
 }  // namespace control
 }  // namespace engine

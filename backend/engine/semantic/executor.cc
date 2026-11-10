@@ -64,17 +64,16 @@ absl::StatusOr<ParameterBindings> BuildParameterBindings(
 }
 
 absl::StatusOr<storage::Row> ProjectOneRow(
-    const ::googlesql::ResolvedQueryStmt& query_stmt,
+    const OutputColumnList& output_columns,
     const absl::flat_hash_map<int, const ::googlesql::ResolvedExpr*>&
         expr_by_column_id,
     const ColumnBindings& row_bindings,
     EvalContext& ctx) {
   storage::Row row;
-  row.cells.reserve(query_stmt.output_column_list_size());
+  row.cells.reserve(output_columns.size());
   ctx.columns = &row_bindings;
-  for (int i = 0; i < query_stmt.output_column_list_size(); ++i) {
-    const ::googlesql::ResolvedOutputColumn* oc =
-        query_stmt.output_column_list(i);
+  for (const auto& output_column : output_columns) {
+    const ::googlesql::ResolvedOutputColumn* oc = output_column.get();
     if (oc == nullptr) {
       return absl::InternalError("semantic: ResolvedOutputColumn is null");
     }
@@ -112,12 +111,25 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
     const ::googlesql::ResolvedQueryStmt& query_stmt,
     const FrameStack* script_variables,
     const ::googlesql::SystemVariableValuesMap* script_system_variables) {
-  const absl::Time execute_start = absl::Now();
-  const ::googlesql::ResolvedScan* query = query_stmt.query();
-  if (query == nullptr) {
+  if (query_stmt.query() == nullptr) {
     return absl::InvalidArgumentError(
         "semantic: ResolvedQueryStmt has no inner scan");
   }
+  return ExecuteResolvedQuery(request,
+                              *query_stmt.query(),
+                              query_stmt.output_column_list(),
+                              script_variables,
+                              script_system_variables);
+}
+
+absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQuery(
+    const QueryRequest& request,
+    const ::googlesql::ResolvedScan& query_scan,
+    const OutputColumnList& output_columns,
+    const FrameStack* script_variables,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables) {
+  const absl::Time execute_start = absl::Now();
+  const ::googlesql::ResolvedScan* query = &query_scan;
 
   absl::StatusOr<const ::googlesql::ResolvedProjectScan*> project_or =
       FindOutputProjectScan(query);
@@ -149,10 +161,9 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
   }
 
   schema::TableSchema output_schema;
-  output_schema.columns.reserve(query_stmt.output_column_list_size());
-  for (int i = 0; i < query_stmt.output_column_list_size(); ++i) {
-    const ::googlesql::ResolvedOutputColumn* oc =
-        query_stmt.output_column_list(i);
+  output_schema.columns.reserve(output_columns.size());
+  for (const auto& output_column : output_columns) {
+    const ::googlesql::ResolvedOutputColumn* oc = output_column.get();
     if (oc == nullptr) {
       return absl::InternalError("semantic: ResolvedOutputColumn is null");
     }
@@ -167,7 +178,7 @@ absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQueryStmt(
   std::vector<storage::Row> rows;
   rows.reserve(materialized->size());
   for (const ColumnBindings& bind : *materialized) {
-    auto row = ProjectOneRow(query_stmt, expr_by_column_id, bind, ctx);
+    auto row = ProjectOneRow(output_columns, expr_by_column_id, bind, ctx);
     if (!row.ok()) return row.status();
     rows.push_back(*std::move(row));
   }

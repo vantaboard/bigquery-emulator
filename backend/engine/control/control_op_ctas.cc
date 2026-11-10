@@ -17,6 +17,7 @@
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
+#include "backend/engine/semantic/executor.h"
 #include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
@@ -148,6 +149,49 @@ absl::Status AttachCollectorTables(::duckdb_connection conn,
   return absl::OkStatus();
 }
 
+// Runs a CTAS query on the semantic executor, for query shapes the DuckDB
+// transpiler cannot lower yet (e.g. `ARRAY(SELECT AS STRUCT ...)` or
+// `ARRAY_AGG(... LIMIT n)[SAFE_OFFSET(0)]`).
+absl::StatusOr<std::vector<storage::Row>> MaterializeCtasRowsSemantic(
+    const QueryRequest& request,
+    const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt) {
+  absl::StatusOr<std::unique_ptr<RowSource>> source =
+      semantic::ExecuteResolvedQuery(
+          request, *stmt->query(), stmt->output_column_list());
+  if (!source.ok()) return source.status();
+  std::vector<storage::Row> rows;
+  while (true) {
+    storage::Row row;
+    absl::StatusOr<bool> has = (*source)->Next(&row);
+    if (!has.ok()) return has.status();
+    if (!*has) break;
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
+// Creates the CTAS target and writes its rows. CREATE OR REPLACE drops an
+// existing target first; IF NOT EXISTS against an existing table returns
+// before the query runs.
+absl::Status PersistCtasRows(
+    storage::Storage& storage,
+    const storage::TableId& target,
+    const schema::TableSchema& bq_schema,
+    ::googlesql::ResolvedCreateStatement::CreateMode create_mode,
+    std::vector<storage::Row> rows) {
+  if (create_mode == ::googlesql::ResolvedCreateStatement::CREATE_OR_REPLACE) {
+    absl::Status dropped = storage.DropTable(target);
+    if (!dropped.ok() && dropped.code() != absl::StatusCode::kNotFound) {
+      return dropped;
+    }
+  }
+  absl::Status created =
+      ApplyCreateMode(storage.CreateTable(target, bq_schema), create_mode);
+  if (!created.ok()) return created;
+  if (rows.empty()) return absl::OkStatus();
+  return storage.AppendRows(target, absl::MakeConstSpan(rows));
+}
+
 // --- CREATE TABLE AS SELECT handler ---------------------------------------
 // statementType: `CREATE_TABLE_AS_SELECT`. Materializes source tables in an
 // in-memory DuckDB connection, executes the CTAS SQL, then persists rows in
@@ -181,6 +225,21 @@ absl::Status RunCreateTableAsSelect(
       ColumnDefinitionListToTableSchema(stmt->column_definition_list());
   if (!bq_schema.ok()) return bq_schema.status();
 
+  absl::StatusOr<std::string> ctas_sql = BuildDuckdbCtasSql(
+      request.sql, stmt, *target, *bq_schema, request.parameters);
+  if (!ctas_sql.ok() &&
+      ctas_sql.status().code() == absl::StatusCode::kUnimplemented) {
+    // The transpiler has no DuckDB lowering for this query shape; run it on
+    // the semantic executor instead. The query runs before any CREATE OR
+    // REPLACE drop, so a query that reads its own target sees the old rows.
+    absl::StatusOr<std::vector<storage::Row>> rows =
+        MaterializeCtasRowsSemantic(request, stmt);
+    if (!rows.ok()) return rows.status();
+    return PersistCtasRows(
+        storage, *target, *bq_schema, stmt->create_mode(), *std::move(rows));
+  }
+  if (!ctas_sql.ok()) return ctas_sql.status();
+
   TableScanCollector collector;
   absl::Status visit_status = root_stmt->Accept(&collector);
   if (!visit_status.ok()) return visit_status;
@@ -204,10 +263,6 @@ absl::Status RunCreateTableAsSelect(
       return dropped;
     }
   }
-
-  absl::StatusOr<std::string> ctas_sql = BuildDuckdbCtasSql(
-      request.sql, stmt, *target, *bq_schema, request.parameters);
-  if (!ctas_sql.ok()) return ctas_sql.status();
 
   ::duckdb_result ctas_result;
   if (::duckdb_query(conn, ctas_sql->c_str(), &ctas_result) !=
@@ -237,11 +292,11 @@ absl::Status RunCreateTableAsSelect(
     (void)storage.DropTable(*target);
   }
 
-  absl::Status created = ApplyCreateMode(
-      storage.CreateTable(*target, *bq_schema), stmt->create_mode());
-  if (!created.ok()) return created;
-  if (after_rows->empty()) return absl::OkStatus();
-  return storage.AppendRows(*target, absl::MakeConstSpan(*after_rows));
+  return PersistCtasRows(storage,
+                         *target,
+                         *bq_schema,
+                         stmt->create_mode(),
+                         *std::move(after_rows));
 }
 
 }  // namespace internal

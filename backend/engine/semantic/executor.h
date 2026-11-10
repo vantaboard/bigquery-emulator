@@ -16,6 +16,7 @@
 // `DuckDbExecutor` through a `RowSource` adapter.
 
 #include <memory>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -27,7 +28,9 @@
 
 namespace googlesql {
 class Catalog;
+class ResolvedOutputColumn;
 class ResolvedQueryStmt;
+class ResolvedScan;
 class ResolvedStatement;
 }  // namespace googlesql
 
@@ -45,6 +48,23 @@ ExecuteResolvedQueryStmt(const QueryRequest& request,
                          const FrameStack* script_variables = nullptr,
                          const ::googlesql::SystemVariableValuesMap*
                              script_system_variables = nullptr);
+
+// The output columns of a query-shaped statement, as
+// `ResolvedQueryStmt::output_column_list()` and
+// `ResolvedCreateTableAsSelectStmt::output_column_list()` return them.
+using OutputColumnList =
+    std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>>;
+
+// Execute a resolved query scan and project `output_columns` from it.
+// `ExecuteResolvedQueryStmt` is this over a SELECT; CTAS uses it to
+// materialize a query the DuckDB transpiler cannot lower.
+[[nodiscard]] absl::StatusOr<std::unique_ptr<RowSource>> ExecuteResolvedQuery(
+    const QueryRequest& request,
+    const ::googlesql::ResolvedScan& query_scan,
+    const OutputColumnList& output_columns,
+    const FrameStack* script_variables = nullptr,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables =
+        nullptr);
 
 // `SemanticExecutor` implements `coordinator::Executor` and so
 // installs cleanly into the coordinator's per-route dispatch
