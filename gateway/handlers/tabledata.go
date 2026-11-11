@@ -360,11 +360,16 @@ func parseTableDataListParams(
 			out.selectedFields = append(out.selectedFields, part)
 		}
 	}
+	out.useInt64Timestamp = useInt64TimestampParam(q)
+	return out, true
+}
+
+func useInt64TimestampParam(q url.Values) bool {
 	switch strings.ToLower(strings.TrimSpace(q.Get("formatOptions.useInt64Timestamp"))) {
 	case "1", "true", "t", "yes":
-		out.useInt64Timestamp = true
+		return true
 	}
-	return out, true
+	return false
 }
 
 func tableDataListPaging(w http.ResponseWriter, q url.Values) (startIndex, maxResults int64, ok bool) {

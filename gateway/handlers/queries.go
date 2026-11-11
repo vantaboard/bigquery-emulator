@@ -303,6 +303,9 @@ func runQueryExecute(deps Dependencies, w http.ResponseWriter, r *http.Request,
 		visibleRoute = emulatorRoute
 		visiblePhases = emulatorPhases
 	}
+	if !req.UseInt64Timestamp() {
+		rows = bqtypes.TimestampsToSeconds(rows, restSchema)
+	}
 	out := assembleQueryResponse(
 		job, restSchema, rows, dmlStats, restDmlStats, statementType,
 		visibleRoute, visiblePhases, ddlTarget, sessionInfo)
@@ -441,7 +444,7 @@ func streamQueryResults(w http.ResponseWriter, stream enginepb.Query_ExecuteQuer
 			}
 			continue
 		}
-		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema))
+		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema, bqtypes.WireFormatOptions{UseInt64Timestamp: true}))
 	}
 	return schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, true
 }
@@ -602,6 +605,9 @@ func QueryGetResults(deps Dependencies) http.HandlerFunc {
 func assembleGetQueryResultsResponse(r *http.Request, job *jobs.Job) bqtypes.QueryResponse {
 	schema, allRows, dmlStats, statementType, emulatorRoute, emulatorPhases, ddlTargetRoutine := queryResultFields(job)
 	pageRows, pageToken := paginateResults(allRows, r.URL.Query())
+	if !useInt64TimestampParam(r.URL.Query()) {
+		pageRows = bqtypes.TimestampsToSeconds(pageRows, schema)
+	}
 	jobRef := job.JobReference
 	out := bqtypes.QueryResponse{
 		Kind:                getQueryResultsKind,

@@ -485,8 +485,12 @@ func runQueryScriptExecute(
 	sessionInfo := sessionStore(&deps).Resolve(
 		projectID, req.Location, req.CreateSession, req.ConnProperties)
 	stampJobSessionInfo(parent, sessionInfo)
+	rows := out.finalRows
+	if !req.UseInt64Timestamp() {
+		rows = bqtypes.TimestampsToSeconds(rows, restSchema)
+	}
 	outResp := assembleQueryResponse(
-		parent, restSchema, out.finalRows, nil, nil,
+		parent, restSchema, rows, nil, nil,
 		out.finalStmtType, visibleRoute, nil, nil, sessionInfo)
 	writeJSON(w, http.StatusOK, outResp)
 }

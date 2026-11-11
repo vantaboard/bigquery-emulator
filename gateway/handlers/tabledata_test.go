@@ -462,22 +462,7 @@ func TestTableDataListUseInt64Timestamp(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	const wantMicros int64 = 1577836800000000
-	switch v := out.Rows[0].F[0].V.(type) {
-	case int64:
-		if v != wantMicros {
-			t.Fatalf("timestamp micros = %d, want %d", v, wantMicros)
-		}
-	case float64:
-		if int64(v) != wantMicros {
-			t.Fatalf("timestamp micros = %v, want %d", v, wantMicros)
-		}
-	case json.Number:
-		n, _ := v.Int64()
-		if n != wantMicros {
-			t.Fatalf("timestamp micros = %d, want %d", n, wantMicros)
-		}
-	default:
-		t.Fatalf("timestamp v type = %T (%v)", out.Rows[0].F[0].V, out.Rows[0].F[0].V)
+	if got := out.Rows[0].F[0].V; got != "1577836800000000" {
+		t.Fatalf("timestamp = %#v, want the int64 microseconds as a string", got)
 	}
 }

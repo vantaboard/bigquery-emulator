@@ -174,3 +174,11 @@ type ConnectionProperty struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
+
+// UseInt64Timestamp reports whether the request's
+// `formatOptions.useInt64Timestamp` asks for TIMESTAMP values as int64
+// microseconds instead of BigQuery's default decimal seconds.
+func (r *QueryRequest) UseInt64Timestamp() bool {
+	v, _ := r.FormatOptions["useInt64Timestamp"].(bool)
+	return v
+}

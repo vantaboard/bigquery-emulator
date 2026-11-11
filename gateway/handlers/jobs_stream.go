@@ -65,7 +65,7 @@ func drainSyncStream(stream enginepb.Query_ExecuteQueryClient) (
 			}
 			continue
 		}
-		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema))
+		rows = append(rows, bqtypes.CellsToRowForSchema(msg.GetCells(), schema, bqtypes.WireFormatOptions{UseInt64Timestamp: true}))
 	}
 	return schema, dmlStats, rows, statementType, emulatorRoute, emulatorPhases, nil
 }
