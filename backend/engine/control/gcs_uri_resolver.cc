@@ -163,6 +163,38 @@ absl::StatusOr<std::string> MaterializeGCSObjectToCache(
   return cache;
 }
 
+absl::StatusOr<std::string> ExportShardUri(absl::string_view uri) {
+  const size_t star = uri.find('*');
+  if (star == absl::string_view::npos) return std::string(uri);
+  if (uri.find('*', star + 1) != absl::string_view::npos) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "EXPORT DATA uri may contain only one '*' wildcard; got '", uri, "'"));
+  }
+  return absl::StrCat(
+      uri.substr(0, star), "000000000000", uri.substr(star + 1));
+}
+
+absl::StatusOr<std::string> PrepareGCSExportCachePath(
+    absl::string_view gs_uri, absl::string_view data_dir) {
+  if (data_dir.empty()) {
+    return absl::InvalidArgumentError(
+        "control op executor: data_dir is required to export to gs:// URIs");
+  }
+  absl::StatusOr<GCSObjectParts> parts = ParseGsUri(gs_uri);
+  if (!parts.ok()) return parts.status();
+  const std::string cache = GcsCachePath(data_dir, *parts);
+  std::error_code ec;
+  fs::create_directories(fs::path(cache).parent_path(), ec);
+  if (ec) {
+    return absl::InternalError(absl::StrCat(
+        "control op executor: could not create export staging directory for ",
+        gs_uri,
+        ": ",
+        ec.message()));
+  }
+  return cache;
+}
+
 absl::Status UploadGCSObjectFromFile(absl::string_view gs_uri,
                                      absl::string_view local_path,
                                      absl::string_view content_type) {

@@ -8,6 +8,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
@@ -97,9 +98,28 @@ absl::Status RunExportData(storage::Storage& storage,
   absl::StatusOr<std::string> uri_or =
       FindOptionString(stmt->option_list(), "uri");
   if (!uri_or.ok()) return uri_or.status();
-  absl::StatusOr<std::string> path_or =
-      LocalPathFromUri(*uri_or, storage.data_dir());
-  if (!path_or.ok()) return path_or.status();
+  // A gs:// destination is written to a staging file under the GCS cache
+  // and uploaded afterwards. Resolving it with `LocalPathFromUri` would try
+  // to download the destination object, which does not exist yet.
+  const bool export_to_gcs = absl::StartsWith(*uri_or, "gs://");
+  std::string dest_uri = *uri_or;
+  std::string cache_path;
+  std::string write_path;
+  if (export_to_gcs) {
+    absl::StatusOr<std::string> shard_uri = ExportShardUri(*uri_or);
+    if (!shard_uri.ok()) return shard_uri.status();
+    dest_uri = *std::move(shard_uri);
+    absl::StatusOr<std::string> cache_or =
+        PrepareGCSExportCachePath(dest_uri, storage.data_dir());
+    if (!cache_or.ok()) return cache_or.status();
+    cache_path = *std::move(cache_or);
+    write_path = absl::StrCat(cache_path, ".export.tmp");
+  } else {
+    absl::StatusOr<std::string> path_or =
+        LocalPathFromUri(*uri_or, storage.data_dir());
+    if (!path_or.ok()) return path_or.status();
+    write_path = *std::move(path_or);
+  }
 
   std::string format = "CSV";
   if (auto fmt = FindOptionString(stmt->option_list(), "format"); fmt.ok()) {
@@ -144,12 +164,6 @@ absl::Status RunExportData(storage::Storage& storage,
     return attach;
   }
 
-  auto export_to_gcs = absl::StartsWith(*uri_or, "gs://");
-  std::string write_path = *path_or;
-  if (export_to_gcs) {
-    write_path = absl::StrCat(*path_or, ".export.tmp");
-  }
-
   absl::StatusOr<std::string> copy_sql =
       BuildCopyToSql(select_sql, write_path, format);
   if (!copy_sql.ok()) {
@@ -165,17 +179,21 @@ absl::Status RunExportData(storage::Storage& storage,
   if (!export_to_gcs) {
     return absl::OkStatus();
   }
+  const std::string upper_format = absl::AsciiStrToUpper(format);
   std::string content_type = "text/csv";
-  if (format == "JSON" || format == "NEWLINE_DELIMITED_JSON") {
+  if (upper_format == "JSON" || upper_format == "NEWLINE_DELIMITED_JSON") {
     content_type = "application/json";
-  } else if (format == "PARQUET") {
+  } else if (upper_format == "PARQUET") {
     content_type = "application/octet-stream";
   }
   absl::Status uploaded =
-      UploadGCSObjectFromFile(*uri_or, write_path, content_type);
-  if (!uploaded.ok()) return uploaded;
+      UploadGCSObjectFromFile(dest_uri, write_path, content_type);
   std::error_code ec;
   std::filesystem::remove(write_path, ec);
+  if (!uploaded.ok()) return uploaded;
+  // Drop any cached copy of an earlier object at this name so a later
+  // LOAD DATA / external table read fetches the bytes just exported.
+  std::filesystem::remove(cache_path, ec);
   return absl::OkStatus();
 }
 
