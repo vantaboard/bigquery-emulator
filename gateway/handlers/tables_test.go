@@ -95,8 +95,10 @@ func TestTableInsertForwardsSchema(t *testing.T) {
 }
 
 // TestTableInsertMaterializedViewInfersSchema asserts a REST insert with
-// materializedView.query but no schema dry-runs the query and registers
-// the inferred output columns (QueryMaterializedViewIT posture).
+// materializedView.query but no schema dry-runs the query, reports the
+// inferred output columns (QueryMaterializedViewIT posture) and
+// registers the query through the CREATE OR REPLACE VIEW path, so
+// reads return the current rows of the base tables.
 func TestTableInsertMaterializedViewInfersSchema(t *testing.T) {
 	fakeCat := &fakeCatalogClient{}
 	fakeQuery := &fakeQueryClient{
@@ -110,6 +112,9 @@ func TestTableInsertMaterializedViewInfersSchema(t *testing.T) {
 					},
 				},
 			}, nil
+		},
+		executeQueryFn: func(_ context.Context, _ *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			return &fakeQueryResultStream{}, nil
 		},
 	}
 	body := `{
@@ -126,16 +131,24 @@ func TestTableInsertMaterializedViewInfersSchema(t *testing.T) {
 	if fakeQuery.lastDryRun == nil {
 		t.Fatal("Query.DryRun was not called for materialized view insert")
 	}
-	if fakeCat.lastRegisterTable == nil {
-		t.Fatal("Catalog.RegisterTable was not called")
+	if fakeQuery.lastExecuteQuery == nil {
+		t.Fatal("Query.ExecuteQuery was not called for materialized view insert")
 	}
-	schema := fakeCat.lastRegisterTable.GetSchema()
-	if schema == nil || len(schema.Fields) != 3 {
-		t.Fatalf("inferred schema not registered: %+v", schema)
+	gotSQL := fakeQuery.lastExecuteQuery.GetSql()
+	if !strings.Contains(strings.ToUpper(gotSQL), "CREATE OR REPLACE VIEW") ||
+		!strings.Contains(gotSQL, "SELECT 1 AS x") {
+		t.Errorf("ExecuteQuery SQL = %q, want a CREATE OR REPLACE VIEW of the query", gotSQL)
+	}
+	if fakeCat.lastRegisterTable != nil {
+		t.Fatal("Catalog.RegisterTable must not be called for a materialized view " +
+			"(an empty backing table would shadow the view on read)")
 	}
 	var got bqtypes.Table
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode body: %v", err)
+	}
+	if got.Schema == nil || len(got.Schema.Fields) != 3 {
+		t.Fatalf("inferred schema not reported: %+v", got.Schema)
 	}
 	if got.Type != "MATERIALIZED_VIEW" {
 		t.Errorf("type = %q, want MATERIALIZED_VIEW", got.Type)
