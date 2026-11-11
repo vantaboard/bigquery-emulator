@@ -29,6 +29,8 @@ func registerInsertedTable(
 		// silently returns zero rows. This is the REST-API analogue
 		// of the CREATE-VIEW-on-read fix.
 		return insertLogicalView(w, r, deps, projectID, datasetID, tableID, t.View.Query)
+	case t.MaterializedView != nil && t.MaterializedView.Query != "":
+		return insertLogicalView(w, r, deps, projectID, datasetID, tableID, t.MaterializedView.Query)
 	case t.ExternalDataConfiguration != nil:
 		return insertExternalTable(w, r, deps, projectID, datasetID, tableID, t)
 	default:
