@@ -3,7 +3,9 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "backend/engine/semantic/error.h"
 #include "backend/engine/semantic/scan_eval_internal.h"
 #include "backend/engine/semantic/value.h"
@@ -87,6 +89,15 @@ absl::StatusOr<std::vector<AggListRow>> CollectOrderedAggRows(
     const std::vector<ColumnBindings>& input_rows,
     bool ignore_nulls,
     const EvalContext& ctx) {
+  if (input_column_values.empty() ||
+      input_column_values[0].size() != input_rows.size()) {
+    return absl::InternalError(absl::StrCat(
+        "semantic: aggregate has ",
+        input_column_values.empty() ? 0 : input_column_values[0].size(),
+        " argument values for ",
+        input_rows.size(),
+        " input rows"));
+  }
   std::vector<AggListRow> rows;
   rows.reserve(input_rows.size());
   for (size_t r = 0; r < input_rows.size(); ++r) {
@@ -223,7 +234,9 @@ absl::StatusOr<Value> EvalArrayAgg(
   for (const AggListRow& row : rows) {
     elements.push_back(row.val);
   }
-  return Value::Array(arr_type, std::move(elements));
+  // `MakeArray` checks each element against the array's element type and
+  // returns an error; `Value::Array` would abort the whole engine.
+  return Value::MakeArray(arr_type, std::move(elements));
 }
 
 std::string StringifyAggValue(const Value& v) {

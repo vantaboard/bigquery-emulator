@@ -145,7 +145,23 @@ absl::StatusOr<Value> EvalAggregateForRows(
   if (agg_name == "$count_star") {
     return Value::Int64(static_cast<int64_t>(effective_rows.size()));
   }
-  return FinishAggregateFromArgColumns(agg, arg_columns, input_rows, ctx);
+  // `FinishAggregateFromArgColumns` reads `input_rows[i]` alongside
+  // `arg_columns[*][i]` (ARRAY_AGG / STRING_AGG ORDER BY keys, SQL UDAF
+  // bodies), so hand it this group's rows, not every input row: with more
+  // than one group the full list is longer than `arg_columns`.
+  bool every_row_in_order = effective_rows.size() == input_rows.size();
+  for (size_t i = 0; every_row_in_order && i < effective_rows.size(); ++i) {
+    every_row_in_order = effective_rows[i] == i;
+  }
+  if (every_row_in_order) {
+    return FinishAggregateFromArgColumns(agg, arg_columns, input_rows, ctx);
+  }
+  std::vector<ColumnBindings> group_rows;
+  group_rows.reserve(effective_rows.size());
+  for (size_t r : effective_rows) {
+    group_rows.push_back(input_rows[r]);
+  }
+  return FinishAggregateFromArgColumns(agg, arg_columns, group_rows, ctx);
 }
 
 absl::StatusOr<ColumnBindings> MaterializeAggregateGroup(
