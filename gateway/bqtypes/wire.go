@@ -2,6 +2,7 @@ package bqtypes
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -91,10 +92,11 @@ type WireFormatOptions struct {
 }
 
 // CellsToRowForSchema is like CellsToRow but re-encodes TIMESTAMP
-// values as decimal microsecond strings. google-cloud-bigquery's
-// query-result parser (`CELL_DATA_PARSER.timestamp_to_py`) expects
-// microseconds since Unix epoch, not the human-readable strings the
-// engine emits.
+// values as BigQuery's REST API does: decimal seconds since the Unix
+// epoch by default, and int64 microseconds as a string when
+// `formatOptions.useInt64Timestamp` is set. Clients parse TIMESTAMP
+// cells by the flag they sent: the Java client reads seconds unless it
+// asked for int64 values, and the Python client always asks for them.
 func CellsToRowForSchema(
 	cells []*enginepb.Cell,
 	schema *enginepb.TableSchema,
@@ -147,9 +149,10 @@ func encodeCellForField(cell Cell, field *enginepb.FieldSchema, format WireForma
 		}
 		if micros, err := TimestampStringToMicros(s); err == nil {
 			if format.UseInt64Timestamp {
-				if n, parseErr := strconv.ParseInt(micros, 10, 64); parseErr == nil {
-					return Cell{V: n}
-				}
+				return Cell{V: micros}
+			}
+			if seconds, secondsErr := MicrosToSeconds(micros); secondsErr == nil {
+				return Cell{V: seconds}
 			}
 			return Cell{V: micros}
 		}
@@ -236,4 +239,73 @@ func isDecimalIntString(s string) bool {
 		}
 	}
 	return true
+}
+
+// MicrosToSeconds turns int64 microseconds since the Unix epoch into
+// the decimal seconds BigQuery's REST API returns for a TIMESTAMP by
+// default, keeping every microsecond.
+func MicrosToSeconds(micros string) (string, error) {
+	n, err := strconv.ParseInt(micros, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	sign := ""
+	if n < 0 {
+		sign, n = "-", -n
+	}
+	return fmt.Sprintf("%s%d.%06d", sign, n/1_000_000, n%1_000_000), nil
+}
+
+// TimestampsToSeconds re-encodes the TIMESTAMP cells of rows that
+// CellsToRowForSchema encoded as int64 microseconds, also inside
+// REPEATED and RECORD fields, as decimal seconds. Query results keep
+// int64 values so each jobs.query and jobs.getQueryResults response
+// can honor its own `formatOptions.useInt64Timestamp`.
+func TimestampsToSeconds(rows []Row, schema *TableSchema) []Row {
+	if schema == nil {
+		return rows
+	}
+	out := make([]Row, len(rows))
+	for i, row := range rows {
+		out[i] = timestampsToSecondsRow(row, schema.Fields)
+	}
+	return out
+}
+
+func timestampsToSecondsRow(row Row, fields []TableFieldSchema) Row {
+	out := Row{F: make([]Cell, len(row.F))}
+	for i, cell := range row.F {
+		if i < len(fields) {
+			cell = timestampsToSecondsCell(cell, fields[i], fields[i].Mode == "REPEATED")
+		}
+		out.F[i] = cell
+	}
+	return out
+}
+
+func timestampsToSecondsCell(cell Cell, field TableFieldSchema, repeated bool) Cell {
+	if repeated {
+		elements, ok := cell.V.([]Cell)
+		if !ok {
+			return cell
+		}
+		out := make([]Cell, len(elements))
+		for i, element := range elements {
+			out[i] = timestampsToSecondsCell(element, field, false)
+		}
+		return Cell{V: out}
+	}
+	switch field.Type {
+	case "TIMESTAMP":
+		if micros, ok := cell.V.(string); ok {
+			if seconds, err := MicrosToSeconds(micros); err == nil {
+				return Cell{V: seconds}
+			}
+		}
+	case "RECORD", "STRUCT":
+		if row, ok := cell.V.(Row); ok {
+			return Cell{V: timestampsToSecondsRow(row, field.Fields)}
+		}
+	}
+	return cell
 }

@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"reflect"
-	"strconv"
 	"testing"
 
 	"github.com/vantaboard/bigquery-emulator/gateway/bqtypes"
@@ -337,14 +336,47 @@ func TestWireCellsToRowForSchemaTimestamp(t *testing.T) {
 	schema := &enginepb.TableSchema{
 		Fields: []*enginepb.FieldSchema{{Name: "ts", Type: typeKindTIMESTAMP}},
 	}
-	got := bqtypes.CellsToRowForSchema(
-		[]*enginepb.Cell{stringCell("2026-06-05 20:26:43.220623+00")},
-		schema,
-	)
-	if got.F[0].V == "2026-06-05 20:26:43.220623+00" {
-		t.Fatalf("TIMESTAMP not converted to micros: %#v", got.F[0])
+	cells := []*enginepb.Cell{stringCell("2026-06-05 20:26:43.220623+00")}
+
+	if got := bqtypes.CellsToRowForSchema(cells, schema); got.F[0].V != "1780691203.220623" {
+		t.Fatalf("default TIMESTAMP = %#v, want decimal seconds", got.F[0])
 	}
-	if _, err := strconv.ParseInt(got.F[0].V.(string), 10, 64); err != nil {
-		t.Fatalf("TIMESTAMP micros not decimal int string: %#v", got.F[0])
+
+	int64Format := bqtypes.WireFormatOptions{UseInt64Timestamp: true}
+	if got := bqtypes.CellsToRowForSchema(cells, schema, int64Format); got.F[0].V != "1780691203220623" {
+		t.Fatalf("useInt64Timestamp TIMESTAMP = %#v, want int64 microseconds as a string", got.F[0])
+	}
+}
+
+func TestWireTimestampsToSeconds(t *testing.T) {
+	t.Parallel()
+	schema := &bqtypes.TableSchema{Fields: []bqtypes.TableFieldSchema{
+		{Name: "ts", Type: "TIMESTAMP"},
+		{Name: "times", Type: "TIMESTAMP", Mode: "REPEATED"},
+		{Name: "event", Type: "RECORD", Fields: []bqtypes.TableFieldSchema{{Name: "at", Type: "TIMESTAMP"}}},
+		{Name: "id", Type: "STRING"},
+	}}
+	rows := []bqtypes.Row{{F: []bqtypes.Cell{
+		{V: "1780691203220623"},
+		{V: []bqtypes.Cell{{V: "-1500000"}, {V: "0"}}},
+		{V: bqtypes.Row{F: []bqtypes.Cell{{V: "1000001"}}}},
+		{V: "1780691203220623"},
+		{V: nil},
+	}}}
+
+	got := bqtypes.TimestampsToSeconds(rows, schema)[0].F
+
+	if got[0].V != "1780691203.220623" {
+		t.Fatalf("ts = %#v", got[0])
+	}
+	times := got[1].V.([]bqtypes.Cell)
+	if times[0].V != "-1.500000" || times[1].V != "0.000000" {
+		t.Fatalf("times = %#v", times)
+	}
+	if at := got[2].V.(bqtypes.Row).F[0].V; at != "1.000001" {
+		t.Fatalf("event.at = %#v", at)
+	}
+	if got[3].V != "1780691203220623" || got[4].V != nil {
+		t.Fatalf("non-TIMESTAMP cells changed: %#v %#v", got[3], got[4])
 	}
 }
