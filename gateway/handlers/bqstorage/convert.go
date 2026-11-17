@@ -92,12 +92,16 @@ func engineFieldToPublic(f *enginepb.FieldSchema) *storagepb.TableFieldSchema {
 	if f == nil {
 		return nil
 	}
-	return &storagepb.TableFieldSchema{
+	out := &storagepb.TableFieldSchema{
 		Name:        f.GetName(),
 		Type:        engineTypeToPublic(f.GetType()),
 		Mode:        engineModeToPublic(f.GetMode()),
 		Description: f.GetDescription(),
 	}
+	for _, sub := range f.GetFields() {
+		out.Fields = append(out.Fields, engineFieldToPublic(sub))
+	}
+	return out
 }
 
 func engineTypeToPublic(t string) storagepb.TableFieldSchema_Type {
