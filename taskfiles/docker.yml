@@ -154,5 +154,10 @@ tasks:
           echo "$response" | grep -q "\"jobComplete\":true"
           echo "$response" | grep -q "\"v\":\"1\""
 
+          # gs:// LOAD DATA / EXPORT DATA shell out to curl inside the
+          # container (backend/engine/control/gcs_uri_resolver.cc).
+          echo "[docker:smoke] runtime image ships curl"
+          docker compose exec -T bigquery-emulator curl --version >/dev/null
+
           echo "[docker:smoke] OK"
         '
