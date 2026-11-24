@@ -316,6 +316,17 @@ TEST_F(ControlOpExportDataTest, ExportWildcardUploadsTheFirstShard) {
   EXPECT_EQ(reqs[0].body.substr(reqs[0].body.size() - 4), "PAR1");
 }
 
+TEST_F(ControlOpExportDataTest, ExportKeepsTheSelectListOrderAndAliases) {
+  absl::Status s = RunDdl(
+      "EXPORT DATA OPTIONS(uri='gs://exports/people/renamed.csv', "
+      "format='CSV') AS SELECT name AS who, id FROM ds.people ORDER BY id");
+  ASSERT_TRUE(s.ok()) << s;
+
+  std::vector<RecordedRequest> reqs = server_.requests();
+  ASSERT_EQ(reqs.size(), 1u);
+  EXPECT_EQ(reqs[0].body, "who,id\nada,1\nlinus,2\n");
+}
+
 }  // namespace
 }  // namespace control
 }  // namespace engine

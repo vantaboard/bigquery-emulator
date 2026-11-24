@@ -127,7 +127,7 @@ absl::Status RunExportData(storage::Storage& storage,
   }
 
   duckdb::transpiler::Transpiler transpiler;
-  std::string select_sql = transpiler.TranspileScan(stmt->query());
+  std::string select_sql = transpiler.EmitExportDataSelect(stmt);
   if (select_sql.empty()) {
     return absl::UnimplementedError(
         "control op executor: EXPORT DATA query did not transpile to DuckDB "
