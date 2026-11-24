@@ -48,6 +48,31 @@ func TestIsMultiStatementScriptDetectsSetScript(t *testing.T) {
 	}
 }
 
+func TestIsMultiStatementScriptDetectsTempFunctionScripts(t *testing.T) {
+	for _, sql := range []string{
+		`CREATE TEMP FUNCTION f(x INT64) AS (x + 1); SELECT f(1) AS v`,
+		`CREATE TEMPORARY FUNCTION f(x INT64) AS (x + 1);
+WITH a AS (SELECT 1 AS x) SELECT f(x) AS v FROM a`,
+		`create temp function f(x INT64) AS (x + 1);
+CREATE TEMP FUNCTION g(x INT64) AS (f(x) * 2);
+EXPORT DATA OPTIONS (uri = 'gs://bucket/*.csv', format = 'CSV') AS SELECT g(1) AS v`,
+	} {
+		if !isMultiStatementScript(sql) {
+			t.Fatalf("expected a script: %s", sql)
+		}
+		if needsEngineScriptExecution(sql) {
+			t.Fatalf("expected the per-statement path: %s", sql)
+		}
+	}
+}
+
+func TestIsMultiStatementScriptKeepsASingleTempFunction(t *testing.T) {
+	const sql = `CREATE TEMP FUNCTION f(x INT64) AS (x + 1);`
+	if isMultiStatementScript(sql) {
+		t.Fatal("a lone CREATE TEMP FUNCTION must not be treated as a script")
+	}
+}
+
 func TestNeedsEngineScriptExecutionDetectsDeclare(t *testing.T) {
 	const sql = `DECLARE x INT64; SET x = 1; SELECT x;`
 	if !needsEngineScriptExecution(sql) {

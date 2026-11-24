@@ -55,6 +55,8 @@ func sqlForScriptDetection(sql string) string {
 
 var setKeywordRE = regexp.MustCompile(`(?i)\bSET\b`)
 
+var tempFunctionRE = regexp.MustCompile(`(?i)^CREATE\s+(TEMP|TEMPORARY)\s+FUNCTION\b`)
+
 var beginEndBlockRE = regexp.MustCompile(`(?is)^\s*BEGIN\s+(.*)\s+END\s*;?\s*$`)
 
 func unwrapBeginEndBlock(sql string) string {
@@ -68,6 +70,9 @@ func unwrapBeginEndBlock(sql string) string {
 func isMultiStatementScript(sql string) bool {
 	trimmed := strings.TrimSpace(sql)
 	upper := strings.ToUpper(sqlForScriptDetection(trimmed))
+	if tempFunctionRE.MatchString(upper) && len(splitScriptStatements(trimmed)) >= 2 {
+		return true
+	}
 	// DDL setup statements (CREATE PROCEDURE bodies embed BEGIN/SET) must
 	// not enter the script splitter.
 	if strings.HasPrefix(upper, "CREATE ") ||
