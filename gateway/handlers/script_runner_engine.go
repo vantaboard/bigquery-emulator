@@ -93,7 +93,8 @@ func registerReExecutedEngineScriptChild(
 	stampChildJobParent(child, parent.JobReference.JobID)
 	childStart := time.Now().UTC()
 	schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
-		ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy)
+		ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy,
+		cfg.Query.QueryParameters)
 	childEnd := time.Now().UTC()
 	if err != nil {
 		finalizeFailedJob(deps, child, childStart, err)
@@ -142,7 +143,8 @@ func runEngineScript(
 ) (*scriptExecOutcome, error) {
 	engineSQL := transformScriptDeclares(sql)
 	schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
-		ctx, deps, projectID, defaultDataset, engineSQL, useLegacy)
+		ctx, deps, projectID, defaultDataset, engineSQL, useLegacy,
+		cfg.Query.QueryParameters)
 	if err != nil {
 		return nil, err
 	}

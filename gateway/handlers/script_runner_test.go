@@ -1,8 +1,15 @@
 package handlers
 
 import (
+	"context"
+	"net/http"
 	"strings"
 	"testing"
+
+	"google.golang.org/grpc"
+
+	"github.com/vantaboard/bigquery-emulator/gateway/enginepb"
+	"github.com/vantaboard/bigquery-emulator/gateway/jobs"
 )
 
 func TestIsMultiStatementScriptBqutilsFromHexSetup(t *testing.T) {
@@ -195,5 +202,44 @@ func TestScriptNeedsGoogleSQLExecutorDetectsException(t *testing.T) {
 	const sql = `BEGIN SELECT 1; EXCEPTION WHEN ERROR THEN SELECT 1; END;`
 	if !scriptNeedsGoogleSQLExecutor(sql) {
 		t.Fatal("expected EXCEPTION script detection")
+	}
+}
+
+func TestQueryRunsTempFunctionScriptStatementByStatementWithParameters(t *testing.T) {
+	var requests []*enginepb.QueryRequest
+	fake := &fakeQueryClient{
+		executeQueryFn: func(_ context.Context, in *enginepb.QueryRequest) (grpc.ServerStreamingClient[enginepb.QueryResultRow], error) {
+			requests = append(requests, in)
+			return &fakeQueryResultStream{msgs: []*enginepb.QueryResultRow{
+				{Schema: &enginepb.TableSchema{
+					Fields: []*enginepb.FieldSchema{{Name: "v", Type: sqlTypeINT64}},
+				}},
+				{Cells: []*enginepb.Cell{
+					{Value: &enginepb.Cell_StringValue{StringValue: "3"}},
+				}},
+			}}, nil
+		},
+	}
+	deps := Dependencies{Query: fake, Jobs: jobs.NewRegistry()}
+	rec := runQueryWithDeps(t, testProjectID, deps, `{
+		"query": "CREATE TEMP FUNCTION f(x INT64) AS (x + 1); SELECT f(@inc) AS v",
+		"useLegacySql": false,
+		"queryParameters": [
+			{"name": "inc", "parameterType": {"type": "INT64"}, "parameterValue": {"value": "2"}}
+		]
+	}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if len(requests) != 2 {
+		t.Fatalf("engine requests = %d, want 2 (one per statement)", len(requests))
+	}
+	for i, prefix := range []string{"CREATE TEMP FUNCTION", "SELECT"} {
+		if !strings.HasPrefix(requests[i].GetSql(), prefix) {
+			t.Errorf("statement %d = %q, want prefix %q", i, requests[i].GetSql(), prefix)
+		}
+		if _, ok := requests[i].GetParameters()["inc"]; !ok {
+			t.Errorf("statement %d has no @inc parameter", i)
+		}
 	}
 }
