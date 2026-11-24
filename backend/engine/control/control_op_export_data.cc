@@ -102,13 +102,12 @@ absl::Status RunExportData(storage::Storage& storage,
   // and uploaded afterwards. Resolving it with `LocalPathFromUri` would try
   // to download the destination object, which does not exist yet.
   const bool export_to_gcs = absl::StartsWith(*uri_or, "gs://");
-  std::string dest_uri = *uri_or;
+  absl::StatusOr<std::string> shard_uri = ExportShardUri(*uri_or);
+  if (!shard_uri.ok()) return shard_uri.status();
+  const std::string dest_uri = *std::move(shard_uri);
   std::string cache_path;
   std::string write_path;
   if (export_to_gcs) {
-    absl::StatusOr<std::string> shard_uri = ExportShardUri(*uri_or);
-    if (!shard_uri.ok()) return shard_uri.status();
-    dest_uri = *std::move(shard_uri);
     absl::StatusOr<std::string> cache_or =
         PrepareGCSExportCachePath(dest_uri, storage.data_dir());
     if (!cache_or.ok()) return cache_or.status();
@@ -116,7 +115,7 @@ absl::Status RunExportData(storage::Storage& storage,
     write_path = absl::StrCat(cache_path, ".export.tmp");
   } else {
     absl::StatusOr<std::string> path_or =
-        LocalPathFromUri(*uri_or, storage.data_dir());
+        LocalPathFromUri(dest_uri, storage.data_dir());
     if (!path_or.ok()) return path_or.status();
     write_path = *std::move(path_or);
   }
