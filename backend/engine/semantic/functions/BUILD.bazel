@@ -258,6 +258,35 @@ cc_test(
 )
 
 cc_library(
+    name = "hll_plus_plus",
+    srcs = [
+        "hll_plus_plus.cc",
+        "hll_plus_plus_data.cc",
+    ],
+    hdrs = [
+        "hll_plus_plus.h",
+        "hll_plus_plus_data.h",
+    ],
+    deps = [
+        "@com_google_absl//absl/numeric:bits",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_test(
+    name = "hll_plus_plus_test",
+    srcs = ["hll_plus_plus_test.cc"],
+    deps = [
+        ":hll_plus_plus",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "hll_funcs",
     srcs = ["hll_funcs.cc"],
     hdrs = ["hll_funcs.h"],
