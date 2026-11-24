@@ -1,5 +1,9 @@
 // LocalCoordinatorEngine integration tests: semantic routing and pipe DDL.
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
@@ -431,6 +435,43 @@ AS
   ASSERT_TRUE(*has);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 123456);
+}
+
+TEST_F(LocalCoordinatorEngineTest,
+       SqlUdfSubqueryBodyBindsArgumentPerRowOverUnnest) {
+  CatalogBundle bundle = MakeCatalog();
+  const absl::Status ddl =
+      engine_->ExecuteDdl(MakeRequest(R"(CREATE FUNCTION g(id STRING) AS (
+  (SELECT h FROM (SELECT LOWER(id) AS h) WHERE REGEXP_CONTAINS(h, r'a'))
+))"),
+                          bundle.catalog.get());
+  ASSERT_TRUE(ddl.ok()) << ddl;
+  const std::vector<std::string> queries = {
+      "SELECT g(user_id) AS v FROM "
+      "(SELECT 'A' AS user_id UNION ALL SELECT 'B')",
+      "SELECT g(user_id) AS v FROM UNNEST(['A', 'B']) user_id",
+      "SELECT g(user_id) AS v FROM "
+      "UNNEST([STRUCT('A' AS user_id, 1 AS n), ('B', 2)])",
+  };
+  for (const std::string& sql : queries) {
+    SCOPED_TRACE(sql);
+    CatalogBundle query_bundle = MakeCatalog();
+    auto source =
+        engine_->ExecuteQuery(MakeRequest(sql), query_bundle.catalog.get());
+    ASSERT_TRUE(source.ok()) << source.status();
+    storage::Row row;
+    std::vector<std::string> got;
+    while (true) {
+      auto has = (*source)->Next(&row);
+      ASSERT_TRUE(has.ok()) << has.status();
+      if (!*has) break;
+      ASSERT_EQ(row.cells.size(), 1u);
+      got.push_back(row.cells[0].is_null() ? "NULL"
+                                           : row.cells[0].string_value());
+    }
+    std::sort(got.begin(), got.end());
+    EXPECT_EQ(got, (std::vector<std::string>{"NULL", "a"}));
+  }
 }
 
 }  // namespace

@@ -161,6 +161,8 @@ absl::StatusOr<Value> EvalSqlUdfBody(
   }
   EvalContext inner = ctx;
   inner.arguments = &arg_frames;
+  inner.columns = nullptr;
+  inner.columns_by_name = nullptr;
   auto result = EvalExpr(body, inner);
   if (!result.ok()) return result;
   // BigQuery translates NULL ARRAY values to empty ARRAY in query
