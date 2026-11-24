@@ -603,9 +603,10 @@ $array_at_offset: semantic_executor
 array_transform: unsupported
 array_filter: unsupported
 
-# HLL_COUNT.* uses a local sketch wire format (not byte-compatible
-# with cloud BigQuery); see `docs/ENGINE_POLICY.md`. Implemented in
-# `backend/engine/semantic/functions/hll_funcs.cc`.
+# HLL_COUNT.* builds BigQuery's own sketches (a port of zetasketch's
+# HyperLogLog++), byte-compatible with cloud BigQuery; see
+# `docs/ENGINE_POLICY.md`. Implemented in
+# `backend/engine/semantic/functions/hll_funcs.cc` and `hll_plus_plus.cc`.
 hll_count.init: semantic_executor
 hll_count.merge: semantic_executor
 hll_count.merge_partial: semantic_executor
