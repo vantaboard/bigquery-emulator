@@ -1145,8 +1145,8 @@ sibling `libduckdb.so` there with an `rpath` of `$ORIGIN`.
     `BIT_COUNT`, `KEYS.NEW_KEYSET`, GIS / GEOGRAPHY functions, and
     date-arithmetic edge cases (`DATE_ADD(d, INTERVAL 1 MONTH)` semantics
     on month-end) often have no DuckDB analog. `HLL_COUNT.*` and
-    `NET.*` are implemented on the semantic executor (local HLL sketch
-    wire format; see ENGINE_POLICY). The function-disposition table
+    `NET.*` are implemented on the semantic executor (HLL sketches are
+    byte-compatible with BigQuery; see ENGINE_POLICY). The function-disposition table
     records a routing disposition per entry; close-enough functions
     become `duckdb_udf`, BigQuery-exact ones become `semantic_executor`,
     and entire families (`docs/ENGINE_POLICY.md`) declare a policy of

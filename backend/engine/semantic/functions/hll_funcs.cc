@@ -5,6 +5,7 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -12,6 +13,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "backend/engine/semantic/error.h"
+#include "backend/engine/semantic/functions/hll_plus_plus.h"
 #include "googlesql/public/type.h"
 
 namespace bigquery_emulator {
@@ -21,19 +23,12 @@ namespace semantic {
 namespace functions {
 namespace {
 
-constexpr unsigned char kHllMagic[] = {0x12, 0xef, 0x7f};
 constexpr int64_t kMinPrecision = 10;
 constexpr int64_t kMaxPrecision = 24;
 constexpr uint64_t kHashK0 = 0xa5b85c5e198ed849ULL;
 constexpr uint64_t kHashK1 = 0x8d58ac26afe12e47ULL;
 constexpr uint64_t kHashK2 = 0xc47b6e9e3a970ed3ULL;
 constexpr uint64_t kHashK3 = 0xc6a4a7935bd1e995ULL;
-
-absl::Status InvalidSketch() {
-  return MakeSemanticError(
-      SemanticErrorReason::kInvalidArgument,
-      "HLL_COUNT sketch is not in a supported wire format");
-}
 
 inline uint64_t RotateRight(uint64_t x, int bits) {
   return (x >> bits) | (x << (64 - bits));
@@ -182,50 +177,18 @@ uint64_t Fingerprint2011(absl::string_view bytes) {
   return result;
 }
 
-void AppendBigEndian64(uint64_t value, std::string* out) {
-  for (int shift = 56; shift >= 0; shift -= 8) {
-    out->push_back(static_cast<char>((value >> shift) & 0xff));
+uint64_t HashInt64(int64_t value) {
+  std::string bytes(8, '\0');
+  for (int i = 0; i < 8; ++i) {
+    bytes[i] =
+        static_cast<char>((static_cast<uint64_t>(value) >> (8 * i)) & 0xff);
   }
+  return Fingerprint2011(bytes);
 }
 
-absl::StatusOr<std::vector<uint64_t>> ParseSketch(absl::string_view bytes) {
-  if (bytes.size() < 3) return InvalidSketch();
-  if (static_cast<unsigned char>(bytes[0]) != kHllMagic[0] ||
-      static_cast<unsigned char>(bytes[1]) != kHllMagic[1] ||
-      static_cast<unsigned char>(bytes[2]) != kHllMagic[2]) {
-    return InvalidSketch();
-  }
-  absl::string_view payload = bytes.substr(3);
-  if ((payload.size() % 8) != 0) return InvalidSketch();
-  std::vector<uint64_t> hashes;
-  hashes.reserve(payload.size() / 8);
-  for (size_t i = 0; i < payload.size(); i += 8) {
-    uint64_t value = 0;
-    for (size_t j = 0; j < 8; ++j) {
-      value = (value << 8) | static_cast<unsigned char>(payload[i + j]);
-    }
-    hashes.push_back(value);
-  }
-  return hashes;
-}
-
-std::string SerializeSketch(std::vector<uint64_t> hashes) {
-  std::sort(hashes.begin(), hashes.end());
-  hashes.erase(std::unique(hashes.begin(), hashes.end()), hashes.end());
-  std::string out;
-  out.reserve(3 + hashes.size() * 8);
-  out.push_back(static_cast<char>(kHllMagic[0]));
-  out.push_back(static_cast<char>(kHllMagic[1]));
-  out.push_back(static_cast<char>(kHllMagic[2]));
-  for (uint64_t hash : hashes) {
-    AppendBigEndian64(hash, &out);
-  }
-  return out;
-}
-
-absl::StatusOr<int64_t> ParseAndValidatePrecision(
+absl::StatusOr<int> ParseAndValidatePrecision(
     std::optional<int64_t> precision) {
-  if (!precision.has_value()) return int64_t{15};
+  if (!precision.has_value()) return 15;
   if (*precision < kMinPrecision || *precision > kMaxPrecision) {
     return MakeSemanticError(
         SemanticErrorReason::kInvalidArgument,
@@ -235,57 +198,69 @@ absl::StatusOr<int64_t> ParseAndValidatePrecision(
                      kMaxPrecision,
                      "]"));
   }
-  return *precision;
+  return static_cast<int>(*precision);
 }
 
-absl::StatusOr<uint64_t> HashInputValue(const Value& v) {
-  if (v.type_kind() == ::googlesql::TYPE_STRING) {
-    // BigQuery currently emits a compact HLL sketch encoding with hash values
-    // that differ from the public FarmFingerprint helper. Keep known vectors
-    // stable while using Fingerprint2011 as the general fallback.
-    if (v.string_value() == "customer_id_1") return 0x3a5f10e7efa35633ULL;
-    if (v.string_value() == "customer_id_2") return 0x4e58838db9a15440ULL;
-    if (v.string_value() == "customer_id_3") return 0x3fad55ad182406b9ULL;
-    return Fingerprint2011(v.string_value());
+absl::StatusOr<int> ValueType(const Value& v) {
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_INT64:
+      return hll_plus_plus::kValueTypeUint64;
+    case ::googlesql::TYPE_STRING:
+    case ::googlesql::TYPE_BYTES:
+      return hll_plus_plus::kValueTypeBytesOrUtf8String;
+    default:
+      return MakeSemanticError(
+          SemanticErrorReason::kNotImplemented,
+          "HLL_COUNT currently supports INT64, STRING and BYTES inputs");
   }
-  if (v.type_kind() == ::googlesql::TYPE_BYTES) {
-    return Fingerprint2011(v.bytes_value());
-  }
-  return MakeSemanticError(
-      SemanticErrorReason::kNotImplemented,
-      "HLL_COUNT currently supports STRING and BYTES inputs");
 }
 
-absl::StatusOr<Value> MergeAggregateImpl(
-    const std::vector<std::vector<Value>>& input_column_values, bool partial) {
+uint64_t HashInputValue(const Value& v) {
+  switch (v.type_kind()) {
+    case ::googlesql::TYPE_INT64:
+      return HashInt64(v.int64_value());
+    case ::googlesql::TYPE_STRING:
+      return Fingerprint2011(v.string_value());
+    default:
+      return Fingerprint2011(v.bytes_value());
+  }
+}
+
+absl::StatusOr<hll_plus_plus::Sketch> ParseSketch(const Value& v) {
+  if (v.type_kind() != ::googlesql::TYPE_BYTES) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             "HLL_COUNT sketches must be BYTES");
+  }
+  auto sketch = hll_plus_plus::Sketch::Parse(v.bytes_value());
+  if (!sketch.ok()) {
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             sketch.status().message());
+  }
+  return sketch;
+}
+
+absl::StatusOr<std::optional<hll_plus_plus::Sketch>> MergeSketches(
+    const std::vector<std::vector<Value>>& input_column_values,
+    absl::string_view function) {
   if (input_column_values.size() != 1) {
-    return MakeSemanticError(
-        SemanticErrorReason::kInvalidArgument,
-        partial ? "HLL_COUNT.MERGE_PARTIAL expects one argument"
-                : "HLL_COUNT.MERGE expects one argument");
+    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                             absl::StrCat(function, " expects one argument"));
   }
-  std::vector<uint64_t> union_hashes;
-  bool saw_non_null = false;
+  std::optional<hll_plus_plus::Sketch> merged;
   for (const Value& v : input_column_values[0]) {
     if (v.is_null()) continue;
-    saw_non_null = true;
-    if (v.type_kind() != ::googlesql::TYPE_BYTES) {
-      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                               "HLL_COUNT merge inputs must be BYTES");
+    auto sketch = ParseSketch(v);
+    if (!sketch.ok()) return sketch.status();
+    if (!merged.has_value()) {
+      merged = std::move(*sketch);
+      continue;
     }
-    auto hashes = ParseSketch(v.bytes_value());
-    if (!hashes.ok()) return hashes.status();
-    union_hashes.insert(union_hashes.end(), hashes->begin(), hashes->end());
+    if (absl::Status status = merged->Merge(*sketch); !status.ok()) {
+      return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                               status.message());
+    }
   }
-  if (!partial) {
-    if (!saw_non_null) return Value::Int64(0);
-    std::sort(union_hashes.begin(), union_hashes.end());
-    union_hashes.erase(std::unique(union_hashes.begin(), union_hashes.end()),
-                       union_hashes.end());
-    return Value::Int64(static_cast<int64_t>(union_hashes.size()));
-  }
-  if (!saw_non_null) return Value::NullBytes();
-  return Value::Bytes(SerializeSketch(std::move(union_hashes)));
+  return merged;
 }
 
 }  // namespace
@@ -317,28 +292,43 @@ absl::StatusOr<Value> HllCountInitValues(const std::vector<Value>& input_values,
                                          std::optional<int64_t> precision) {
   auto checked_precision = ParseAndValidatePrecision(precision);
   if (!checked_precision.ok()) return checked_precision.status();
-  (void)checked_precision;
-  std::vector<uint64_t> hashes;
-  bool saw_non_null = false;
+  std::optional<hll_plus_plus::Sketch> sketch;
   for (const Value& v : input_values) {
     if (v.is_null()) continue;
-    saw_non_null = true;
-    auto hash = HashInputValue(v);
-    if (!hash.ok()) return hash.status();
-    hashes.push_back(*hash);
+    if (!sketch.has_value()) {
+      auto value_type = ValueType(v);
+      if (!value_type.ok()) return value_type.status();
+      auto created = hll_plus_plus::Sketch::Create(
+          *checked_precision,
+          std::min(*checked_precision + 5,
+                   hll_plus_plus::kMaximumSparsePrecision),
+          *value_type);
+      if (!created.ok()) {
+        return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
+                                 created.status().message());
+      }
+      sketch = std::move(*created);
+    }
+    sketch->AddHash(HashInputValue(v));
   }
-  if (!saw_non_null) return Value::NullBytes();
-  return Value::Bytes(SerializeSketch(std::move(hashes)));
+  if (!sketch.has_value()) return Value::NullBytes();
+  return Value::Bytes(sketch->Serialize());
 }
 
 absl::StatusOr<Value> HllCountMergeAggregate(
     const std::vector<std::vector<Value>>& input_column_values) {
-  return MergeAggregateImpl(input_column_values, /*partial=*/false);
+  auto merged = MergeSketches(input_column_values, "HLL_COUNT.MERGE");
+  if (!merged.ok()) return merged.status();
+  if (!merged->has_value()) return Value::Int64(0);
+  return Value::Int64((*merged)->Estimate());
 }
 
 absl::StatusOr<Value> HllCountMergePartialAggregate(
     const std::vector<std::vector<Value>>& input_column_values) {
-  return MergeAggregateImpl(input_column_values, /*partial=*/true);
+  auto merged = MergeSketches(input_column_values, "HLL_COUNT.MERGE_PARTIAL");
+  if (!merged.ok()) return merged.status();
+  if (!merged->has_value()) return Value::NullBytes();
+  return Value::Bytes((*merged)->Serialize());
 }
 
 absl::StatusOr<Value> HllCountExtractScalar(const std::vector<Value>& args) {
@@ -347,15 +337,9 @@ absl::StatusOr<Value> HllCountExtractScalar(const std::vector<Value>& args) {
                              "HLL_COUNT.EXTRACT expects one argument");
   }
   if (args[0].is_null()) return Value::Int64(0);
-  if (args[0].type_kind() != ::googlesql::TYPE_BYTES) {
-    return MakeSemanticError(SemanticErrorReason::kInvalidArgument,
-                             "HLL_COUNT.EXTRACT expects BYTES");
-  }
-  auto hashes = ParseSketch(args[0].bytes_value());
-  if (!hashes.ok()) return hashes.status();
-  std::sort(hashes->begin(), hashes->end());
-  hashes->erase(std::unique(hashes->begin(), hashes->end()), hashes->end());
-  return Value::Int64(static_cast<int64_t>(hashes->size()));
+  auto sketch = ParseSketch(args[0]);
+  if (!sketch.ok()) return sketch.status();
+  return Value::Int64(sketch->Estimate());
 }
 
 }  // namespace functions

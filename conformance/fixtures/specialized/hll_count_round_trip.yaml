@@ -1,7 +1,7 @@
 # hll_count_round_trip: HLL_COUNT INIT / MERGE / EXTRACT vectors.
 #
-# Sketches use the emulator-local wire format in `hll_funcs.cc`
-# (not byte-compatible with cloud BigQuery). Vectors match
+# Sketches are BigQuery's HyperLogLog++ format (`hll_plus_plus.cc`, a
+# port of zetasketch), byte-compatible with cloud BigQuery. Vectors match
 # `hll_funcs_test.cc` and gateway e2e `hll_count.*` cases.
 name: specialized_hll_count_round_trip
 description: |

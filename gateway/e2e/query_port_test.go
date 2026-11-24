@@ -3383,9 +3383,9 @@ FROM
       ('UA', 'customer_id_2', 'invoice_id_24')])
 GROUP BY country`,
 			expectedRows: [][]any{
-				{"BR", "Eu9/P61VrRgkBrk="},
-				{"CZ", "Eu9/TliDjbmhVEA="},
-				{"UA", "Eu9/Ol8Q5++jVjNOWIONuaFUQA=="},
+				{"BR", "CHAQARgCIAuCBwsQARgKIA8yA4LhAQ=="},
+				{"CZ", "CHAQAhgCIAuCBwsQARgKIA8yA/nkAQ=="},
+				{"UA", "CHAQAhgCIAuCBw0QAhgKIA8yBfnkAc0I"},
 			},
 		},
 		{
@@ -3430,7 +3430,7 @@ FROM
           ('UA', 'customer_id_2', 'invoice_id_24')])
     GROUP BY country
   )`,
-			expectedRows: [][]any{{"Eu9/Ol8Q5++jVjM/rVWtGCQGuU5Yg425oVRA"}},
+			expectedRows: [][]any{{"CHAQBhgCIAuCBxAQAxgPIBQyCNCgOOp9pJMC"}},
 		},
 		{
 			name: "hll_count.extract",
