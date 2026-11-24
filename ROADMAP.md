@@ -577,9 +577,9 @@ public-facing policy.
   routing decisions.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
   SELECT`, `DROP TABLE`, `ALTER TABLE`, `CREATE
-  MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA` (local
-  `file://`; CSV, JSON, Parquet and Avro), and `LOAD DATA` (local
-  `file://`) are wired via
+  MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA`
+  (`file://` and `gs://`; CSV, JSON, Parquet and Avro), and `LOAD DATA`
+  (`file://` and `gs://`) are wired via
   `ControlOpExecutor`, which mutates `Storage` directly and emits a
   BigQuery-shaped envelope (`Job.statistics.query.statementType`
   populated per the BigQuery REST reference). The DuckDB SQL evaluator
@@ -597,8 +597,8 @@ public-facing policy.
   REST `datasets.undelete`.) Wildcard tables
   (`dataset.prefix_*`) resolve in the virtual catalog with
   `_TABLE_SUFFIX` filtering (`wildcard_table_suffix_filter.h`).
-  Cloud-storage `gs://` URIs for `EXPORT DATA` / `LOAD DATA` remain
-  unsupported today; see [External data sources](#external-data-sources).
+  Cloud-storage `gs://` URIs resolve through `gcs_uri_resolver.cc`; see
+  [External data sources](#external-data-sources).
 - ✅ Scripting / UDFs / TVFs routed to a local scripting executor
   — see `docs/ENGINE_POLICY.md`. `ASSERT <expr> [AS '<msg>']`
   lands on the new `backend/engine/semantic/script/` package and
