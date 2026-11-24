@@ -1,7 +1,9 @@
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -13,12 +15,16 @@
 #include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "backend/catalog/storage_table.h"
+#include "backend/engine/control/avro_writer.h"
 #include "backend/engine/control/control_op_internal.h"
 #include "backend/engine/control/control_op_options.h"
 #include "backend/engine/control/gcs_uri_resolver.h"
+#include "backend/engine/duckdb/arrow_to_bq.h"
 #include "backend/engine/duckdb/transpiler/transpiler.h"
 #include "backend/engine/duckdb/udf/registrar.h"
 #include "backend/engine/engine.h"
+#include "backend/schema/googlesql_to_bq.h"
+#include "backend/schema/schema.h"
 #include "backend/storage/storage.h"
 #include "duckdb.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
@@ -84,6 +90,74 @@ absl::Status AttachReferencedTables(
   return absl::OkStatus();
 }
 
+struct AvroExport {
+  schema::TableSchema columns;
+  AvroFileWriter::Options options;
+};
+
+absl::StatusOr<AvroExport> ParseAvroExport(
+    const ::googlesql::ResolvedExportDataStmt& stmt) {
+  AvroExport out;
+  if (auto c = FindOptionString(stmt.option_list(), "compression"); c.ok()) {
+    absl::StatusOr<AvroCodec> codec = ParseAvroCompression(*c);
+    if (!codec.ok()) return codec.status();
+    out.options.codec = *codec;
+  } else if (!absl::IsNotFound(c.status())) {
+    return c.status();
+  }
+  if (auto logical =
+          FindOptionBool(stmt.option_list(), "use_avro_logical_types");
+      logical.ok()) {
+    out.options.use_logical_types = *logical;
+  } else if (!absl::IsNotFound(logical.status())) {
+    return logical.status();
+  }
+  v1::TableSchema proto;
+  absl::Status reflected =
+      schema::OutputColumnListToTableSchema(stmt.output_column_list(), &proto);
+  if (!reflected.ok()) return reflected;
+  absl::StatusOr<schema::TableSchema> columns =
+      schema::TableSchemaFromProto(proto);
+  if (!columns.ok()) return columns.status();
+  out.columns = *std::move(columns);
+  return out;
+}
+
+absl::Status WriteAvroFromQuery(::duckdb_connection conn,
+                                const std::string& select_sql,
+                                const std::string& path,
+                                const AvroExport& avro) {
+  absl::StatusOr<std::unique_ptr<AvroFileWriter>> writer =
+      AvroFileWriter::Create(path, avro.columns, avro.options);
+  if (!writer.ok()) return writer.status();
+  ::duckdb_result result;
+  if (::duckdb_query(conn, select_sql.c_str(), &result) != ::DuckDBSuccess) {
+    const char* err = ::duckdb_result_error(&result);
+    absl::Status failed = absl::InternalError(
+        absl::StrCat("control op executor: EXPORT DATA query failed: ",
+                     select_sql,
+                     ": ",
+                     err == nullptr ? "" : err));
+    ::duckdb_destroy_result(&result);
+    return failed;
+  }
+  absl::Status status = absl::OkStatus();
+  while (status.ok()) {
+    ::duckdb_data_chunk chunk = ::duckdb_fetch_chunk(result);
+    if (chunk == nullptr) break;
+    const ::idx_t n = ::duckdb_data_chunk_get_size(chunk);
+    for (::idx_t i = 0; i < n && status.ok(); ++i) {
+      absl::StatusOr<storage::Row> row =
+          duckdb::arrow_to_bq::ChunkRowToCells(chunk, i, avro.columns);
+      status = row.ok() ? (*writer)->Write(*row) : row.status();
+    }
+    ::duckdb_destroy_data_chunk(&chunk);
+  }
+  ::duckdb_destroy_result(&result);
+  if (!status.ok()) return status;
+  return (*writer)->Finish();
+}
+
 }  // namespace
 
 absl::Status RunExportData(storage::Storage& storage,
@@ -125,6 +199,13 @@ absl::Status RunExportData(storage::Storage& storage,
     format = *fmt;
   }
 
+  std::optional<AvroExport> avro;
+  if (absl::AsciiStrToUpper(format) == "AVRO") {
+    absl::StatusOr<AvroExport> parsed = ParseAvroExport(*stmt);
+    if (!parsed.ok()) return parsed.status();
+    avro = *std::move(parsed);
+  }
+
   duckdb::transpiler::Transpiler transpiler;
   std::string select_sql = transpiler.EmitExportDataSelect(stmt);
   if (select_sql.empty()) {
@@ -163,15 +244,15 @@ absl::Status RunExportData(storage::Storage& storage,
     return attach;
   }
 
-  absl::StatusOr<std::string> copy_sql =
-      BuildCopyToSql(select_sql, write_path, format);
-  if (!copy_sql.ok()) {
-    ::duckdb_disconnect(&conn);
-    ::duckdb_close(&db);
-    return copy_sql.status();
+  absl::Status copied;
+  if (avro.has_value()) {
+    copied = WriteAvroFromQuery(conn, select_sql, write_path, *avro);
+  } else {
+    absl::StatusOr<std::string> copy_sql =
+        BuildCopyToSql(select_sql, write_path, format);
+    copied =
+        copy_sql.ok() ? RunSqlNoResult(conn, *copy_sql) : copy_sql.status();
   }
-
-  absl::Status copied = RunSqlNoResult(conn, *copy_sql);
   ::duckdb_disconnect(&conn);
   ::duckdb_close(&db);
   if (!copied.ok()) return copied;
@@ -182,7 +263,7 @@ absl::Status RunExportData(storage::Storage& storage,
   std::string content_type = "text/csv";
   if (upper_format == "JSON" || upper_format == "NEWLINE_DELIMITED_JSON") {
     content_type = "application/json";
-  } else if (upper_format == "PARQUET") {
+  } else if (upper_format == "PARQUET" || upper_format == "AVRO") {
     content_type = "application/octet-stream";
   }
   absl::Status uploaded =

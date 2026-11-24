@@ -26,6 +26,14 @@ absl::StatusOr<std::string> FindOptionString(
         options,
     absl::string_view name);
 
+// Finds the first option named `name` (case-insensitive) in `options`
+// and returns its BOOL literal value. NOT_FOUND when the option is
+// absent.
+absl::StatusOr<bool> FindOptionBool(
+    const std::vector<std::unique_ptr<const ::googlesql::ResolvedOption>>&
+        options,
+    absl::string_view name);
+
 // Extracts STRING elements from a resolved ARRAY literal expression.
 absl::StatusOr<std::vector<std::string>> ExtractStringArrayLiteral(
     const ::googlesql::ResolvedExpr* expr);

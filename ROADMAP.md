@@ -303,7 +303,9 @@ behind each, and the multi-strategy coordinator is the only
 - ✅ BigQuery DDL routed to the control-op executor: `CREATE TABLE`,
   `CREATE TABLE AS SELECT`, `DROP TABLE`, `ALTER TABLE`,
   `CREATE MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA`
-  (local `file://` writers), and `LOAD DATA` (local `file://` readers)
+  (local `file://` writers: CSV / JSON / Parquet via DuckDB `COPY`,
+  Avro via `avro_writer.cc` with null / deflate / snappy codecs), and
+  `LOAD DATA` (local `file://` readers)
   flow through `backend/engine/control/control_op_executor.{h,cc}` and
   mutate `Storage` directly (no longer through the DuckDB SQL evaluator).
   `CREATE VIEW` registers in the per-project view registry, and
@@ -576,7 +578,8 @@ public-facing policy.
 - ✅ DDL routed to control ops. `CREATE TABLE`, `CREATE TABLE AS
   SELECT`, `DROP TABLE`, `ALTER TABLE`, `CREATE
   MATERIALIZED VIEW` (full refresh at creation), `EXPORT DATA` (local
-  `file://`), and `LOAD DATA` (local `file://`) are wired via
+  `file://`; CSV, JSON, Parquet and Avro), and `LOAD DATA` (local
+  `file://`) are wired via
   `ControlOpExecutor`, which mutates `Storage` directly and emits a
   BigQuery-shaped envelope (`Job.statistics.query.statementType`
   populated per the BigQuery REST reference). The DuckDB SQL evaluator

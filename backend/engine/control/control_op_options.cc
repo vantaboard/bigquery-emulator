@@ -67,6 +67,30 @@ absl::StatusOr<std::string> FindOptionString(
       "control op executor: required option '", name, "' missing"));
 }
 
+absl::StatusOr<bool> FindOptionBool(
+    const std::vector<std::unique_ptr<const ::googlesql::ResolvedOption>>&
+        options,
+    absl::string_view name) {
+  for (const auto& opt : options) {
+    if (opt == nullptr) continue;
+    if (!absl::EqualsIgnoreCase(opt->name(), name)) continue;
+    const ::googlesql::ResolvedExpr* expr = opt->value();
+    if (expr != nullptr && expr->node_kind() == ::googlesql::RESOLVED_LITERAL) {
+      const ::googlesql::Value& v =
+          expr->GetAs<::googlesql::ResolvedLiteral>()->value();
+      if (!v.is_null() && v.type_kind() == ::googlesql::TYPE_BOOL) {
+        return v.bool_value();
+      }
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("control op executor: option '",
+                     opt->name(),
+                     "' must be a BOOL literal"));
+  }
+  return absl::NotFoundError(
+      absl::StrCat("control op executor: option '", name, "' missing"));
+}
+
 absl::StatusOr<std::vector<std::string>> ExtractStringArrayLiteral(
     const ::googlesql::ResolvedExpr* expr) {
   if (expr == nullptr) {
