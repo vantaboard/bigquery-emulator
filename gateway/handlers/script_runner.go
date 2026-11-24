@@ -55,6 +55,8 @@ func sqlForScriptDetection(sql string) string {
 
 var setKeywordRE = regexp.MustCompile(`(?i)\bSET\b`)
 
+var tempFunctionRE = regexp.MustCompile(`(?i)^CREATE\s+(TEMP|TEMPORARY)\s+FUNCTION\b`)
+
 var beginEndBlockRE = regexp.MustCompile(`(?is)^\s*BEGIN\s+(.*)\s+END\s*;?\s*$`)
 
 func unwrapBeginEndBlock(sql string) string {
@@ -68,6 +70,9 @@ func unwrapBeginEndBlock(sql string) string {
 func isMultiStatementScript(sql string) bool {
 	trimmed := strings.TrimSpace(sql)
 	upper := strings.ToUpper(sqlForScriptDetection(trimmed))
+	if tempFunctionRE.MatchString(upper) && len(splitScriptStatements(trimmed)) >= 2 {
+		return true
+	}
 	// DDL setup statements (CREATE PROCEDURE bodies embed BEGIN/SET) must
 	// not enter the script splitter.
 	if strings.HasPrefix(upper, "CREATE ") ||
@@ -223,8 +228,11 @@ func executeScriptStatement(
 	deps Dependencies,
 	projectID, defaultDataset, sql string,
 	useLegacy bool,
+	params []bqtypes.QueryParameter,
 ) (*enginepb.TableSchema, []bqtypes.Row, string, string, error) {
-	sql, err := query.PrepareEngineSQL(useLegacy, sql, projectID, defaultDataset)
+	expanded := expandQueryParamsInSQL(sql, params)
+	bindParams := stripExpandedArrayParams(sql, expanded, params)
+	sql, err := query.PrepareEngineSQL(useLegacy, expanded, projectID, defaultDataset)
 	if err != nil {
 		return nil, nil, "", "", err
 	}
@@ -233,6 +241,7 @@ func executeScriptStatement(
 		DefaultDatasetId: defaultDataset,
 		Sql:              sql,
 		UseLegacySql:     false,
+		Parameters:       parametersToEngineMap(bindParams),
 	}
 	stream, err := deps.Query.ExecuteQuery(ctx, engineReq)
 	if err != nil {
@@ -338,7 +347,8 @@ func runLegacySplitScript(
 			stampChildJobParent(child, parent.JobReference.JobID)
 			childStart := time.Now().UTC()
 			schema, rows, statementType, emulatorRoute, err := executeScriptStatement(
-				ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy)
+				ctx, deps, projectID, defaultDataset, stmtSQL, useLegacy,
+				cfg.Query.QueryParameters)
 			if err != nil {
 				return nil, err
 			}
@@ -459,7 +469,10 @@ func runQueryScriptExecute(
 	}}
 	cfg := &jobs.JobConfiguration{
 		JobType: jobConfigurationKindQuery,
-		Query:   &jobs.JobConfigurationQuery{Query: req.Query},
+		Query: &jobs.JobConfigurationQuery{
+			Query:           req.Query,
+			QueryParameters: req.Parameters,
+		},
 	}
 	parent := newPendingJob(deps, projectID, posted, cfg)
 
