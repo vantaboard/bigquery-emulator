@@ -397,7 +397,9 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
 absl::Status LocalCoordinatorEngine::ExecuteExportData(
     const QueryRequest& request,
     const ::googlesql::ResolvedExportDataStmt& stmt,
-    ::googlesql::Catalog* catalog) {
+    ::googlesql::Catalog* catalog,
+    const semantic::FrameStack* script_variables,
+    const ::googlesql::SystemVariableValuesMap* script_system_variables) {
   if (storage_ == nullptr || stmt.query() == nullptr) {
     return control_op_executor_.ExecuteDdl(request, stmt, catalog);
   }
@@ -409,7 +411,8 @@ absl::Status LocalCoordinatorEngine::ExecuteExportData(
   }
   return control::internal::RunExportDataFromRows(
       *storage_, stmt, [&]() -> absl::StatusOr<std::unique_ptr<RowSource>> {
-        return semantic_executor_.ExecuteQuery(request, **query_stmt, catalog);
+        return semantic::ExecuteResolvedQueryStmt(
+            request, **query_stmt, script_variables, script_system_variables);
       });
 }
 

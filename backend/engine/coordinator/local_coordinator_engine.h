@@ -90,16 +90,24 @@ class LocalCoordinatorEngine : public Engine {
   absl::Status ExecuteDdl(const QueryRequest& request,
                           ::googlesql::Catalog* catalog) override;
 
+  // Runs an already-analyzed EXPORT DATA statement. Queries that need the
+  // semantic executor run on it, resolving script identifiers from
+  // `script_variables` when it is set; every other query goes through the
+  // control-op executor.
+  absl::Status ExecuteExportData(
+      const QueryRequest& request,
+      const ::googlesql::ResolvedExportDataStmt& stmt,
+      ::googlesql::Catalog* catalog,
+      const semantic::FrameStack* script_variables = nullptr,
+      const ::googlesql::SystemVariableValuesMap* script_system_variables =
+          nullptr);
+
  private:
   // Pick the `Executor` the supplied resolved statement routes to.
   // Returns nullptr for the (theoretically unreachable) case where
   // the classifier reports an unknown disposition; callers map that
   // to INTERNAL.
   Executor* RouteFor(const ::googlesql::ResolvedStatement& stmt);
-
-  absl::Status ExecuteExportData(const QueryRequest& request,
-                                 const ::googlesql::ResolvedExportDataStmt& stmt,
-                                 ::googlesql::Catalog* catalog);
 
   RouteClassifier classifier_{};
   storage::Storage* storage_ = nullptr;  // not owned

@@ -232,6 +232,63 @@ TEST_F(LocalCoordinatorEngineExportDataTest, DuckDbQueryStillExportsCsv) {
             "id,name\n1,ada\n2,linus\n3,grace\n");
 }
 
+TEST_F(LocalCoordinatorEngineExportDataTest,
+       ScriptConstantReachesSemanticExport) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(absl::StrCat("CREATE CONSTANT min_id = 2;\n"
+                               "EXPORT DATA OPTIONS (uri = '",
+                               ExportUri("script.csv"),
+                               "', format = 'CSV') AS "
+                               "SELECT id, REVERSE(name) AS eman "
+                               "FROM ds.people WHERE id >= min_id "
+                               "ORDER BY id;")),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  EXPECT_EQ(ReadFile(ExportDir() / "script.csv"),
+            "id,eman\n2,sunil\n3,ecarg\n");
+}
+
+TEST_F(LocalCoordinatorEngineExportDataTest,
+       ControlFlowScriptVariableReachesSemanticExport) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(absl::StrCat("DECLARE n INT64 DEFAULT 2;\n"
+                               "IF n > 1 THEN\n"
+                               "  EXPORT DATA OPTIONS (uri = '",
+                               ExportUri("branch.csv"),
+                               "', format = 'CSV') AS "
+                               "SELECT id, REVERSE(name) AS eman "
+                               "FROM ds.people WHERE id <= n ORDER BY id;\n"
+                               "END IF;")),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  EXPECT_EQ(ReadFile(ExportDir() / "branch.csv"),
+            "id,eman\n1,ada\n2,sunil\n");
+}
+
+TEST_F(LocalCoordinatorEngineExportDataTest, ScriptDuckDbExportExportsCsv) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(absl::StrCat("DECLARE n INT64 DEFAULT 2;\n"
+                               "IF n > 1 THEN\n"
+                               "  EXPORT DATA OPTIONS (uri = '",
+                               ExportUri("duckdb.csv"),
+                               "', format = 'CSV') AS "
+                               "SELECT id, name FROM ds.people ORDER BY id;\n"
+                               "END IF;")),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  EXPECT_EQ(ReadFile(ExportDir() / "duckdb.csv"),
+            "id,name\n1,ada\n2,linus\n3,grace\n");
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

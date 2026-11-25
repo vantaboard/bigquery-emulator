@@ -162,6 +162,13 @@ absl::Status ExecuteOneScriptStatement(
       if (!result.ok()) return result.status();
       return absl::OkStatus();
     }
+    case ::googlesql::RESOLVED_EXPORT_DATA_STMT:
+      return engine.ExecuteExportData(
+          request,
+          *stmt.GetAs<::googlesql::ResolvedExportDataStmt>(),
+          catalog,
+          &driver.variables(),
+          script_system_variables);
     case ::googlesql::RESOLVED_EXECUTE_IMMEDIATE_STMT:
       return ExecuteExecuteImmediate(
           engine,
