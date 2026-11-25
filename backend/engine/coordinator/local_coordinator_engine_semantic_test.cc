@@ -195,6 +195,35 @@ TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   EXPECT_EQ(row.cells[0].int64_value(), 30);
 }
 
+TEST_F(LocalCoordinatorEngineTest, InUnnestArrayParameterFiltersTableRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  QueryRequest req = MakeRequest(
+      "SELECT id, name IN UNNEST(@names) AS listed FROM ds.people "
+      "WHERE name IN UNNEST(@names) OR name NOT IN UNNEST(@names) "
+      "ORDER BY id");
+  QueryParameter names;
+  names.name = "names";
+  names.type_kind = "ARRAY";
+  names.type_json = "STRING";
+  names.value_json = R"(["ada","grace"])";
+  req.parameters.push_back(names);
+  auto source = engine_->ExecuteQuery(req, bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  std::vector<std::pair<int64_t, bool>> got;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    got.emplace_back(row.cells[0].int64_value(), row.cells[1].bool_value());
+  }
+  EXPECT_EQ(got,
+            (std::vector<std::pair<int64_t, bool>>{
+                {1, true}, {2, false}, {3, true}}));
+}
+
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexFixtureUdf) {
   CatalogBundle bundle = MakeCatalog();
   const std::string sql = R"(/*
