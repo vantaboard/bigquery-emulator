@@ -253,6 +253,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Expressions ----------------------------------------------------
   virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);
   virtual std::string EmitParameter(const ::googlesql::ResolvedParameter* node);
+  virtual std::string EmitConstant(const ::googlesql::ResolvedConstant* node);
   virtual std::string EmitColumnRef(const ::googlesql::ResolvedColumnRef* node);
   virtual std::string EmitFunctionCall(
       const ::googlesql::ResolvedFunctionCall* node);

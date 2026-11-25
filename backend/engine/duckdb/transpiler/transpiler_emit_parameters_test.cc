@@ -1,6 +1,14 @@
+#include <memory>
+#include <string>
+
+#include "absl/status/status.h"
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/transpiler_test_fixture.h"
+#include "googlesql/public/constant.h"
+#include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/type.h"
 #include "googlesql/public/types/struct_type.h"
+#include "googlesql/public/value.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -248,6 +256,59 @@ TEST_F(TranspilerTest, EmitCastArrayThreadsThroughColumnRef) {
   // `$make_array` to DuckDB's bracket syntax.
   EXPECT_EQ(t.EmitCast(expr->GetAs<::googlesql::ResolvedCast>()),
             "CAST([\"id\"] AS VARCHAR[])");
+}
+
+namespace {
+
+class ValuelessConstant : public ::googlesql::Constant {
+ public:
+  explicit ValuelessConstant(const ::googlesql::Type* type)
+      : ::googlesql::Constant({"pending"}), type_(type) {}
+  const ::googlesql::Type* type() const override { return type_; }
+  std::string DebugString() const override { return "pending"; }
+  std::string ConstantValueDebugString() const override { return ""; }
+
+ private:
+  const ::googlesql::Type* type_;
+};
+
+std::string EmitConstantWithValue(const ::googlesql::Value& value) {
+  std::unique_ptr<::googlesql::SimpleConstant> constant;
+  absl::Status created =
+      ::googlesql::SimpleConstant::Create({"script_var"}, value, &constant);
+  EXPECT_TRUE(created.ok()) << created;
+  if (!created.ok()) return "<create failed>";
+  std::unique_ptr<::googlesql::ResolvedConstant> node =
+      ::googlesql::MakeResolvedConstant(constant->type(), constant.get());
+  TestTranspiler t;
+  return t.EmitConstant(node.get());
+}
+
+}  // namespace
+
+TEST_F(TranspilerTest, EmitConstantInlinesScalarValue) {
+  EXPECT_EQ(EmitConstantWithValue(::googlesql::Value::Int64(2)), "2");
+  EXPECT_EQ(EmitConstantWithValue(::googlesql::Value::String("it's")),
+            "'it''s'");
+  EXPECT_EQ(EmitConstantWithValue(::googlesql::Value::Date(19724)),
+            "CAST('2024-01-02' AS DATE)");
+}
+
+TEST_F(TranspilerTest, EmitConstantInlinesNullAndArray) {
+  EXPECT_EQ(EmitConstantWithValue(::googlesql::Value::NullInt64()), "NULL");
+  EXPECT_EQ(EmitConstantWithValue(::googlesql::Value::Array(
+                ::googlesql::types::StringArrayType(),
+                {::googlesql::Value::String("a"),
+                 ::googlesql::Value::String("b")})),
+            "['a', 'b']");
+}
+
+TEST_F(TranspilerTest, EmitConstantWithoutValueIsUnimplemented) {
+  ValuelessConstant constant(type_factory_->get_int64());
+  std::unique_ptr<::googlesql::ResolvedConstant> node =
+      ::googlesql::MakeResolvedConstant(constant.type(), &constant);
+  TestTranspiler t;
+  EXPECT_EQ(t.EmitConstant(node.get()), "");
 }
 
 }  // namespace transpiler

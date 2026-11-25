@@ -289,6 +289,25 @@ TEST_F(LocalCoordinatorEngineExportDataTest, ScriptDuckDbExportExportsCsv) {
             "id,name\n1,ada\n2,linus\n3,grace\n");
 }
 
+TEST_F(LocalCoordinatorEngineExportDataTest,
+       ScriptVariableReachesDuckDbExport) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest(absl::StrCat("CREATE CONSTANT min_id = 1;\n"
+                               "SET min_id = 2;\n"
+                               "EXPORT DATA OPTIONS (uri = '",
+                               ExportUri("variable.csv"),
+                               "', format = 'CSV') AS "
+                               "SELECT id, name FROM ds.people "
+                               "WHERE id >= min_id ORDER BY id;")),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+
+  EXPECT_EQ(ReadFile(ExportDir() / "variable.csv"),
+            "id,name\n2,linus\n3,grace\n");
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

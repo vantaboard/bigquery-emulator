@@ -6,6 +6,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -18,6 +20,7 @@
 #include "backend/engine/duckdb/transpiler/transpiler_internal.h"
 #include "backend/engine/duckdb/transpiler/types.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/constant.h"
 #include "googlesql/public/function.h"
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/sql_function.h"
@@ -86,6 +89,34 @@ std::string Transpiler::EmitParameter(
     return absl::StrCat("$", slot);
   }
   return "";
+}
+
+std::string Transpiler::EmitConstant(
+    const ::googlesql::ResolvedConstant* node) {
+  // Named constants are script variables. The coordinator keeps the
+  // catalog constant in step with the variable's current value before
+  // each statement is analyzed, so the value read here is the one the
+  // statement must see. A constant without a readable value, or with a
+  // value `EmitValueLiteral` cannot lower, surfaces UNIMPLEMENTED.
+  if (node == nullptr || node->constant() == nullptr) return "";
+  const ::googlesql::Constant* constant = node->constant();
+  absl::StatusOr<::googlesql::Value> value =
+      constant->HasValue()
+          ? constant->GetValue()
+          : absl::FailedPreconditionError("constant has no value");
+  if (!value.ok()) {
+    LOG(INFO) << "duckdb transpiler: constant '" << constant->FullName()
+              << "' has no value at transpile time (" << value.status()
+              << "); surfacing UNIMPLEMENTED";
+    return "";
+  }
+  std::string literal = internal::EmitValueLiteral(*value);
+  if (literal.empty()) {
+    LOG(INFO) << "duckdb transpiler: constant '" << constant->FullName()
+              << "' of type " << value->type()->DebugString()
+              << " has no DuckDB literal; surfacing UNIMPLEMENTED";
+  }
+  return literal;
 }
 
 int Transpiler::LookupOrAssignNamedParameter(absl::string_view name) {

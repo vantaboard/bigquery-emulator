@@ -76,6 +76,7 @@ std::string Transpiler::Transpile(const ::googlesql::ResolvedNode* node) {
       return EmitScan(node->GetAs<::googlesql::ResolvedScan>());
     case ::googlesql::RESOLVED_LITERAL:
     case ::googlesql::RESOLVED_PARAMETER:
+    case ::googlesql::RESOLVED_CONSTANT:
     case ::googlesql::RESOLVED_COLUMN_REF:
     case ::googlesql::RESOLVED_FUNCTION_CALL:
     case ::googlesql::RESOLVED_CAST:
@@ -97,6 +98,8 @@ std::string Transpiler::EmitExpr(const ::googlesql::ResolvedExpr* expr) {
       return EmitLiteral(expr->GetAs<::googlesql::ResolvedLiteral>());
     case ::googlesql::RESOLVED_PARAMETER:
       return EmitParameter(expr->GetAs<::googlesql::ResolvedParameter>());
+    case ::googlesql::RESOLVED_CONSTANT:
+      return EmitConstant(expr->GetAs<::googlesql::ResolvedConstant>());
     case ::googlesql::RESOLVED_COLUMN_REF:
       return EmitColumnRef(expr->GetAs<::googlesql::ResolvedColumnRef>());
     case ::googlesql::RESOLVED_FUNCTION_CALL:
