@@ -1,7 +1,13 @@
 // LocalCoordinatorEngine integration tests: semantic routing and pipe DDL.
 
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/types/span.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
 
@@ -431,6 +437,57 @@ AS
   ASSERT_TRUE(*has);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 123456);
+}
+
+TEST_F(LocalCoordinatorEngineTest, SemanticReadsStoredDateDatetimeAndTime) {
+  schema::TableSchema bq_schema;
+  for (const auto& [name, type] :
+       std::vector<std::pair<std::string, schema::ColumnType>>{
+           {"d", schema::ColumnType::kDate},
+           {"dt", schema::ColumnType::kDatetime},
+           {"t", schema::ColumnType::kTime},
+       }) {
+    schema::ColumnSchema column;
+    column.name = name;
+    column.type = type;
+    column.mode = schema::ColumnMode::kNullable;
+    bq_schema.columns.push_back(column);
+  }
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "moments"}, bq_schema).ok());
+  std::vector<storage::Row> rows(2);
+  rows[0].cells = {storage::Value::String("2024-01-01"),
+                   storage::Value::String("2024-01-01 00:00:00"),
+                   storage::Value::String("00:00:00")};
+  rows[1].cells = {storage::Value::String("2024-01-02"),
+                   storage::Value::String("2024-01-02 03:04:05"),
+                   storage::Value::String("01:02:03")};
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "moments"},
+                               absl::MakeConstSpan(rows))
+                  .ok());
+
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT FORMAT_DATE('%F', d), CAST(d AS STRING), "
+                  "CAST(dt AS STRING) FROM ds.moments "
+                  "WHERE d >= DATE '2024-01-02' "
+                  "AND dt >= DATETIME '2024-01-02 00:00:00' "
+                  "AND t >= TIME '01:00:00'"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 3u);
+  EXPECT_EQ(row.cells[0].string_value(), "2024-01-02");
+  EXPECT_EQ(row.cells[1].string_value(), "2024-01-02");
+  EXPECT_EQ(row.cells[2].string_value(), "2024-01-02 03:04:05");
+  has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  EXPECT_FALSE(*has);
 }
 
 }  // namespace
