@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -36,6 +37,7 @@
 #include "googlesql/public/options.pb.h"
 #include "googlesql/public/types/type_factory.h"
 #include "googlesql/resolved_ast/resolved_ast.h"
+#include "googlesql/resolved_ast/resolved_ast_deep_copy_visitor.h"
 #include "googlesql/resolved_ast/resolved_node_kind.pb.h"
 #include "proto/emulator.pb.h"
 
@@ -193,6 +195,24 @@ absl::Status ExecuteCreateViewTvfProcedureDdl(
       request.project_id, *create_proc, std::move(*reg_output));
   if (!registered.ok()) return registered;
   return catalog::PersistRoutineDdl(bq_catalog->storage(), request, *reg_stmt);
+}
+
+absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedQueryStmt>>
+ExportDataQueryStmt(const ::googlesql::ResolvedExportDataStmt& stmt) {
+  std::vector<std::unique_ptr<const ::googlesql::ResolvedOutputColumn>>
+      output_columns;
+  output_columns.reserve(stmt.output_column_list_size());
+  for (const auto& column : stmt.output_column_list()) {
+    absl::StatusOr<std::unique_ptr<::googlesql::ResolvedOutputColumn>> copied =
+        ::googlesql::ResolvedASTDeepCopyVisitor::Copy(column.get());
+    if (!copied.ok()) return copied.status();
+    output_columns.push_back(*std::move(copied));
+  }
+  absl::StatusOr<std::unique_ptr<::googlesql::ResolvedScan>> query =
+      ::googlesql::ResolvedASTDeepCopyVisitor::Copy(stmt.query());
+  if (!query.ok()) return query.status();
+  return ::googlesql::MakeResolvedQueryStmt(
+      std::move(output_columns), stmt.is_value_table(), *std::move(query));
 }
 
 }  // namespace
@@ -361,6 +381,10 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
                            driver,
                            catalog);
   }
+  if (stmt->node_kind() == ::googlesql::RESOLVED_EXPORT_DATA_STMT) {
+    return ExecuteExportData(
+        request, *stmt->GetAs<::googlesql::ResolvedExportDataStmt>(), catalog);
+  }
   Executor* executor = RouteFor(*stmt);
   if (executor == nullptr) {
     return absl::InternalError(
@@ -368,6 +392,25 @@ absl::Status LocalCoordinatorEngine::ExecuteDdl(const QueryRequest& request,
         "unknown disposition");
   }
   return executor->ExecuteDdl(request, *stmt, catalog);
+}
+
+absl::Status LocalCoordinatorEngine::ExecuteExportData(
+    const QueryRequest& request,
+    const ::googlesql::ResolvedExportDataStmt& stmt,
+    ::googlesql::Catalog* catalog) {
+  if (storage_ == nullptr || stmt.query() == nullptr) {
+    return control_op_executor_.ExecuteDdl(request, stmt, catalog);
+  }
+  absl::StatusOr<std::unique_ptr<const ::googlesql::ResolvedQueryStmt>>
+      query_stmt = ExportDataQueryStmt(stmt);
+  if (!query_stmt.ok()) return query_stmt.status();
+  if (RouteFor(**query_stmt) != &semantic_executor_) {
+    return control_op_executor_.ExecuteDdl(request, stmt, catalog);
+  }
+  return control::internal::RunExportDataFromRows(
+      *storage_, stmt, [&]() -> absl::StatusOr<std::unique_ptr<RowSource>> {
+        return semantic_executor_.ExecuteQuery(request, **query_stmt, catalog);
+      });
 }
 
 }  // namespace coordinator

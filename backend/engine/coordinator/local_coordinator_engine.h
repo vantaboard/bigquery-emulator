@@ -44,6 +44,10 @@
 #include "backend/storage/storage.h"
 #include "googlesql/public/analyzer.h"
 
+namespace googlesql {
+class ResolvedExportDataStmt;
+}  // namespace googlesql
+
 namespace bigquery_emulator {
 namespace backend {
 namespace engine {
@@ -92,6 +96,10 @@ class LocalCoordinatorEngine : public Engine {
   // the classifier reports an unknown disposition; callers map that
   // to INTERNAL.
   Executor* RouteFor(const ::googlesql::ResolvedStatement& stmt);
+
+  absl::Status ExecuteExportData(const QueryRequest& request,
+                                 const ::googlesql::ResolvedExportDataStmt& stmt,
+                                 ::googlesql::Catalog* catalog);
 
   RouteClassifier classifier_{};
   storage::Storage* storage_ = nullptr;  // not owned

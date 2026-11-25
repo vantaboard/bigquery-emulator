@@ -78,6 +78,7 @@ cc_library(
         "//backend/storage",
         "//proto:emulator_cc_proto",
         "//third_party/duckdb",
+        "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
