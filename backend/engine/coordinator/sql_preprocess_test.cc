@@ -267,6 +267,21 @@ TEST(SqlPreprocess, PreservesSingleQuotedStringLiterals) {
   EXPECT_EQ(sql, out);
 }
 
+TEST(SqlPreprocess, KeepsCommentMarkersInsideLiteralsAndLineComments) {
+  const std::string sql = R"sql(EXPORT DATA OPTIONS(uri = 'gs://bucket/path/*.avro') AS
+SELECT "*/" AS a, r'/*' AS b, '''/*''' AS c, `x/*y` -- don't /*
+FROM t # see /*
+)sql";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_EQ(sql, out);
+}
+
+TEST(SqlPreprocess, StripsBlockCommentsOutsideLiterals) {
+  const std::string sql = R"sql(SELECT /* 'a */ 'it\'s /* kept' /* "b */ AS x)sql";
+  const std::string out = PreprocessSqlForAnalyzer(sql);
+  EXPECT_EQ(R"sql(SELECT  'it\'s /* kept'  AS x)sql", out);
+}
+
 TEST(SqlPreprocess, RewritesStructInt64LiteralCastsInTTestQuery) {
   const std::string sql =
       "SELECT TO_JSON_STRING(STRUCT(CAST(2.8957935572829476 AS FLOAT64) AS "

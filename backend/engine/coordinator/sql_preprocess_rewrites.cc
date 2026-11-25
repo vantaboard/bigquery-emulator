@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <string>
@@ -15,24 +16,47 @@ namespace sql_preprocess_internal {
 
 namespace {
 
-// Removes /* ... */ block comments. License headers in bqutils fixtures
-// never embed */ inside the comment body, so a quote-unaware scan is safe
-// and avoids mis-parsing (the "License") / "AS IS" text in headers.
+// Returns the position after the quoted literal or identifier that starts at
+// `start`: '...', "...", their triple-quoted forms, or `...`.
+size_t QuotedEnd(absl::string_view sql, size_t start) {
+  const char quote = sql[start];
+  const size_t width =
+      quote != '`' && sql.substr(start, 3) == std::string(3, quote) ? 3 : 1;
+  const absl::string_view close = sql.substr(start, width);
+  for (size_t i = start + width; i < sql.size(); ++i) {
+    if (sql[i] == '\\') {
+      ++i;
+    } else if (sql.substr(i, width) == close) {
+      return i + width;
+    }
+  }
+  return sql.size();
+}
+
+// Removes /* ... */ block comments. String literals, quoted identifiers and
+// line comments are copied as they are, so a `/*` inside them (a
+// `gs://bucket/*.csv` URI, a `-- see /*` note) starts no comment. Quotes
+// inside a block comment open no literal, so license headers that quote
+// "License" and "AS IS" are removed whole.
 std::string StripBlockComments(absl::string_view sql) {
   std::string out;
   out.reserve(sql.size());
   for (size_t i = 0; i < sql.size();) {
-    if (i + 1 < sql.size() && sql[i] == '/' && sql[i + 1] == '*') {
-      i += 2;
-      while (i + 1 < sql.size() && !(sql[i] == '*' && sql[i + 1] == '/')) {
-        ++i;
-      }
-      if (i + 1 < sql.size()) {
-        i += 2;
-      }
+    const char c = sql[i];
+    const char next = i + 1 < sql.size() ? sql[i + 1] : '\0';
+    if (c == '/' && next == '*') {
+      const size_t close = sql.find("*/", i + 2);
+      i = close == absl::string_view::npos ? sql.size() : close + 2;
       continue;
     }
-    out.push_back(sql[i++]);
+    size_t end = i + 1;
+    if (c == '\'' || c == '"' || c == '`') {
+      end = QuotedEnd(sql, i);
+    } else if (c == '#' || (c == '-' && next == '-')) {
+      end = std::min(sql.find('\n', i), sql.size());
+    }
+    out.append(sql.substr(i, end - i));
+    i = end;
   }
   return out;
 }
