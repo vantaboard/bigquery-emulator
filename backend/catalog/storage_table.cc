@@ -19,6 +19,7 @@
 #include "googlesql/public/numeric_value.h"
 #include "googlesql/public/simple_catalog.h"
 #include "googlesql/public/type.h"
+#include "googlesql/public/type.pb.h"
 #include "googlesql/public/types/array_type.h"
 #include "googlesql/public/types/proto_type.h"
 #include "googlesql/public/types/struct_type.h"
@@ -101,6 +102,16 @@ absl::StatusOr<::googlesql::Value> ConvertStringTypedScalar(
   }
   if (type->kind() == ::googlesql::TYPE_TIMESTAMP) {
     auto parsed = engine::semantic::ParseTimestampWireString(string_value);
+    if (!parsed.ok()) {
+      return parsed.status();
+    }
+    return *parsed;
+  }
+  if (type->kind() == ::googlesql::TYPE_DATE ||
+      type->kind() == ::googlesql::TYPE_DATETIME ||
+      type->kind() == ::googlesql::TYPE_TIME) {
+    auto parsed = engine::semantic::ParseParameterValue(
+        string_value, ::googlesql::TypeKind_Name(type->kind()));
     if (!parsed.ok()) {
       return parsed.status();
     }

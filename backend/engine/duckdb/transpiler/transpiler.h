@@ -160,12 +160,14 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // CTAS and other control-op paths that already have a scan root.
   std::string TranspileScan(const ::googlesql::ResolvedScan* scan);
 
-  // Lower CTAS / INSERT ... SELECT inner queries with the same
-  // `query_output_column_names_` + outer projection path as
+  // Lower CTAS / INSERT ... SELECT / EXPORT DATA inner queries with
+  // the same `query_output_column_names_` + outer projection path as
   // `EmitQueryStmt`, keyed on the analyzer's output column lists.
   std::string EmitCtasSelect(
       const ::googlesql::ResolvedCreateTableAsSelectStmt* stmt);
   std::string EmitInsertSelect(const ::googlesql::ResolvedInsertStmt* stmt);
+  std::string EmitExportDataSelect(
+      const ::googlesql::ResolvedExportDataStmt* stmt);
 
   // Bind-order accumulator for the GoogleSQL parameters encountered
   // during the most recent traversal. Slot `i` (0-based) is the
@@ -251,6 +253,7 @@ class Transpiler : public ::googlesql::ResolvedASTVisitor {
   // Expressions ----------------------------------------------------
   virtual std::string EmitLiteral(const ::googlesql::ResolvedLiteral* node);
   virtual std::string EmitParameter(const ::googlesql::ResolvedParameter* node);
+  virtual std::string EmitConstant(const ::googlesql::ResolvedConstant* node);
   virtual std::string EmitColumnRef(const ::googlesql::ResolvedColumnRef* node);
   virtual std::string EmitFunctionCall(
       const ::googlesql::ResolvedFunctionCall* node);

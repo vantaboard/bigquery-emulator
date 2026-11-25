@@ -362,7 +362,7 @@ absl::StatusOr<std::vector<storage::Row>> ReadRowsFromIterator(
 
 absl::StatusOr<std::string> BuildInsertSqlForRows(
     absl::string_view table_name,
-    const catalog::StorageTable& table,
+    absl::string_view source_name,
     const schema::TableSchema& schema,
     absl::Span<const storage::Row> rows) {
   std::string insert_sql;
@@ -375,7 +375,7 @@ absl::StatusOr<std::string> BuildInsertSqlForRows(
                                                      "] has ",
                                                      rows[r].cells.size(),
                                                      " cells but table '",
-                                                     table.Name(),
+                                                     source_name,
                                                      "' has ",
                                                      ncols,
                                                      " columns"));
@@ -435,7 +435,7 @@ absl::Status AttachStorageTableAt(::duckdb_connection conn,
   if (rows.empty()) return absl::OkStatus();
 
   absl::StatusOr<std::string> insert_sql =
-      BuildInsertSqlForRows(table_name, table, schema, rows);
+      BuildInsertSqlForRows(table_name, table.Name(), schema, rows);
   if (!insert_sql.ok()) return insert_sql.status();
   return RunSqlNoResult(conn, *insert_sql);
 }

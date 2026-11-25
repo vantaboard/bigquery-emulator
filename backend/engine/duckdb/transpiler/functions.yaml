@@ -117,6 +117,10 @@ $between: semantic_executor
 # `IN (<subquery>)` resolve to different node shapes and keep their
 # existing routes.
 $in: duckdb_native duckdb_name=IN
+# `x IN UNNEST(arr)` (and `NOT ... IN UNNEST`, which wraps it in `$not`)
+# analyzes to `$in_array`. The transpiler has no lowering for it, so it
+# runs on the semantic executor.
+$in_array: semantic_executor
 $is_true: semantic_executor
 $is_not_true: semantic_executor
 $is_false: semantic_executor

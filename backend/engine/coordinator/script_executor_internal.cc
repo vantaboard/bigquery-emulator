@@ -4,13 +4,16 @@
 #include <string>
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/strip.h"
 #include "backend/catalog/googlesql_catalog.h"
 #include "backend/engine/semantic/frame_stack.h"
 #include "googlesql/public/catalog.h"
+#include "googlesql/public/constant.h"
 #include "googlesql/public/simple_catalog.h"
+#include "googlesql/public/value.h"
 
 namespace bigquery_emulator {
 namespace backend {
@@ -25,6 +28,13 @@ bool ScriptKeywordPresent(absl::string_view sql, absl::string_view keyword) {
     c = static_cast<char>(absl::ascii_toupper(static_cast<unsigned char>(c)));
   }
   return upper.find(keyword) != std::string::npos;
+}
+
+bool ConstantHoldsValue(const ::googlesql::Constant& constant,
+                        const ::googlesql::Value& value) {
+  if (!constant.HasValue()) return false;
+  absl::StatusOr<::googlesql::Value> current = constant.GetValue();
+  return current.ok() && current->Equals(value);
 }
 
 }  // namespace
@@ -72,13 +82,17 @@ absl::Status RegisterScriptVariablesOnCatalog(
     const semantic::FrameStack& variables,
     absl::flat_hash_set<std::string>* registered) {
   for (const auto& [name, value] : variables.VisibleBindings()) {
-    if (registered->contains(name)) continue;
     const ::googlesql::Constant* existing = nullptr;
     absl::Status found =
         catalog->FindConstant({name}, &existing, /*options=*/{});
     if (found.ok() && existing != nullptr) {
-      registered->insert(name);
-      continue;
+      if (ConstantHoldsValue(*existing, value) ||
+          catalog->RemoveConstants([existing](const ::googlesql::Constant* c) {
+            return c == existing;
+          }) == 0) {
+        registered->insert(name);
+        continue;
+      }
     }
     std::unique_ptr<::googlesql::SimpleConstant> constant;
     absl::Status created =

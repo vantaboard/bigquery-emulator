@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -73,6 +74,16 @@ class TableScanCollector : public ::googlesql::ResolvedASTVisitor {
 };
 
 absl::Status RunSqlNoResult(::duckdb_connection conn, absl::string_view sql);
+
+absl::Status CreateOrReplaceTable(::duckdb_connection conn,
+                                  absl::string_view table_name,
+                                  const schema::TableSchema& schema);
+
+absl::StatusOr<std::string> BuildInsertSqlForRows(
+    absl::string_view table_name,
+    absl::string_view source_name,
+    const schema::TableSchema& schema,
+    absl::Span<const storage::Row> rows);
 
 absl::Status AttachStorageTableAt(
     ::duckdb_connection conn,
@@ -151,6 +162,17 @@ absl::Status RunExportData(storage::Storage& storage,
                            const QueryRequest& request,
                            const ::googlesql::ResolvedExportDataStmt* stmt,
                            const ::googlesql::ResolvedStatement& root_stmt);
+
+/**
+ * Writes the rows `run_query` returns to the destination of `stmt`, with
+ * the same options, formats and gs:// upload as `RunExportData`. The
+ * destination and options are validated before `run_query` is called.
+ * Used for EXPORT DATA queries that do not lower to DuckDB SQL.
+ */
+absl::Status RunExportDataFromRows(
+    storage::Storage& storage,
+    const ::googlesql::ResolvedExportDataStmt& stmt,
+    absl::FunctionRef<absl::StatusOr<std::unique_ptr<RowSource>>()> run_query);
 
 absl::Status RunLoadData(storage::Storage& storage,
                          absl::string_view project_id,

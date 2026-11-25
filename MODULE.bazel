@@ -133,6 +133,11 @@ bazel_dep(name = "rules_cc", version = "0.2.8")
 # without going through GoogleSQL's transitive surface.
 bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
 
+# zlib — already a transitive dep of protobuf / gRPC. Listed directly
+# so the Avro writer behind `EXPORT DATA` can use raw deflate and
+# CRC32. Version matches the one the module graph already resolves.
+bazel_dep(name = "zlib", version = "1.3.1.bcr.3")
+
 # Bump Gazelle past the broken semver parser. Pinned googlesql ships
 # `gazelle = 0.45.0`, which crashes on Go pseudo-version timestamps
 # (e.g. `v0.0.0-20210717090340-…` -> "Numeric identifiers in semantic

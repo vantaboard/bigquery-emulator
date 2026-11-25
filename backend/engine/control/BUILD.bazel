@@ -13,6 +13,27 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "avro_writer",
+    srcs = [
+        "avro_encoding.cc",
+        "avro_writer.cc",
+    ],
+    hdrs = [
+        "avro_encoding.h",
+        "avro_writer.h",
+    ],
+    deps = [
+        "//backend/schema",
+        "//backend/storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@zlib",
+    ],
+)
+
+cc_library(
     name = "control_op_executor",
     srcs = [
         "control_op_alter_table.cc",
@@ -33,6 +54,7 @@ cc_library(
         "gcs_uri_resolver.h",
     ],
     deps = [
+        ":avro_writer",
         "//backend/catalog:create_function_util",
         "//backend/catalog:procedure_registry",
         "//backend/catalog:routine_persistence",
@@ -56,6 +78,7 @@ cc_library(
         "//backend/storage",
         "//proto:emulator_cc_proto",
         "//third_party/duckdb",
+        "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
@@ -115,6 +138,30 @@ cc_test(
 )
 
 cc_test(
+    name = "control_op_export_data_test",
+    srcs = ["control_op_export_data_test.cc"],
+    deps = [
+        ":control_op_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
+        "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_test(
     name = "control_op_executor_ctas_test",
     srcs = ["control_op_executor_ctas_test.cc"],
     deps = [
@@ -157,6 +204,41 @@ cc_test(
         "@googlesql//googlesql/public:analyzer_options",
         "@googlesql//googlesql/public:analyzer_output",
         "@googlesql//googlesql/public:catalog",
+        "@googlesql//googlesql/public:language_options",
+        "@googlesql//googlesql/public:options_cc_proto",
+        "@googlesql//googlesql/public:type",
+        "@googlesql//googlesql/resolved_ast",
+    ],
+)
+
+cc_library(
+    name = "avro_test_reader",
+    testonly = True,
+    hdrs = ["avro_test_reader.h"],
+    deps = [
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest",
+        "@zlib",
+    ],
+)
+
+cc_test(
+    name = "control_op_export_data_avro_test",
+    srcs = ["control_op_export_data_avro_test.cc"],
+    deps = [
+        ":avro_test_reader",
+        ":control_op_executor",
+        "//backend/catalog:googlesql_catalog",
+        "//backend/engine",
+        "//backend/schema",
+        "//backend/storage",
+        "//backend/storage/duckdb:duckdb_storage",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_googletest//:gtest_main",
+        "@googlesql//googlesql/public:analyzer",
+        "@googlesql//googlesql/public:analyzer_options",
+        "@googlesql//googlesql/public:analyzer_output",
         "@googlesql//googlesql/public:language_options",
         "@googlesql//googlesql/public:options_cc_proto",
         "@googlesql//googlesql/public:type",

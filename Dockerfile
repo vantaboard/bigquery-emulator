@@ -409,11 +409,16 @@ LABEL org.opencontainers.image.source="${SOURCE_REPO}" \
 #     the tzdata package?"). Pin TZ=Etc/UTC below so the container's
 #     own clock stays deterministic regardless of the host.
 #   * wget — used by the HEALTHCHECK directive below.
+#   * curl — the engine shells out to it for gs:// URIs
+#     (`backend/engine/control/gcs_uri_resolver.cc`): downloads for
+#     LOAD DATA / external tables and uploads for EXPORT DATA, against
+#     `STORAGE_EMULATOR_HOST`. Without it those statements fail with
+#     "command not found" (rc 127).
 #   * ca-certificates — keeps the gateway HTTP client honest if the
 #     image is repurposed to talk to upstream BigQuery in the future.
 #
 # hadolint DL3008 (pin apt versions): intentionally unpinned — these
-# are core Ubuntu system libraries (libstdc++, tzdata, wget,
+# are core Ubuntu system libraries (libstdc++, tzdata, wget, curl,
 # ca-certificates) on the version-pinned `ubuntu:24.04` base. Ubuntu's
 # security mirror rotates exact versions in-place, so a hard pin like
 # `libstdc++6=14.2.0-...` breaks the build the next time a security
@@ -422,6 +427,7 @@ LABEL org.opencontainers.image.source="${SOURCE_REPO}" \
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         libssl3t64 \
         libstdc++6 \
         python3 \

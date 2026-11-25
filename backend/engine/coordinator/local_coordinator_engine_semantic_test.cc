@@ -1,7 +1,13 @@
 // LocalCoordinatorEngine integration tests: semantic routing and pipe DDL.
 
+#include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/types/span.h"
 #include "backend/engine/coordinator/local_coordinator_analyze.h"
 #include "backend/engine/coordinator/local_coordinator_engine_test_fixture.h"
 
@@ -187,6 +193,35 @@ TEST_F(LocalCoordinatorEngineTest, CreateFunctionThenCallScalarUdf) {
   ASSERT_EQ(row.cells.size(), 1u);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 30);
+}
+
+TEST_F(LocalCoordinatorEngineTest, InUnnestArrayParameterFiltersTableRows) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  QueryRequest req = MakeRequest(
+      "SELECT id, name IN UNNEST(@names) AS listed FROM ds.people "
+      "WHERE name IN UNNEST(@names) OR name NOT IN UNNEST(@names) "
+      "ORDER BY id");
+  QueryParameter names;
+  names.name = "names";
+  names.type_kind = "ARRAY";
+  names.type_json = "STRING";
+  names.value_json = R"(["ada","grace"])";
+  req.parameters.push_back(names);
+  auto source = engine_->ExecuteQuery(req, bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  std::vector<std::pair<int64_t, bool>> got;
+  storage::Row row;
+  while (true) {
+    auto has = (*source)->Next(&row);
+    ASSERT_TRUE(has.ok()) << has.status();
+    if (!*has) break;
+    ASSERT_EQ(row.cells.size(), 2u);
+    got.emplace_back(row.cells[0].int64_value(), row.cells[1].bool_value());
+  }
+  EXPECT_EQ(got,
+            (std::vector<std::pair<int64_t, bool>>{
+                {1, true}, {2, false}, {3, true}}));
 }
 
 TEST_F(LocalCoordinatorEngineTest, CreateFromHexFixtureUdf) {
@@ -431,6 +466,57 @@ AS
   ASSERT_TRUE(*has);
   ASSERT_EQ(row.cells[0].kind(), storage::Value::Kind::kInt64);
   EXPECT_EQ(row.cells[0].int64_value(), 123456);
+}
+
+TEST_F(LocalCoordinatorEngineTest, SemanticReadsStoredDateDatetimeAndTime) {
+  schema::TableSchema bq_schema;
+  for (const auto& [name, type] :
+       std::vector<std::pair<std::string, schema::ColumnType>>{
+           {"d", schema::ColumnType::kDate},
+           {"dt", schema::ColumnType::kDatetime},
+           {"t", schema::ColumnType::kTime},
+       }) {
+    schema::ColumnSchema column;
+    column.name = name;
+    column.type = type;
+    column.mode = schema::ColumnMode::kNullable;
+    bq_schema.columns.push_back(column);
+  }
+  ASSERT_TRUE(storage_->CreateDataset({"proj-test", "ds"}, "US").ok());
+  ASSERT_TRUE(
+      storage_->CreateTable({"proj-test", "ds", "moments"}, bq_schema).ok());
+  std::vector<storage::Row> rows(2);
+  rows[0].cells = {storage::Value::String("2024-01-01"),
+                   storage::Value::String("2024-01-01 00:00:00"),
+                   storage::Value::String("00:00:00")};
+  rows[1].cells = {storage::Value::String("2024-01-02"),
+                   storage::Value::String("2024-01-02 03:04:05"),
+                   storage::Value::String("01:02:03")};
+  ASSERT_TRUE(storage_
+                  ->AppendRows({"proj-test", "ds", "moments"},
+                               absl::MakeConstSpan(rows))
+                  .ok());
+
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("SELECT FORMAT_DATE('%F', d), CAST(d AS STRING), "
+                  "CAST(dt AS STRING) FROM ds.moments "
+                  "WHERE d >= DATE '2024-01-02' "
+                  "AND dt >= DATETIME '2024-01-02 00:00:00' "
+                  "AND t >= TIME '01:00:00'"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  storage::Row row;
+  auto has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  ASSERT_TRUE(*has);
+  ASSERT_EQ(row.cells.size(), 3u);
+  EXPECT_EQ(row.cells[0].string_value(), "2024-01-02");
+  EXPECT_EQ(row.cells[1].string_value(), "2024-01-02");
+  EXPECT_EQ(row.cells[2].string_value(), "2024-01-02 03:04:05");
+  has = (*source)->Next(&row);
+  ASSERT_TRUE(has.ok()) << has.status();
+  EXPECT_FALSE(*has);
 }
 
 }  // namespace

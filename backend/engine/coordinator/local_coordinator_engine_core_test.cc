@@ -1,10 +1,12 @@
 // LocalCoordinatorEngine integration tests: analyze, dry-run, DDL, DML.
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
@@ -394,6 +396,58 @@ TEST_F(LocalCoordinatorEngineTest, ExecuteDdlAlterTableAddColumnPadsRows) {
   }
   EXPECT_EQ(rows_seen, 3);
 }
+
+std::vector<int64_t> DrainIds(RowSource& source) {
+  std::vector<int64_t> ids;
+  storage::Row row;
+  while (true) {
+    absl::StatusOr<bool> has = source.Next(&row);
+    EXPECT_TRUE(has.ok()) << has.status();
+    if (!has.ok() || !*has) break;
+    ids.push_back(row.cells[0].int64_value());
+  }
+  return ids;
+}
+
+TEST_F(LocalCoordinatorEngineTest, ScriptConstantFiltersDuckDbQuery) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("CREATE CONSTANT min_id = 2;\n"
+                  "SELECT id FROM ds.people WHERE id >= min_id ORDER BY id;"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  EXPECT_EQ(DrainIds(**source), (std::vector<int64_t>{2, 3}));
+}
+
+TEST_F(LocalCoordinatorEngineTest, ScriptSetValueReachesDuckDbQuery) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("CREATE CONSTANT min_id = 1;\n"
+                  "SET min_id = 3;\n"
+                  "SELECT id FROM ds.people WHERE id >= min_id ORDER BY id;"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  EXPECT_EQ(DrainIds(**source), (std::vector<int64_t>{3}));
+}
+
+TEST_F(LocalCoordinatorEngineTest, ControlFlowScriptSetValueReachesDuckDbQuery) {
+  CreatePeopleTable();
+  CatalogBundle bundle = MakeCatalog();
+  auto source = engine_->ExecuteQuery(
+      MakeRequest("BEGIN\n"
+                  "  DECLARE min_id INT64 DEFAULT 1;\n"
+                  "  SET min_id = 3;\n"
+                  "  IF min_id > 0 THEN\n"
+                  "    SELECT id FROM ds.people WHERE id >= min_id ORDER BY id;\n"
+                  "  END IF;\n"
+                  "END;"),
+      bundle.catalog.get());
+  ASSERT_TRUE(source.ok()) << source.status();
+  EXPECT_EQ(DrainIds(**source), (std::vector<int64_t>{3}));
+}
+
 }  // namespace
 }  // namespace coordinator
 }  // namespace engine

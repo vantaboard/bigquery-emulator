@@ -271,6 +271,7 @@ class TestTranspiler : public Transpiler {
   using Transpiler::EmitCast;
   using Transpiler::EmitColumnRef;
   using Transpiler::EmitComputedColumn;
+  using Transpiler::EmitConstant;
   using Transpiler::EmitFilterScan;
   using Transpiler::EmitFunctionArgument;
   using Transpiler::EmitFunctionCall;

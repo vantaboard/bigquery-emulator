@@ -172,6 +172,38 @@ std::string Transpiler::EmitCtasSelect(
   return sql;
 }
 
+std::string Transpiler::EmitExportDataSelect(
+    const ::googlesql::ResolvedExportDataStmt* stmt) {
+  if (stmt == nullptr || stmt->query() == nullptr) return "";
+  output_order_items_.clear();
+  output_order_column_ids_.clear();
+  join_id_aliases_in_query_ = false;
+  join_output_columns_use_id_aliases_ = false;
+  input_has_rn_column_ = false;
+  input_rn_ordering_ = false;
+  output_includes_input_rn_ = false;
+  query_output_column_names_.clear();
+  query_output_column_names_.reserve(stmt->output_column_list_size());
+  for (const auto& out : stmt->output_column_list()) {
+    if (out != nullptr) {
+      query_output_column_names_.push_back(out->column().name());
+    }
+  }
+  std::string inner = EmitScan(stmt->query());
+  if (inner.empty()) return "";
+  std::vector<std::string> outputs;
+  outputs.reserve(stmt->output_column_list_size());
+  for (const auto& out : stmt->output_column_list()) {
+    std::string emitted = EmitOutputColumn(out.get());
+    if (emitted.empty()) return "";
+    outputs.push_back(std::move(emitted));
+  }
+  if (outputs.empty()) return "";
+  query_output_column_names_.clear();
+  return absl::StrCat(
+      "SELECT ", absl::StrJoin(outputs, ", "), " FROM (", inner, ")");
+}
+
 std::string Transpiler::EmitInsertSelect(
     const ::googlesql::ResolvedInsertStmt* stmt) {
   if (stmt == nullptr || stmt->query() == nullptr) return "";

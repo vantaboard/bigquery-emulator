@@ -41,6 +41,16 @@ TEST_F(RouteClassifierTest, SafeDivideRoutesToSemanticExecutor) {
   EXPECT_EQ(d.offending_node, "function:safe_divide");
 }
 
+TEST_F(RouteClassifierTest, InUnnestRoutesToSemanticExecutor) {
+  const auto* stmt =
+      Analyze("SELECT id FROM people WHERE name IN UNNEST(['ada', 'grace'])");
+  ASSERT_NE(stmt, nullptr);
+
+  RouteDecision d = classifier_.Classify(*stmt);
+  EXPECT_EQ(d.disposition, Disposition::kSemanticExecutor);
+  EXPECT_EQ(d.offending_node, "function:$in_array");
+}
+
 TEST_F(RouteClassifierTest, ControlOpStatementRoutesToControlOp) {
   // `ResolvedCreateTableStmt` is `disposition=control_op` (no
   // `status=planned`) in `node_dispositions.yaml`. Per
